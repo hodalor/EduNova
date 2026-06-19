@@ -1,0 +1,14 @@
+node_modules/
+**/node_modules/
+build/
+**/build/
+dist/
+coverage/
+logs/
+**/logs/
+.env
+.env.local
+.DS_Store
+.dart_tool/
+.idea/
+.vscode/
