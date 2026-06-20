@@ -9,6 +9,9 @@ const rateLimit = require('express-rate-limit');
 
 const env = require('./config/env');
 const logger = require('./config/logger');
+const authRoutes = require('./modules/auth/auth.routes');
+const communicationRoutes = require('./modules/communication/communication.routes');
+const mediaRoutes = require('./modules/media/media.routes');
 const errorHandler = require('./shared/middleware/errorHandler');
 const notFound = require('./shared/middleware/notFound');
 
@@ -54,6 +57,10 @@ const createApp = () => {
       timestamp: new Date().toISOString(),
     });
   });
+
+  app.use('/api/auth', authRoutes);
+  app.use('/api', communicationRoutes);
+  app.use('/api/v1/media', mediaRoutes);
 
   app.use(notFound);
   app.use(errorHandler);

@@ -2,10 +2,12 @@ const http = require('http');
 const { Server } = require('socket.io');
 
 const createApp = require('./src/app');
+const communicationService = require('./src/modules/communication/communication.service');
 const env = require('./src/config/env');
 const logger = require('./src/config/logger');
 const { sequelize, connectDatabase } = require('./src/config/database');
 const { redisClient, connectRedis } = require('./src/config/redis');
+const { setSocketNamespaces } = require('./src/shared/helpers/socket');
 
 const app = createApp();
 const server = http.createServer(app);
@@ -17,6 +19,14 @@ const io = new Server(server, {
 });
 
 app.locals.io = io;
+const notificationNamespace = io.of('/notifications');
+const transportNamespace = io.of('/transport');
+
+setSocketNamespaces({
+  io,
+  notifications: notificationNamespace,
+  transport: transportNamespace,
+});
 
 io.on('connection', (socket) => {
   logger.info(`Socket connected: ${socket.id}`);
@@ -26,10 +36,25 @@ io.on('connection', (socket) => {
   });
 });
 
+notificationNamespace.on('connection', (socket) => {
+  const { user_id: userId } = socket.handshake.query;
+  if (userId) {
+    socket.join(userId);
+  }
+});
+
+transportNamespace.on('connection', (socket) => {
+  const { vehicle_id: vehicleId } = socket.handshake.query;
+  if (vehicleId) {
+    socket.join(vehicleId);
+  }
+});
+
 const startServer = async () => {
   try {
     await connectDatabase();
     await connectRedis();
+    communicationService.registerEventSubscribers();
 
     server.listen(env.PORT, () => {
       logger.info(`EDUOVA backend listening on port ${env.PORT}`);
