@@ -12,7 +12,7 @@ module.exports = (error, req, res, next) => {
     return next(error);
   }
 
-  const statusCode = error.statusCode || 500;
+  const statusCode = error.statusCode || error.status || 500;
 
   return res.status(statusCode).json({
     success: false,

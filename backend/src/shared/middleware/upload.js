@@ -1,26 +1,24 @@
 const multer = require('multer');
 
-const env = require('../../config/env');
-
-const allowedMimeTypes = new Set([
-  'image/jpeg',
-  'image/png',
-  'image/webp',
-  'image/gif',
-  'application/pdf',
-  'application/msword',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'application/vnd.ms-excel',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-]);
+const fileRules = {
+  'image/jpeg': 5 * 1024 * 1024,
+  'image/png': 5 * 1024 * 1024,
+  'image/webp': 5 * 1024 * 1024,
+  'image/gif': 5 * 1024 * 1024,
+  'application/pdf': 20 * 1024 * 1024,
+  'text/csv': 10 * 1024 * 1024,
+  'application/vnd.ms-excel': 10 * 1024 * 1024,
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 10 * 1024 * 1024,
+  'application/msword': 20 * 1024 * 1024,
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 20 * 1024 * 1024,
+};
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: {
-    fileSize: env.MAX_FILE_SIZE,
-  },
+  limits: { fileSize: 20 * 1024 * 1024 },
   fileFilter: (_req, file, callback) => {
-    if (!allowedMimeTypes.has(file.mimetype)) {
+    const maxSize = fileRules[file.mimetype];
+    if (!maxSize) {
       const error = new Error('Unsupported file type.');
       error.statusCode = 400;
       callback(error);

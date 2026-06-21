@@ -46,26 +46,45 @@ const buildProfile = async (user) => {
   };
 };
 
-const login = async ({ email, password, institution_id, otp_code }) => {
-  const lock = await isLocked(email, institution_id);
+const resolveInstitutionId = async ({ institution_id, institution_code }) => {
+  if (institution_id) {
+    return institution_id;
+  }
+
+  const institution = await models.Institution.findOne({
+    where: { code: institution_code },
+  });
+  if (!institution) {
+    throw Object.assign(new Error('Institution not found.'), { status: 404 });
+  }
+
+  return institution.id;
+};
+
+const login = async ({ email, identity, password, institution_id, institution_code, otp_code }) => {
+  const institutionId = await resolveInstitutionId({ institution_id, institution_code });
+  const loginIdentity = (email || identity || '').trim().toLowerCase();
+  const lock = await isLocked(loginIdentity, institutionId);
   if (lock.locked) {
     throw Object.assign(new Error(`Account locked. Try again in ${lock.retryIn} seconds.`), { status: 429 });
   }
 
   const user = await models.User.findOne({
-    where: { email, institution_id },
+    where: email || loginIdentity.includes('@')
+      ? { email: email || loginIdentity, institution_id: institutionId }
+      : { phone: loginIdentity, institution_id: institutionId },
     include: [{ model: models.Institution, as: 'institution' }],
   });
 
   if (!user) {
-    await recordFailedLogin(email, institution_id);
+    await recordFailedLogin(loginIdentity, institutionId);
     throw Object.assign(new Error('Invalid email or password.'), { status: 401 });
   }
 
   const valid = await comparePassword(password, user.password_hash);
   if (!valid) {
-    await recordFailedLogin(email, institution_id);
-    logger.warn('Failed login attempt', { email, institution_id, user_id: user.id });
+    await recordFailedLogin(loginIdentity, institutionId);
+    logger.warn('Failed login attempt', { identity: loginIdentity, institution_id: institutionId, user_id: user.id });
     throw Object.assign(new Error('Invalid email or password.'), { status: 401 });
   }
 
@@ -86,7 +105,7 @@ const login = async ({ email, password, institution_id, otp_code }) => {
     }
   }
 
-  await clearLoginLock(email, institution_id);
+  await clearLoginLock(loginIdentity, institutionId);
   await user.update({ last_login: new Date() });
 
   const access_token = signAccessToken(user);
@@ -149,8 +168,9 @@ const logout = async ({ token, refresh_token }) => {
   return { success: true };
 };
 
-const forgotPassword = async ({ email, institution_id }) => {
-  const user = await models.User.findOne({ where: { email, institution_id } });
+const forgotPassword = async ({ email, institution_id, institution_code }) => {
+  const institutionId = await resolveInstitutionId({ institution_id, institution_code });
+  const user = await models.User.findOne({ where: { email, institution_id: institutionId } });
   if (!user) {
     return { success: true };
   }
@@ -160,7 +180,7 @@ const forgotPassword = async ({ email, institution_id }) => {
     purpose: 'reset-password',
     userId: user.id,
     value: otp,
-    metadata: { institution_id },
+    metadata: { institution_id: institutionId },
   });
 
   await sendEmail({

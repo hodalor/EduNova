@@ -1,14 +1,45 @@
 const { Sequelize } = require('sequelize');
 
-const initializeModels = require('../../database/models');
 const env = require('./env');
 const logger = require('./logger');
 
-const sharedOptions = {
-  dialect: 'postgres',
-  logging: env.NODE_ENV === 'development' ? (message) => logger.debug(message) : false,
-  dialectOptions:
-    env.NODE_ENV === 'production' || env.DATABASE_URL
+const initializeModels = require('../../database/models');
+
+let sequelize;
+let models;
+let connectDatabase;
+
+if (env.NODE_ENV === 'test') {
+  sequelize = {
+    authenticate: async () => true,
+    close: async () => true,
+  };
+  models = {};
+  connectDatabase = async () => true;
+} else {
+  const runtimeConfig = {
+    development: {
+      requireSsl: false,
+      pool: {
+        min: 2,
+        max: 10,
+      },
+    },
+    production: {
+      requireSsl: true,
+      pool: {
+        min: 2,
+        max: 10,
+      },
+    },
+  };
+  const currentConfig =
+    runtimeConfig[env.NODE_ENV] || runtimeConfig.development;
+
+  const sharedOptions = {
+    dialect: 'postgres',
+    logging: env.NODE_ENV === 'development' ? (message) => logger.debug(message) : false,
+    dialectOptions: currentConfig.requireSsl
       ? {
           ssl: {
             require: true,
@@ -16,28 +47,29 @@ const sharedOptions = {
           },
         }
       : {},
-  pool: {
-    max: 10,
-    min: 0,
-    acquire: 30000,
-    idle: 10000,
-  },
-};
+    pool: {
+      max: currentConfig.pool.max,
+      min: currentConfig.pool.min,
+      acquire: 30000,
+      idle: 10000,
+    },
+  };
 
-const sequelize = env.DATABASE_URL
-  ? new Sequelize(env.DATABASE_URL, sharedOptions)
-  : new Sequelize(env.DB_NAME, env.DB_USER, env.DB_PASSWORD, {
-      ...sharedOptions,
-      host: env.DB_HOST,
-      port: env.DB_PORT,
-    });
+  sequelize = env.DATABASE_URL
+    ? new Sequelize(env.DATABASE_URL, sharedOptions)
+    : new Sequelize(env.DB_NAME, env.DB_USER, env.DB_PASSWORD, {
+        ...sharedOptions,
+        host: env.DB_HOST,
+        port: env.DB_PORT,
+      });
 
-const connectDatabase = async () => {
-  await sequelize.authenticate();
-  logger.info('PostgreSQL connection established successfully.');
-};
+  connectDatabase = async () => {
+    await sequelize.authenticate();
+    logger.info('PostgreSQL connection established successfully.');
+  };
 
-const models = initializeModels(sequelize);
+  models = initializeModels(sequelize);
+}
 
 module.exports = {
   sequelize,

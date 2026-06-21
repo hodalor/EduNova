@@ -4,13 +4,24 @@
 
 :root {
   color-scheme: light;
+  --color-primary: 15 27 60;
+  --color-accent: 245 166 35;
+  --color-success: 34 197 94;
+  --color-warning: 245 158 11;
+  --color-danger: 239 68 68;
+  --color-info: 59 130 246;
+  --color-background: 248 250 252;
+  --color-card: 255 255 255;
+  --color-text: 30 41 59;
+  --color-muted: 100 116 139;
 }
 
 body {
   margin: 0;
+  min-height: 100vh;
   font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  background: #f5f7fb;
-  color: #10213f;
+  background: rgb(var(--color-background));
+  color: rgb(var(--color-text));
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -21,4 +32,60 @@ body {
 
 #root {
   min-height: 100vh;
+}
+
+::selection {
+  background: rgba(var(--color-accent), 0.2);
+}
+
+@layer base {
+  h1,
+  h2,
+  h3,
+  h4 {
+    @apply tracking-tight text-slate-900;
+  }
+
+  a {
+    @apply text-inherit no-underline;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+  }
+}
+
+@layer components {
+  .app-container {
+    @apply mx-auto w-full max-w-[1600px] px-4 sm:px-6 xl:px-8;
+  }
+
+  .surface {
+    @apply rounded-3xl border border-slate-200 bg-white shadow-sm;
+  }
+
+  .surface-muted {
+    @apply rounded-3xl border border-slate-200 bg-slate-50;
+  }
+
+  .field-base {
+    @apply h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm text-slate-800 shadow-sm transition placeholder:text-slate-400 focus:border-amber-400 focus:outline-none focus:ring-4 focus:ring-amber-100;
+  }
+
+  .nav-active {
+    background: rgba(15, 27, 60, 0.08);
+    border-left: 3px solid rgb(var(--color-accent));
+  }
+
+  .scrollbar-hidden {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hidden::-webkit-scrollbar {
+    display: none;
+  }
 }

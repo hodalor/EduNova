@@ -56,6 +56,7 @@ const PayrollRunFactory = require('./payrollRun');
 const PayrollRecordFactory = require('./payrollRecord');
 const LeaveTypeFactory = require('./leaveType');
 const LeaveRequestFactory = require('./leaveRequest');
+const AuditLogFactory = require('./auditLog');
 
 let cached = null;
 
@@ -126,6 +127,7 @@ module.exports = (sequelize) => {
   models.PayrollRecord = PayrollRecordFactory(sequelize, DataTypes);
   models.LeaveType = LeaveTypeFactory(sequelize, DataTypes);
   models.LeaveRequest = LeaveRequestFactory(sequelize, DataTypes);
+  models.AuditLog = AuditLogFactory(sequelize, DataTypes);
   if (models.Institution.associate) models.Institution.associate(models);
   if (models.InstitutionBranch.associate) models.InstitutionBranch.associate(models);
   if (models.AcademicYear.associate) models.AcademicYear.associate(models);
@@ -182,6 +184,7 @@ module.exports = (sequelize) => {
   if (models.PayrollRecord.associate) models.PayrollRecord.associate(models);
   if (models.LeaveType.associate) models.LeaveType.associate(models);
   if (models.LeaveRequest.associate) models.LeaveRequest.associate(models);
+  if (models.AuditLog.associate) models.AuditLog.associate(models);
 
   cached = {
     sequelize,
@@ -242,6 +245,7 @@ module.exports = (sequelize) => {
       PayrollRecord: models.PayrollRecord,
       LeaveType: models.LeaveType,
       LeaveRequest: models.LeaveRequest,
+      AuditLog: models.AuditLog,
   };
 
   return cached;

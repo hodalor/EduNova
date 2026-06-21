@@ -1,0 +1,38 @@
+name: eduova_mobile
+description: EDUOVA mobile application scaffold.
+publish_to: "none"
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.3.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_riverpod: ^2.5.1
+  go_router: ^14.2.0
+  dio: ^5.7.0
+  flutter_secure_storage: ^9.2.2
+  shared_preferences: ^2.3.2
+  pretty_dio_logger: ^1.4.0
+  firebase_core: ^3.6.0
+  firebase_messaging: ^15.1.3
+  flutter_local_notifications: ^17.2.3
+  cached_network_image: ^3.4.1
+  shimmer: ^3.0.0
+  connectivity_plus: ^6.1.0
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+  google_maps_flutter: ^2.9.0
+  socket_io_client: ^3.0.2
+  mobile_scanner: ^5.2.3
+  flutter_dotenv: ^5.1.0
+  equatable: ^2.0.7
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true

@@ -1,4 +1,4 @@
-const { deleteMediaFile, uploadMediaFile } = require('./media.service');
+const { deleteMediaFile, getSignedMediaUrl, uploadMediaFile } = require('./media.service');
 
 const uploadSingle = async (req, res) => {
   if (!req.file) {
@@ -38,7 +38,29 @@ const deleteSingle = async (req, res) => {
   });
 };
 
+const getSignedUrl = async (req, res) => {
+  const { bucketName, objectPath, expiresIn } = req.query;
+
+  if (!objectPath) {
+    const error = new Error('objectPath is required.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const url = await getSignedMediaUrl({
+    bucketName,
+    objectPath,
+    expiresIn: Number(expiresIn) || 3600,
+  });
+
+  res.status(200).json({
+    success: true,
+    data: { url },
+  });
+};
+
 module.exports = {
   uploadSingle,
   deleteSingle,
+  getSignedUrl,
 };

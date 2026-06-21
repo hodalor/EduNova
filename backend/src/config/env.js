@@ -32,6 +32,7 @@ const schema = Joi.object({
   TWILIO_TOKEN: Joi.string().allow('').required(),
   TWILIO_PHONE: Joi.string().required(),
   FRONTEND_URL: Joi.string().uri().required(),
+  CORS_ORIGINS: Joi.string().allow('').optional(),
   MOBILE_API_KEY: Joi.string().required(),
   MAX_FILE_SIZE: Joi.number().integer().positive().default(5242880),
 }).unknown();

@@ -2,6 +2,7 @@ const { Op } = require('sequelize');
 
 const { models } = require('../../config/database');
 const logger = require('../../config/logger');
+const socketService = require('../notifications/socket.service');
 const eventBus = require('../../shared/helpers/events');
 const { parsePagination, successMeta } = require('../../shared/helpers/common');
 const { enqueueNotification } = require('./notification.queue');
@@ -52,6 +53,24 @@ const saveAndDispatch = async ({
   logger.info('Notification queued', {
     notification_id: notification.id,
     recipients: recipients.length,
+  });
+
+  recipients.forEach((recipient) => {
+    socketService.emitNotification({
+      userId: recipient.id,
+      notification: {
+        id: notification.id,
+        title,
+        body,
+        type,
+        priority,
+        created_at: notification.created_at,
+      },
+    });
+    socketService.emitNotificationBadge({
+      userId: recipient.id,
+      unread: 1,
+    });
   });
 
   return notification;
@@ -129,12 +148,25 @@ const publishAnnouncement = async ({ institutionId, id }) => {
   return announcement;
 };
 
-const sendMessage = async ({ institutionId, senderId, payload }) =>
-  models.Message.create({
+const sendMessage = async ({ institutionId, senderId, payload }) => {
+  const message = await models.Message.create({
     institution_id: institutionId,
     sender_id: senderId,
     ...payload,
   });
+  socketService.emitChatMessage({
+    userId: payload.recipient_id,
+    message: {
+      id: message.id,
+      thread_id: message.thread_id,
+      sender_id: message.sender_id,
+      recipient_id: message.recipient_id,
+      body: message.body,
+      created_at: message.created_at,
+    },
+  });
+  return message;
+};
 
 const listThreads = async ({ institutionId, userId }) =>
   models.Message.findAll({
