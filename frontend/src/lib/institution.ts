@@ -1,12 +1,16 @@
 import type { InstitutionSummary, UserRole } from '../types/auth';
 
 export const DEFAULT_LEVELS = ['PR', 'JH', 'SH'] as const;
+export const PLATFORM_LEVELS = ['DC', 'PR', 'JH', 'SH', 'TR'] as const;
 
 export const getInstitutionLevels = (institution?: InstitutionSummary | null) => {
   if (institution?.education_levels?.length) {
     return institution.education_levels;
   }
-  return [...DEFAULT_LEVELS];
+  if (institution?.code === 'MASTER') {
+    return [...PLATFORM_LEVELS];
+  }
+  return [];
 };
 
 export const hasLevel = (institution: InstitutionSummary | null | undefined, level: string) =>

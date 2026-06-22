@@ -38,6 +38,7 @@ const InstitutionListPage = () => {
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['super-admin', 'institutions'],
     queryFn: eduovaApi.superAdmin.institutions,
+    refetchOnMount: 'always',
   });
 
   const suspendMutation = useMutation({
@@ -65,7 +66,14 @@ const InstitutionListPage = () => {
   if (isError || !data) {
     return (
       <Card title="Unable to load institutions" description="Retry the platform institutions query.">
-        <Button onClick={() => refetch()}>Retry</Button>
+        <div className="flex gap-3">
+          <Button onClick={() => refetch()}>Retry</Button>
+          <Link to="/super-admin/institutions/new">
+            <Button variant="secondary" leftIcon={<PlusCircle className="h-4 w-4" />}>
+              Onboard School
+            </Button>
+          </Link>
+        </div>
       </Card>
     );
   }

@@ -87,7 +87,8 @@ const createApp = () => {
 
   app.use('/api/auth', authRoutes);
   app.use('/api/super-admin', superAdminRoutes);
-  app.use('/api', communicationRoutes);
+  app.use('/api/communication', communicationRoutes);
+  app.use('/api/v1/communication', communicationRoutes);
   app.use('/api/v1/analytics', analyticsRoutes);
   app.use('/api/v1/finance', financeRoutes);
   app.use('/api/v1/academics', academicsRoutes);

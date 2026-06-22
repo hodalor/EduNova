@@ -10,6 +10,11 @@ const {
   getClusterMetadata,
   provisionTenantDatabase,
 } = require('../../shared/services/tenant-cluster.service');
+const {
+  ensurePlatformInstitution,
+  platformUserDatabaseReady,
+  resolvePlatformUsername,
+} = require('../../shared/services/platform-user.service');
 
 const levelLabels = {
   DC: 'Daycare',
@@ -28,6 +33,12 @@ const databaseReady = () =>
       models.AcademicYear &&
       sequelize?.transaction
   );
+
+const requirePassword = (value, fieldLabel) => {
+  if (!String(value || '').trim()) {
+    throw Object.assign(new Error(`${fieldLabel} is required.`), { statusCode: 400 });
+  }
+};
 
 const resolveLevelModules = (educationLevels = []) => [
   ...new Set(educationLevels.flatMap((level) => getLevelConfig(level)?.modules || [])),
@@ -356,7 +367,7 @@ const onboardInstitutionInDatabase = async ({ payload, userId, ip }) => {
       {
         institution_id: institution.id,
         email,
-        password_hash: await hashPassword(payload.admin_password || 'Eduova123'),
+        password_hash: await hashPassword(payload.admin_password),
         role: 'institution_admin',
         first_name: payload.admin_first_name,
         last_name: payload.admin_last_name,
@@ -413,6 +424,7 @@ const onboardInstitutionInDatabase = async ({ payload, userId, ip }) => {
 };
 
 const onboardInstitutionInRuntime = async ({ payload, userId, ip }) => {
+  requirePassword(payload.admin_password, 'Admin temporary password');
   const nextInstitutionId = `inst-${String(store.platform.institutions.length + 1).padStart(3, '0')}`;
   const plan = getPlan(payload.subscription_plan);
   const educationLevels = (payload.education_levels || []).map((item) => String(item).toUpperCase());
@@ -452,7 +464,7 @@ const onboardInstitutionInRuntime = async ({ payload, userId, ip }) => {
     role: 'institution_admin',
     first_name: payload.admin_first_name,
     last_name: payload.admin_last_name,
-    password_hash: await hashPassword(payload.admin_password || 'Eduova123'),
+    password_hash: await hashPassword(payload.admin_password),
     workspace_profile: institution.settings.workspace_profile.label,
     education_levels: educationLevels,
   };
@@ -484,6 +496,7 @@ const onboardInstitutionInRuntime = async ({ payload, userId, ip }) => {
 };
 
 const onboardInstitution = async (context) => {
+  requirePassword(context.payload?.admin_password, 'Admin temporary password');
   if (databaseReady()) {
     return onboardInstitutionInDatabase(context);
   }
@@ -625,7 +638,30 @@ const extendTrial = async (context) => {
   return extendTrialFromRuntime(context);
 };
 
-const listPlatformUsers = async () =>
+const listPlatformUsersFromDatabase = async () => {
+  const platformInstitution = await ensurePlatformInstitution();
+  const users = await models.User.findAll({
+    where: {
+      institution_id: platformInstitution.id,
+      role: 'super_admin',
+    },
+    order: [['created_at', 'DESC']],
+  });
+
+  return users.map((user) => ({
+    id: user.id,
+    institution_id: user.institution_id,
+    username: resolvePlatformUsername(user),
+    email: user.email,
+    role: 'super_admin',
+    first_name: user.first_name,
+    last_name: user.last_name,
+    is_active: user.is_active,
+    status: user.is_active ? 'active' : 'inactive',
+  }));
+};
+
+const listPlatformUsersFromRuntime = async () =>
   [store.platform.superAdmin, ...(store.platform.superAdmins || [])].map((user) => ({
     id: user.id,
     institution_id: 'platform',
@@ -638,7 +674,84 @@ const listPlatformUsers = async () =>
     status: user.is_active === false ? 'inactive' : 'active',
   }));
 
+const listPlatformUsers = async () => {
+  if (platformUserDatabaseReady() && sequelize?.transaction) {
+    return listPlatformUsersFromDatabase();
+  }
+
+  return listPlatformUsersFromRuntime();
+};
+
+const createPlatformUserInDatabase = async ({ payload, userId, ip }) => {
+  const username = String(payload.username || '').trim().toLowerCase();
+  const email = String(payload.email || '').trim().toLowerCase();
+
+  if (!username || !email || !payload.first_name || !payload.last_name || !payload.temporary_password) {
+    throw Object.assign(new Error('Username, name, email, and temporary password are required.'), {
+      statusCode: 400,
+    });
+  }
+
+  const platformInstitution = await ensurePlatformInstitution();
+  const duplicate = await models.User.findOne({
+    where: {
+      institution_id: platformInstitution.id,
+      role: 'super_admin',
+      [Op.or]: [{ email }, { phone: username }],
+    },
+  });
+  if (duplicate) {
+    throw Object.assign(new Error('A super admin with this username or email already exists.'), {
+      statusCode: 409,
+    });
+  }
+
+  const user = await models.User.create({
+    institution_id: platformInstitution.id,
+    email,
+    phone: username,
+    password_hash: await hashPassword(payload.temporary_password),
+    role: 'super_admin',
+    first_name: payload.first_name,
+    last_name: payload.last_name,
+    is_active: true,
+    email_verified: true,
+  });
+
+  const response = {
+    id: user.id,
+    institution_id: user.institution_id,
+    username,
+    email: user.email,
+    role: user.role,
+    first_name: user.first_name,
+    last_name: user.last_name,
+    is_active: true,
+    status: 'active',
+  };
+
+  await logAudit({
+    userId,
+    action: 'CREATE',
+    resourceType: 'platform_user',
+    resourceId: user.id,
+    newValues: {
+      ...response,
+      temporary_password: 'redacted',
+    },
+    ip,
+  });
+
+  return response;
+};
+
 const createPlatformUser = async ({ payload, userId, ip }) => {
+  requirePassword(payload.temporary_password, 'Temporary password');
+
+  if (platformUserDatabaseReady() && sequelize?.transaction) {
+    return createPlatformUserInDatabase({ payload, userId, ip });
+  }
+
   const username = String(payload.username || '').trim().toLowerCase();
   const email = String(payload.email || '').trim().toLowerCase();
 

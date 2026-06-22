@@ -15,6 +15,9 @@ import Button from '../../components/ui/Button';
 import Card from '../../components/ui/Card';
 import PageLoader from '../../components/ui/PageLoader';
 import Select from '../../components/ui/Select';
+import { getInstitutionLevels } from '../../lib/institution';
+import { useAuthStore } from '../../store/authStore';
+import type { EducationLevelCode } from '../../types/auth';
 import PageHeader from '../shared/PageHeader';
 
 interface SubjectConfig {
@@ -23,6 +26,26 @@ interface SubjectConfig {
   teacher: string;
   periods: number;
   room: string;
+}
+
+interface AcademicGroup {
+  id: string;
+  name: string;
+  code: string;
+  level_code: string;
+}
+
+interface AcademicOffering {
+  id: string;
+  group_id: string;
+  code: string;
+  name: string;
+  credit_hours?: number | null;
+}
+
+interface AcademicStructureResponse {
+  groups: AcademicGroup[];
+  offerings: AcademicOffering[];
 }
 
 const SortableItem = ({ item }: { item: SubjectConfig }) => {
@@ -51,21 +74,49 @@ const SortableItem = ({ item }: { item: SubjectConfig }) => {
 const TimetableGeneratorPage = () => {
   const [step, setStep] = useState(1);
   const [generated, setGenerated] = useState(false);
+  const [groupId, setGroupId] = useState('');
   const sensors = useSensors(useSensor(PointerSensor));
-  const { data, isLoading } = useQuery({
-    queryKey: ['timetable-generator-subjects'],
-    queryFn: eduovaApi.timetable.subjects,
+  const institution = useAuthStore((state) => state.institution);
+  const tenantContext = useAuthStore((state) => state.tenantContext);
+  const activeInstitution = tenantContext || institution;
+  const activeInstitutionId = activeInstitution?.id || null;
+  const allowedLevels = getInstitutionLevels(activeInstitution);
+  const { data, isLoading } = useQuery<AcademicStructureResponse>({
+    queryKey: ['academic-structure', 'timetable-generator', activeInstitutionId],
+    queryFn: eduovaApi.academics.structure,
+    enabled: Boolean(activeInstitutionId),
   });
   const [subjects, setSubjects] = useState<SubjectConfig[]>([]);
+  const groups = ((data?.groups || []) as AcademicGroup[]).filter(
+    (group) => !allowedLevels.length || allowedLevels.includes(group.level_code as EducationLevelCode)
+  );
 
   useEffect(() => {
-    if (data && subjects.length === 0) {
-      setSubjects(data as SubjectConfig[]);
+    if (!groupId && groups[0]?.id) {
+      setGroupId(groups[0].id);
     }
-  }, [data, subjects.length]);
+  }, [groupId, groups]);
+
+  useEffect(() => {
+    if (!data) {
+      return;
+    }
+
+    const nextSubjects = ((data.offerings || []) as AcademicOffering[])
+      .filter((item: AcademicOffering) => !groupId || item.group_id === groupId)
+      .map((item: AcademicOffering) => ({
+        id: item.id,
+        subject: item.name,
+        teacher: item.code,
+        periods: Number(item.credit_hours || 2),
+        room: 'Room pending',
+      }));
+
+    setSubjects(nextSubjects);
+  }, [data, groupId]);
 
   const conflicts = generated
-    ? subjects.filter((item) => item.periods > 4).map((item) => `${item.subject} exceeds ideal load.`)
+    ? subjects.filter((item: SubjectConfig) => item.periods > 4).map((item: SubjectConfig) => `${item.subject} exceeds ideal load.`)
     : [];
 
   const generatedRows = generated
@@ -85,7 +136,7 @@ const TimetableGeneratorPage = () => {
     <div className="space-y-6">
       <PageHeader
         title="Timetable Generator"
-        description="Configure timetable inputs, generate a draft schedule, and reorder items manually."
+        description="Use the actual school structure to prepare a timetable draft and reorder teaching load."
       />
 
       <div className="grid gap-3 md:grid-cols-3">
@@ -104,9 +155,13 @@ const TimetableGeneratorPage = () => {
       {step === 1 ? (
         <Card title="Step 1: Context" description="Select class and term for timetable generation.">
           <div className="grid gap-4 md:grid-cols-3">
-            <Select label="Class">
-              <option>SH 2 Science</option>
-              <option>PR 5 Gold</option>
+            <Select label="Class or Level" value={groupId} onChange={(event) => setGroupId(event.target.value)}>
+              <option value="">Select class or level</option>
+              {groups.map((group: AcademicGroup) => (
+                <option key={group.id} value={group.id}>
+                  {group.name} ({group.code})
+                </option>
+              ))}
             </Select>
             <Select label="Term">
               <option>Term 2</option>
@@ -143,6 +198,13 @@ const TimetableGeneratorPage = () => {
                 </div>
               </SortableContext>
             </DndContext>
+            {!subjects.length ? (
+              <Alert
+                title="No offerings available"
+                message="Create subjects or courses under Academic Setup before generating the timetable."
+                variant="info"
+              />
+            ) : null}
             <div className="flex gap-3">
               <Button variant="ghost" onClick={() => setStep(1)}>
                 Back

@@ -405,22 +405,39 @@ export interface AuthLayoutProps {
   title: string;
   description: string;
   children: ReactNode;
+  decorativeWord?: string;
 }
 
-export const AuthLayout = ({ title, description, children }: AuthLayoutProps) => (
+export const AuthLayout = ({
+  title,
+  description,
+  children,
+  decorativeWord = 'EDUOVA',
+}: AuthLayoutProps) => (
   <div className="flex min-h-screen items-center justify-center bg-brand-navy px-4 py-10">
-    <div className="grid w-full max-w-5xl gap-8 overflow-hidden rounded-[2rem] bg-white shadow-2xl lg:grid-cols-[1.1fr_0.9fr]">
-      <div className="hidden bg-brand-navy px-10 py-12 text-white lg:block">
-        <p className="text-sm font-semibold uppercase tracking-[0.4em] text-brand-gold">EDUOVA</p>
-        <h1 className="mt-8 text-4xl font-semibold leading-tight">
-          Trustworthy administration for education leaders.
-        </h1>
-        <p className="mt-4 max-w-md text-slate-300">
-          Manage admissions, finance, attendance, academics, and analytics from one
-          serious, operations-focused command center.
-        </p>
+    <div className="grid w-full max-w-6xl overflow-hidden rounded-[2rem] bg-white shadow-2xl lg:grid-cols-[1.5fr_1fr]">
+      <div className="relative hidden overflow-hidden bg-brand-navy px-12 py-12 text-white lg:block">
+        <div className="absolute inset-y-0 right-6 flex items-center gap-5 opacity-80">
+          {[0, 1, 2, 3, 4].map((index) => (
+            <span
+              key={`${decorativeWord}-${index}`}
+              className="[writing-mode:vertical-rl] text-4xl font-black uppercase tracking-[0.32em] text-white/8"
+            >
+              {decorativeWord}
+            </span>
+          ))}
+        </div>
+        <div className="relative z-10 max-w-xl">
+          <p className="text-sm font-semibold uppercase tracking-[0.4em] text-brand-gold">EDUOVA</p>
+          <h1 className="mt-8 text-4xl font-semibold leading-tight">
+            Trustworthy administration for every school.
+          </h1>
+          <p className="mt-4 max-w-md text-slate-300">
+            Admissions, academics, finance, attendance, and communication stay in one secure school workspace.
+          </p>
+        </div>
       </div>
-      <div className="px-6 py-10 sm:px-10">
+      <div className="px-6 py-10 sm:px-10 lg:px-12">
         <div className="mx-auto max-w-md">
           <p className="text-xs font-semibold uppercase tracking-[0.36em] text-brand-gold">
             Secure Access

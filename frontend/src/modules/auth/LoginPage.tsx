@@ -1,9 +1,8 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Mail, Lock, School } from 'lucide-react';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
-import { Link } from 'react-router-dom';
 import { useNavigate } from 'react-router-dom';
 import { z } from 'zod';
 
@@ -23,23 +22,27 @@ type LoginValues = z.infer<typeof loginSchema>;
 
 const LoginPage = () => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const setSession = useAuthStore((state) => state.setSession);
   const {
     register,
     handleSubmit,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm<LoginValues>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
-      institution_code: 'EDUOVA',
-      identity: 'admin@eduova.test',
-      password: 'Eduova123',
+      institution_code: '',
+      identity: '',
+      password: '',
     },
   });
+  const institutionCode = watch('institution_code');
 
   const mutation = useMutation({
     mutationFn: eduovaApi.auth.login,
     onSuccess: (payload) => {
+      queryClient.clear();
       setSession(payload);
       toast.success('Welcome back to EDUOVA');
       navigate(payload.user.role === 'super_admin' ? '/super-admin' : '/');
@@ -49,10 +52,19 @@ const LoginPage = () => {
 
   return (
     <AuthLayout
-      title="Sign in to the EDUOVA Admin Panel"
-      description="Use your institution credentials to access the operations portal."
+      title=""
+      description=""
+      decorativeWord={(institutionCode || 'EDUNOVA').trim().toUpperCase()}
     >
-      <form className="space-y-4" onSubmit={handleSubmit((values) => mutation.mutate(values))}>
+      <form
+        className="space-y-4"
+        onSubmit={handleSubmit((values) =>
+          mutation.mutate({
+            ...values,
+            institution_code: values.institution_code.trim().toUpperCase(),
+          })
+        )}
+      >
         <Input
           label="Institution Code"
           error={errors.institution_code?.message}
@@ -75,17 +87,7 @@ const LoginPage = () => {
         <Button type="submit" className="w-full" size="lg" loading={mutation.isPending || isSubmitting}>
           Sign In
         </Button>
-        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-          Super admin:
-          {' '}
-          use
-          {' '}
-          <Link className="font-semibold text-brand-navy underline" to="/super-admin/login">
-            master control login
-          </Link>
-          {' '}
-          with `master / superadmin / 12345678`.
-        </div>
+       
       </form>
     </AuthLayout>
   );

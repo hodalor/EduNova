@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { FileSpreadsheet, Receipt, ShieldAlert } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 import { eduovaApi } from '../../api/eduovaApi';
 import Alert from '../../components/ui/Alert';
@@ -23,6 +24,7 @@ interface FinanceStat {
 }
 
 const FinanceDashboardPage = () => {
+  const navigate = useNavigate();
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['finance-dashboard'],
     queryFn: eduovaApi.finance.dashboard,
@@ -47,7 +49,7 @@ const FinanceDashboardPage = () => {
     <div className="space-y-6">
       <PageHeader
         title="Finance Dashboard"
-        description="Track billing, collection, and outstanding balances across the current term."
+        description="Track billing, collections, and outstanding balances across the active school term."
       />
 
       <div className="grid gap-5 xl:grid-cols-4">
@@ -72,13 +74,13 @@ const FinanceDashboardPage = () => {
 
         <Card title="Quick Actions" description="Launch common finance workflows.">
           <div className="grid gap-4">
-            <Button variant="secondary" leftIcon={<FileSpreadsheet className="h-4 w-4" />}>
+            <Button variant="secondary" leftIcon={<FileSpreadsheet className="h-4 w-4" />} onClick={() => navigate('/finance/invoices')}>
               Generate Invoices
             </Button>
-            <Button variant="secondary" leftIcon={<Receipt className="h-4 w-4" />}>
+            <Button variant="secondary" leftIcon={<Receipt className="h-4 w-4" />} onClick={() => navigate('/finance/payments')}>
               Record Payment
             </Button>
-            <Button variant="secondary" leftIcon={<ShieldAlert className="h-4 w-4" />}>
+            <Button variant="secondary" leftIcon={<ShieldAlert className="h-4 w-4" />} onClick={() => navigate('/finance/defaulters')}>
               View Defaulters
             </Button>
           </div>

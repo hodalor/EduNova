@@ -1,9 +1,12 @@
 const blockSuperAdminInstitutionAccess = (req, res, next) => {
   if (req.user?.role === 'super_admin') {
+    if (req.institutionId && req.institutionId !== 'platform') {
+      return next();
+    }
+
     return res.status(403).json({
       success: false,
-      message:
-        'Super admins can only access aggregate platform endpoints. Institution data is not directly available.',
+      message: 'Select a school scope before accessing institution data.',
     });
   }
 

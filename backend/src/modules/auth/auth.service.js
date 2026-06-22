@@ -7,7 +7,6 @@ const logger = require('../../config/logger');
 const { redisClient } = require('../../config/redis');
 const { models } = require('../../config/database');
 const { getPermissionsForRole } = require('../../shared/constants/permissions');
-const { store } = require('../../shared/store/runtime-store');
 const {
   comparePassword,
   hashPassword,
@@ -26,65 +25,33 @@ const {
   rotateRefreshToken,
   revokeRefreshToken,
 } = require('../../shared/helpers/auth');
-
-const getRuntimeSuperAdminInstitution = () => ({
-  id: 'platform',
-  name: 'EDUOVA Master Control',
-  code: 'MASTER',
-  subscription_plan: 'enterprise',
-  education_levels: ['DC', 'PR', 'JH', 'SH', 'TR'],
-  settings: {
-    platform: {
-      god_mode: true,
-      cluster: store.platform.cluster,
-    },
-  },
-});
-
-const getRuntimeSuperAdmins = () => [
-  store.platform.superAdmin,
-  ...(store.platform.superAdmins || []),
-];
-
-const findRuntimeSuperAdminById = (id) =>
-  getRuntimeSuperAdmins().find((item) => item.id === id) || null;
-
-const findRuntimeSuperAdminByIdentity = (identity) =>
-  getRuntimeSuperAdmins().find((item) => {
-    const username = String(item.username || '').trim().toLowerCase();
-    const email = String(item.email || '').trim().toLowerCase();
-    return username === identity || email === identity;
-  }) || null;
-
-const ensureRuntimeSuperAdmin = async () => {
-  if (!store.platform.superAdmin.password_hash) {
-    store.platform.superAdmin.password_hash = await hashPassword('12345678');
-  }
-
-  return {
-    ...store.platform.superAdmin,
-    institution: getRuntimeSuperAdminInstitution(),
-    profile_photo: null,
-    phone: '+233200000099',
-  };
-};
+const {
+  PLATFORM_CODE,
+  ensurePlatformInstitution,
+  findPlatformUserById,
+  findPlatformUserByIdentity,
+  resolvePlatformUsername,
+  serializePlatformInstitution,
+} = require('../../shared/services/platform-user.service');
 
 const buildProfile = async (user) => {
-  if (user.role === 'super_admin' && findRuntimeSuperAdminById(user.id)) {
+  if (user.role === 'super_admin') {
+    const platformInstitution = user.institution || (await ensurePlatformInstitution());
+
     return {
       id: user.id,
       institution_id: user.institution_id,
       email: user.email,
-      username: user.username,
-      phone: user.phone,
+      username: resolvePlatformUsername(user),
+      phone: null,
       role: user.role,
       first_name: user.first_name,
       last_name: user.last_name,
       profile_photo: user.profile_photo,
-      email_verified: true,
+      email_verified: user.email_verified,
       phone_verified: true,
       last_login: user.last_login || null,
-      institution: getRuntimeSuperAdminInstitution(),
+      institution: serializePlatformInstitution(platformInstitution),
       permissions: getPermissionsForRole(user.role),
     };
   }
@@ -109,8 +76,11 @@ const buildProfile = async (user) => {
 };
 
 const resolveInstitutionId = async ({ institution_id, institution_code }) => {
-  if (String(institution_code || '').toUpperCase() === 'MASTER') {
-    return 'platform';
+  const normalizedCode = String(institution_code || '').trim().toUpperCase();
+
+  if (normalizedCode === PLATFORM_CODE) {
+    const platformInstitution = await ensurePlatformInstitution();
+    return platformInstitution.id;
   }
 
   if (institution_id) {
@@ -118,7 +88,7 @@ const resolveInstitutionId = async ({ institution_id, institution_code }) => {
   }
 
   const institution = await models.Institution.findOne({
-    where: { code: institution_code },
+    where: { code: normalizedCode },
   });
   if (!institution) {
     throw Object.assign(new Error('Institution not found.'), { status: 404 });
@@ -129,12 +99,11 @@ const resolveInstitutionId = async ({ institution_id, institution_code }) => {
 
 const login = async ({ email, identity, password, institution_id, institution_code, otp_code }) => {
   const loginIdentity = (email || identity || '').trim().toLowerCase();
-  const isPlatformLogin = String(institution_code || '').toUpperCase() === 'MASTER';
+  const isPlatformLogin = String(institution_code || '').trim().toUpperCase() === PLATFORM_CODE;
 
   if (isPlatformLogin) {
-    await ensureRuntimeSuperAdmin();
-    const superAdmin = findRuntimeSuperAdminByIdentity(loginIdentity);
-    if (!superAdmin) {
+    const superAdmin = await findPlatformUserByIdentity(loginIdentity);
+    if (!superAdmin || !superAdmin.is_active) {
       throw Object.assign(new Error('Invalid super admin credentials.'), { status: 401 });
     }
     const valid = await comparePassword(password, superAdmin.password_hash);
@@ -142,12 +111,14 @@ const login = async ({ email, identity, password, institution_id, institution_co
       throw Object.assign(new Error('Invalid super admin credentials.'), { status: 401 });
     }
 
+    await superAdmin.update({ last_login: new Date() });
+
     const access_token = signAccessToken(superAdmin);
     const refresh_token = await signRefreshToken(superAdmin);
 
     return {
       user: await buildProfile(superAdmin),
-      institution: getRuntimeSuperAdminInstitution(),
+      institution: serializePlatformInstitution(superAdmin.institution),
       permissions: getPermissionsForRole(superAdmin.role),
       tokens: {
         access_token,
@@ -226,29 +197,12 @@ const refresh = async ({ refresh_token }) => {
     throw Object.assign(new Error('Refresh token session not found.'), { status: 401 });
   }
 
-  if (payload.role === 'super_admin') {
-    await ensureRuntimeSuperAdmin();
-    const superAdmin = findRuntimeSuperAdminById(payload.sub);
-    if (!superAdmin) {
-      throw Object.assign(new Error('Super admin account is inactive.'), { status: 401 });
-    }
-    const access_token = signAccessToken(superAdmin);
-    const rotated_refresh_token = await rotateRefreshToken(refresh_token, superAdmin);
-
-    return {
-      user: await buildProfile(superAdmin),
-      permissions: getPermissionsForRole(superAdmin.role),
-      tokens: {
-        access_token,
-        refresh_token: rotated_refresh_token,
-        expires_in: 15 * 60,
-      },
-    };
-  }
-
-  const user = await models.User.findByPk(payload.sub, {
-    include: [{ model: models.Institution, as: 'institution' }],
-  });
+  const user =
+    payload.role === 'super_admin'
+      ? await findPlatformUserById(payload.sub)
+      : await models.User.findByPk(payload.sub, {
+          include: [{ model: models.Institution, as: 'institution' }],
+        });
   if (!user || !user.is_active) {
     throw Object.assign(new Error('User account is inactive.'), { status: 401 });
   }

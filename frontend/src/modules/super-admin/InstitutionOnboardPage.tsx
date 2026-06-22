@@ -1,4 +1,4 @@
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
@@ -28,8 +28,28 @@ const educationLevelOptions = [
   { code: 'TR', label: 'Tertiary' },
 ];
 
+const resolveErrorMessage = (error: unknown) => {
+  if (error && typeof error === 'object') {
+    const maybeResponse = (error as {
+      response?: { data?: { message?: string } };
+      message?: string;
+    }).response;
+    if (maybeResponse?.data?.message) {
+      return maybeResponse.data.message;
+    }
+
+    const maybeMessage = (error as { message?: string }).message;
+    if (maybeMessage) {
+      return maybeMessage;
+    }
+  }
+
+  return 'Failed to onboard institution.';
+};
+
 const InstitutionOnboardPage = () => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const {
     register,
     handleSubmit,
@@ -40,7 +60,7 @@ const InstitutionOnboardPage = () => {
     defaultValues: {
       subscription_plan: 'growth',
       education_levels: ['PR', 'JH', 'SH'],
-      admin_password: 'Eduova123',
+      admin_password: '',
     },
   });
   const selectedLevels = watch('education_levels');
@@ -48,10 +68,13 @@ const InstitutionOnboardPage = () => {
   const mutation = useMutation({
     mutationFn: eduovaApi.superAdmin.onboardInstitution,
     onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['super-admin', 'institutions'] });
       toast.success('Institution onboarded successfully.');
       navigate('/super-admin/institutions');
     },
-    onError: () => toast.error('Failed to onboard institution.'),
+    onError: (error: unknown) => {
+      toast.error(resolveErrorMessage(error));
+    },
   });
 
   return (
@@ -62,7 +85,12 @@ const InstitutionOnboardPage = () => {
       />
 
       <Card title="Institution Setup" description="Plan, code, level mix, and bootstrap admin account.">
-        <form className="grid gap-4 md:grid-cols-2" onSubmit={handleSubmit((values) => mutation.mutate(values))}>
+        <form
+          className="grid gap-4 md:grid-cols-2"
+          onSubmit={handleSubmit((values) => {
+            mutation.mutate(values);
+          })}
+        >
           <Input label="Institution Name" error={errors.name?.message} {...register('name', { required: 'Institution name is required' })} />
           <Input label="Institution Code" error={errors.code?.message} {...register('code', { required: 'Institution code is required' })} />
           <label className="space-y-2 text-sm font-medium text-slate-700">

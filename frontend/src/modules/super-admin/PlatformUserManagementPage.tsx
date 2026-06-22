@@ -39,7 +39,7 @@ const defaultValues: FormValues = {
   first_name: '',
   last_name: '',
   email: '',
-  temporary_password: 'Eduova123',
+  temporary_password: '',
 };
 
 const PlatformUserManagementPage = () => {
@@ -134,7 +134,7 @@ const PlatformUserManagementPage = () => {
               <Input
                 label="Temporary Password"
                 error={errors.temporary_password?.message}
-                helperText="Use the `master` platform code together with this username and password."
+                helperText="Set the first password for this control-plane account."
                 {...register('temporary_password')}
               />
             </div>

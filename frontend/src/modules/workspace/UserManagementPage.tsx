@@ -66,7 +66,7 @@ const defaultValues: UserFormValues = {
   specialization: '',
   employment_type: 'full_time',
   date_joined: '',
-  temporary_password: 'Eduova123',
+  temporary_password: '',
 };
 
 const UserManagementPage = () => {

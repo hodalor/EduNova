@@ -14,6 +14,9 @@ import Input from '../../components/ui/Input';
 import PageLoader from '../../components/ui/PageLoader';
 import ProgressBar from '../../components/ui/ProgressBar';
 import Select from '../../components/ui/Select';
+import { getInstitutionLevels, isTertiaryInstitution } from '../../lib/institution';
+import { useAuthStore } from '../../store/authStore';
+import type { EducationLevelCode } from '../../types/auth';
 import PageHeader from '../shared/PageHeader';
 import { useCreateStudent } from './hooks/useCreateStudent';
 
@@ -95,6 +98,14 @@ interface TertiaryOverview {
   }>;
 }
 
+const levelLabels: Record<EducationLevelCode, string> = {
+  DC: 'Daycare',
+  PR: 'Primary',
+  JH: 'Junior High',
+  SH: 'Senior High',
+  TR: 'Tertiary',
+};
+
 const steps = [
   'Level',
   'Personal',
@@ -128,15 +139,31 @@ const defaultValues: EnrollmentValues = {
 
 const StudentEnrollmentForm = () => {
   const navigate = useNavigate();
+  const institution = useAuthStore((state) => state.institution);
+  const tenantContext = useAuthStore((state) => state.tenantContext);
+  const activeInstitution = tenantContext || institution;
+  const activeInstitutionId = activeInstitution?.id || null;
+  const allowedLevels = getInstitutionLevels(activeInstitution);
+  const activeLevelSet = useMemo(
+    () => (allowedLevels.length ? allowedLevels : (['PR'] as EducationLevelCode[])),
+    [allowedLevels]
+  );
+  const defaultLevel = activeLevelSet[0];
+  const isTertiaryOnly = activeLevelSet.length === 1 && activeLevelSet[0] === 'TR';
+  const isBasicOnly = activeLevelSet.length > 0 && !activeLevelSet.includes('TR');
+  const assignmentLabel = isTertiaryOnly ? 'Level' : isBasicOnly ? 'Class' : 'Class or Level';
+  const roadmapLabel = isTertiaryOnly ? 'program roadmap' : 'class placement';
   const [step, setStep] = useState(0);
   const createStudent = useCreateStudent();
   const { data: structure, isLoading: structureLoading } = useQuery<AcademicStructureResponse>({
-    queryKey: ['academic-structure', 'enrollment'],
+    queryKey: ['academic-structure', 'enrollment', activeInstitutionId],
     queryFn: eduovaApi.academics.structure,
+    enabled: Boolean(activeInstitutionId),
   });
   const { data: tertiaryOverview, isLoading: tertiaryLoading } = useQuery<TertiaryOverview>({
-    queryKey: ['tertiary-overview', 'enrollment'],
+    queryKey: ['tertiary-overview', 'enrollment', activeInstitutionId],
     queryFn: eduovaApi.tertiary.overview,
+    enabled: Boolean(activeInstitutionId && isTertiaryInstitution(activeInstitution)),
   });
 
   const savedDraft = useMemo(() => {
@@ -156,12 +183,18 @@ const StudentEnrollmentForm = () => {
     defaultValues: {
       ...defaultValues,
       ...savedDraft,
+      level:
+        savedDraft?.level && activeLevelSet.includes(savedDraft.level as EducationLevelCode)
+          ? savedDraft.level
+          : defaultLevel,
     },
   });
 
   const values = watch();
   const completion = ((step + 1) / steps.length) * 100;
-  const groups: AcademicGroup[] = structure?.groups || [];
+  const groups: AcademicGroup[] = (structure?.groups || []).filter((item: AcademicGroup) =>
+    activeLevelSet.includes(item.level_code as EducationLevelCode)
+  );
   const availableGroups = groups.filter((item: AcademicGroup) => item.level_code === values.level);
   const faculties: TertiaryOverview['faculties'] = tertiaryOverview?.faculties || [];
   const departments: TertiaryOverview['departments'] = (tertiaryOverview?.departments || []).filter(
@@ -181,6 +214,22 @@ const StudentEnrollmentForm = () => {
   useEffect(() => {
     window.localStorage.setItem(draftKey, JSON.stringify(values));
   }, [values]);
+
+  useEffect(() => {
+    if (!activeLevelSet.includes(values.level as EducationLevelCode)) {
+      setValue('level', defaultLevel);
+      setValue('groupId', '');
+      setValue('facultyId', '');
+      setValue('departmentId', '');
+      setValue('programId', '');
+    }
+  }, [activeLevelSet, defaultLevel, setValue, values.level]);
+
+  useEffect(() => {
+    if (values.groupId && !availableGroups.some((item) => item.id === values.groupId)) {
+      setValue('groupId', '');
+    }
+  }, [availableGroups, setValue, values.groupId]);
 
   useEffect(() => {
     if (values.facultyId && !departments.some((item) => item.id === values.departmentId)) {
@@ -247,7 +296,7 @@ const StudentEnrollmentForm = () => {
     <div className="space-y-6">
       <PageHeader
         title="Enroll Student"
-        description="Capture student information in a guided, level-aware enrollment flow."
+        description={`Capture learner information in a guided flow for ${activeInstitution?.name || 'the selected school'}.`}
       />
 
       <Card title={`Step ${step + 1} of ${steps.length}`} description={steps[step]}>
@@ -276,13 +325,13 @@ const StudentEnrollmentForm = () => {
 
       <form className="space-y-6" onSubmit={onSubmit}>
         {step === 0 ? (
-          <Card title="Education Level" description="Select the student's educational pathway.">
+          <Card title="Education Level" description="Choose the pathway available for this school.">
             <Select label="Education Level" error={errors.level?.message} {...register('level')}>
-              <option value="DC">DC</option>
-              <option value="PR">PR</option>
-              <option value="JH">JH</option>
-              <option value="SH">SH</option>
-              <option value="TR">TR</option>
+              {activeLevelSet.map((level) => (
+                <option key={level} value={level}>
+                  {levelLabels[level]}
+                </option>
+              ))}
             </Select>
           </Card>
         ) : null}
@@ -325,7 +374,7 @@ const StudentEnrollmentForm = () => {
         ) : null}
 
         {step === 3 ? (
-          <Card title="Level Specific Details" description="The fields below adapt to the selected level.">
+          <Card title="School-Specific Details" description="The fields below adapt to the selected level.">
             <div className="grid gap-4 xl:grid-cols-2">
               {values.level === 'DC' ? (
                 <>
@@ -334,7 +383,7 @@ const StudentEnrollmentForm = () => {
                   <Input label="Pickup Persons" {...register('pickupPersons')} />
                 </>
               ) : null}
-              {values.level === 'PR' ? <Input label="Previous School Information" {...register('previousSchool')} /> : null}
+              {values.level === 'PR' ? <Input label="Previous School" {...register('previousSchool')} /> : null}
               {(values.level === 'JH' || values.level === 'SH') ? (
                 <>
                   <Input label="Previous Results Reference" {...register('previousResults')} />
@@ -369,7 +418,7 @@ const StudentEnrollmentForm = () => {
                       </option>
                     ))}
                   </Select>
-                  <Input label="Qualification Reference" {...register('qualification')} />
+                  <Input label="Qualification" {...register('qualification')} />
                   <div className="xl:col-span-2">
                     <FileUpload multiple={false} />
                   </div>
@@ -389,9 +438,12 @@ const StudentEnrollmentForm = () => {
         ) : null}
 
         {step === 4 ? (
-          <Card title="Class Assignment and Fees" description="Assign class placement and preview fee structure.">
+          <Card
+            title={`${assignmentLabel} Assignment And Fees`}
+            description={`Assign the learner to the right ${assignmentLabel.toLowerCase()} and fee plan.`}
+          >
             <div className="grid gap-4 xl:grid-cols-2">
-              <Select label="Assigned Class or Level" error={errors.groupId?.message} {...register('groupId')}>
+              <Select label={`Assigned ${assignmentLabel}`} error={errors.groupId?.message} {...register('groupId')}>
                 <option value="">Select assignment</option>
                 {availableGroups.map((group) => (
                   <option key={group.id} value={group.id}>
@@ -403,7 +455,7 @@ const StudentEnrollmentForm = () => {
               <div className="xl:col-span-2 rounded-3xl bg-slate-50 p-5">
                 <p className="text-sm font-semibold text-brand-navy">Fee Preview</p>
                 <p className="mt-2 text-sm text-slate-600">
-                  Tuition and fee lines will follow the selected class or level and the school setup.
+                  Tuition and fee lines will follow the selected {assignmentLabel.toLowerCase()} and the school setup.
                 </p>
               </div>
             </div>
@@ -418,7 +470,7 @@ const StudentEnrollmentForm = () => {
                 <p className="mt-2 font-semibold text-brand-navy">
                   {[values.firstName, values.lastName].filter(Boolean).join(' ') || 'Not provided'}
                 </p>
-                <p className="mt-1 text-sm text-slate-500">{values.level}</p>
+                <p className="mt-1 text-sm text-slate-500">{levelLabels[values.level as EducationLevelCode] || values.level}</p>
               </div>
               <div className="surface-muted p-4">
                 <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Guardian</p>
@@ -426,7 +478,7 @@ const StudentEnrollmentForm = () => {
                 <p className="mt-1 text-sm text-slate-500">{values.guardianPhone || 'No phone yet'}</p>
               </div>
               <div className="surface-muted p-4">
-                <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Class Assignment</p>
+                <p className="text-xs uppercase tracking-[0.14em] text-slate-400">{assignmentLabel} Assignment</p>
                 <p className="mt-2 font-semibold text-brand-navy">
                   {selectedGroup?.name || 'Pending assignment'}
                 </p>
@@ -447,7 +499,14 @@ const StudentEnrollmentForm = () => {
                       : 'Faculty, department, and program selection will drive the semester roadmap.'}
                   </p>
                 </div>
-              ) : null}
+              ) : (
+                <div className="surface-muted p-4 md:col-span-2">
+                  <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Placement Note</p>
+                  <p className="mt-2 text-sm text-slate-600">
+                    The learner will follow the {roadmapLabel} tied to the selected {assignmentLabel.toLowerCase()}.
+                  </p>
+                </div>
+              )}
             </div>
           </Card>
         ) : null}

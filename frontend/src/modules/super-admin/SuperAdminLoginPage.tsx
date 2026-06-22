@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Lock, ShieldCheck, UserCog } from 'lucide-react';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
@@ -22,20 +22,23 @@ type LoginValues = z.infer<typeof loginSchema>;
 
 const SuperAdminLoginPage = () => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const setSession = useAuthStore((state) => state.setSession);
   const logout = useAuthStore((state) => state.logout);
   const {
     register,
     handleSubmit,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm<LoginValues>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
-      institution_code: 'master',
-      identity: 'superadmin',
-      password: '12345678',
+      institution_code: '',
+      identity: '',
+      password: '',
     },
   });
+  const institutionCode = watch('institution_code');
 
   const mutation = useMutation({
     mutationFn: eduovaApi.auth.superAdminLogin,
@@ -45,6 +48,7 @@ const SuperAdminLoginPage = () => {
         toast.error('Super admin access is required.');
         return;
       }
+      queryClient.clear();
       setSession(payload);
       toast.success('Welcome to the EDUOVA control plane');
       navigate('/super-admin');
@@ -56,8 +60,17 @@ const SuperAdminLoginPage = () => {
     <AuthLayout
       title="Sign in to EDUOVA Super Admin"
       description="Access the platform control plane for institutions, subscriptions, analytics, and audit visibility."
+      decorativeWord={(institutionCode || 'MASTER').trim().toUpperCase()}
     >
-      <form className="space-y-4" onSubmit={handleSubmit((values) => mutation.mutate(values))}>
+      <form
+        className="space-y-4"
+        onSubmit={handleSubmit((values) =>
+          mutation.mutate({
+            ...values,
+            institution_code: values.institution_code.trim().toUpperCase(),
+          })
+        )}
+      >
         <Input
           label="Platform Code"
           error={errors.institution_code?.message}
@@ -65,9 +78,8 @@ const SuperAdminLoginPage = () => {
           {...register('institution_code')}
         />
         <Input
-          label="Super Admin Username"
+          label="Email or Username"
           error={errors.identity?.message}
-          helperText="Use `superadmin` as the master username."
           prefix={<UserCog className="h-4 w-4" />}
           {...register('identity')}
         />
@@ -78,9 +90,6 @@ const SuperAdminLoginPage = () => {
           prefix={<Lock className="h-4 w-4" />}
           {...register('password')}
         />
-        <p className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-          Default master access: school id `master`, username `superadmin`, password `12345678`.
-        </p>
         <Button type="submit" className="w-full" size="lg" loading={mutation.isPending || isSubmitting}>
           Access Control Plane
         </Button>

@@ -20,7 +20,7 @@ const randomCode = (size = 6) =>
 
 const randomPassword = (size = 10) =>
   crypto.randomBytes(size).toString('base64').replace(/[^a-zA-Z0-9]/g, '').slice(0, size) ||
-  'Eduova1234';
+  `${Date.now().toString(36)}Ab12`.slice(0, size);
 
 const buildPdfBuffer = (builder) =>
   new Promise((resolve, reject) => {

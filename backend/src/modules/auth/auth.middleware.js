@@ -1,7 +1,9 @@
 const { models } = require('../../config/database');
 const { hasPermission } = require('../../shared/constants/permissions');
 const { isTokenBlacklisted, verifyAccessToken } = require('../../shared/helpers/auth');
-const { store } = require('../../shared/store/runtime-store');
+const {
+  findPlatformUserById,
+} = require('../../shared/services/platform-user.service');
 
 const extractToken = (req) => {
   const header = req.headers.authorization || '';
@@ -10,11 +12,6 @@ const extractToken = (req) => {
   }
   return header.replace('Bearer ', '').trim();
 };
-
-const findRuntimeSuperAdmin = (userId) =>
-  [store.platform.superAdmin, ...(store.platform.superAdmins || [])].find(
-    (item) => item.id === userId
-  ) || null;
 
 const authenticate = async (req, res, next) => {
   const token = extractToken(req);
@@ -30,26 +27,10 @@ const authenticate = async (req, res, next) => {
     let user = null;
 
     if (payload.role === 'super_admin') {
-      const runtimeSuperAdmin = findRuntimeSuperAdmin(payload.sub);
-      if (!runtimeSuperAdmin) {
+      user = await findPlatformUserById(payload.sub);
+      if (!user) {
         return res.status(401).json({ success: false, message: 'User account is inactive.' });
       }
-
-      user = {
-        ...runtimeSuperAdmin,
-        institution: {
-          id: 'platform',
-          name: 'EDUOVA Master Control',
-          code: 'MASTER',
-          education_levels: ['DC', 'PR', 'JH', 'SH', 'TR'],
-          settings: {
-            platform: {
-              god_mode: true,
-              cluster: store.platform.cluster,
-            },
-          },
-        },
-      };
     } else {
       user = await models.User.findByPk(payload.sub, {
         include: [{ model: models.Institution, as: 'institution' }],
@@ -71,7 +52,12 @@ const authenticate = async (req, res, next) => {
 
 const resolveInstitution = (req, res, next) => {
   const headerInstitution = req.headers['x-institution-id'];
-  const institutionId = req.auth?.institution_id || headerInstitution || req.body.institution_id || req.query.institution_id;
+  const requestedInstitution =
+    headerInstitution || req.body.institution_id || req.query.institution_id || null;
+  const institutionId =
+    req.user?.role === 'super_admin'
+      ? requestedInstitution || req.auth?.institution_id
+      : req.auth?.institution_id || requestedInstitution;
 
   if (!institutionId) {
     return res.status(400).json({ success: false, message: 'institution_id is required.' });

@@ -4,13 +4,6 @@ import {
   analyticsData,
   daycareData,
   dashboardOverview,
-  demoLoginResponse,
-  demoSuperAdminLoginResponse,
-  demoStudentLoginResponse,
-  demoTeacherLoginResponse,
-  demoDaycareLoginResponse,
-  demoTertiaryLoginResponse,
-  demoTertiaryStudentLoginResponse,
   financeData,
   attendanceData,
   superAdminData,
@@ -19,33 +12,6 @@ import {
 import type { LoginResponse } from '../types/auth';
 
 const wait = (ms = 250) => new Promise((resolve) => window.setTimeout(resolve, ms));
-
-const selectLoginFallback = (payload: { identity: string; institution_code: string }) => {
-  const identity = payload.identity.toLowerCase();
-  const institutionCode = payload.institution_code.toUpperCase();
-
-  if (identity.includes('student') && (institutionCode === 'UNI' || institutionCode === 'TERTIARY')) {
-    return demoTertiaryStudentLoginResponse;
-  }
-  if (identity.includes('teacher')) {
-    return demoTeacherLoginResponse;
-  }
-  if (identity.includes('student')) {
-    return demoStudentLoginResponse;
-  }
-  if (institutionCode === 'DAYCARE') {
-    return demoDaycareLoginResponse;
-  }
-  if (institutionCode === 'UNI' || institutionCode === 'TERTIARY') {
-    return demoTertiaryLoginResponse;
-  }
-  return demoLoginResponse;
-};
-
-const isMasterSuperAdminLogin = (payload: { identity: string; password: string; institution_code: string }) =>
-  payload.institution_code.trim().toUpperCase() === 'MASTER' &&
-  payload.identity.trim().toLowerCase() === 'superadmin' &&
-  payload.password === '12345678';
 
 async function safeRequest<T>(request: () => Promise<T>, fallback: T): Promise<T> {
   try {
@@ -63,33 +29,16 @@ export const eduovaApi = {
       password: string;
       institution_code: string;
     }): Promise<LoginResponse> => {
-      if (isMasterSuperAdminLogin(payload)) {
-        return eduovaApi.auth.superAdminLogin(payload);
-      }
-
-      return safeRequest(
-        async () => {
-          const { data } = await authApi.post('/auth/login', payload);
-          return data.data || data;
-        },
-        selectLoginFallback(payload)
-      );
+      const { data } = await authApi.post('/auth/login', payload);
+      return data.data || data;
     },
     superAdminLogin: async (payload: {
       identity: string;
       password: string;
       institution_code: string;
     }): Promise<LoginResponse> => {
-      try {
-        const { data } = await authApi.post('/auth/login', payload);
-        return data.data || data;
-      } catch (error) {
-        if (isMasterSuperAdminLogin(payload)) {
-          await wait();
-          return demoSuperAdminLoginResponse;
-        }
-        throw error;
-      }
+      const { data } = await authApi.post('/auth/login', payload);
+      return data.data || data;
     },
   },
   analytics: {
@@ -131,19 +80,19 @@ export const eduovaApi = {
       safeRequest(async () => (await axiosInstance.get('/finance/fee-structures')).data.data, financeData.feeStructures),
   },
   academics: {
-    structure: async () => (await axiosInstance.get('/academics/structure')).data.data,
+    structure: async () => (await axiosInstance.get('/v1/academics/structure')).data.data,
     createGroup: async (payload: Record<string, unknown>) =>
-      (await axiosInstance.post('/academics/groups', payload)).data.data,
+      (await axiosInstance.post('/v1/academics/groups', payload)).data.data,
     createPeriod: async (payload: Record<string, unknown>) =>
-      (await axiosInstance.post('/academics/periods', payload)).data.data,
+      (await axiosInstance.post('/v1/academics/periods', payload)).data.data,
     createOffering: async (payload: Record<string, unknown>) =>
-      (await axiosInstance.post('/academics/offerings', payload)).data.data,
+      (await axiosInstance.post('/v1/academics/offerings', payload)).data.data,
     assessments: () =>
-      safeRequest(async () => (await axiosInstance.get('/academics/assessments')).data.data, academicsData.assessments),
+      safeRequest(async () => (await axiosInstance.get('/v1/academics/assessments')).data.data, academicsData.assessments),
     reportCards: () =>
-      safeRequest(async () => (await axiosInstance.get('/academics/report-cards')).data.data, academicsData.reportCards),
+      safeRequest(async () => (await axiosInstance.get('/v1/academics/report-cards')).data.data, academicsData.reportCards),
     gradebook: () =>
-      safeRequest(async () => (await axiosInstance.get('/academics/gradebook')).data.data, academicsData.gradebook),
+      safeRequest(async () => (await axiosInstance.get('/v1/academics/gradebook')).data.data, academicsData.gradebook),
   },
   attendance: {
     taking: () =>
