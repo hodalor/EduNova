@@ -57,17 +57,26 @@ if (env.NODE_ENV === 'test') {
 
   connectRedis = async () => true;
 } else {
+  const shouldRetryRedis = env.NODE_ENV === 'production';
+  let hasLoggedRedisError = false;
+
   redisClient = new Redis(env.REDIS_URL, {
     lazyConnect: true,
+    enableOfflineQueue: false,
     maxRetriesPerRequest: 2,
+    retryStrategy: shouldRetryRedis ? (times) => Math.min(times * 250, 2000) : () => null,
   });
 
   redisClient.on('connect', () => {
+    hasLoggedRedisError = false;
     logger.info('Redis connection established successfully.');
   });
 
   redisClient.on('error', (error) => {
-    logger.error('Redis connection error', { error: error.message });
+    if (!hasLoggedRedisError) {
+      hasLoggedRedisError = true;
+      logger.warn('Redis connection unavailable', { error: error.message });
+    }
   });
 
   connectRedis = async () => {

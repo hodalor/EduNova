@@ -17,11 +17,15 @@ router.use(
   generalApiRateLimiter
 );
 
+router.get('/overview', controller.getOverview);
 router.post('/course-registration', controller.registerCourses);
 router.get('/student-registration/:studentId', controller.getStudentRegistrationState);
 router.get('/transcript/:studentId', controller.getTranscript);
+router.get('/faculties', controller.listFaculties);
+router.post('/faculties', controller.createFaculty);
 router.get('/departments', controller.listDepartments);
 router.post('/departments', controller.createDepartment);
 router.get('/programs', controller.listPrograms);
+router.post('/programs', controller.createProgram);
 
 module.exports = router;

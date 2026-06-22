@@ -10,6 +10,9 @@ const SuperAdminLoginPage = lazy(() => import('../modules/super-admin/SuperAdmin
 const PlatformHomePage = lazy(() => import('../modules/super-admin/PlatformHomePage'));
 const InstitutionListPage = lazy(() => import('../modules/super-admin/InstitutionListPage'));
 const InstitutionOnboardPage = lazy(() => import('../modules/super-admin/InstitutionOnboardPage'));
+const PlatformUserManagementPage = lazy(
+  () => import('../modules/super-admin/PlatformUserManagementPage')
+);
 const PlatformAnalyticsPage = lazy(() => import('../modules/super-admin/PlatformAnalyticsPage'));
 const AuditLogPage = lazy(() => import('../modules/super-admin/AuditLogPage'));
 const DashboardPage = lazy(() => import('../modules/dashboard/DashboardPage'));
@@ -89,26 +92,7 @@ const AppRouter = () => {
               path="/admissions"
               element={
                 <ProtectedRoute allowedRoles={['institution_admin']}>
-                  <WorkspaceHubPage
-                    title="Admissions"
-                    description="Manage enquiries, screening, offer workflows, and onboarding paths for daycare, K-12, and tertiary institutions."
-                    metrics={[
-                      { label: 'Active Pipelines', value: '4', helper: 'Daycare, K-12, transfer, and tertiary admissions.' },
-                      { label: 'Pending Reviews', value: '26', helper: 'Applicants waiting for document verification.' },
-                      { label: 'Offer Letters', value: '14', helper: 'Offers generated for the current intake.' },
-                      { label: 'Interview Slots', value: '8', helper: 'Scheduled admission conversations.' },
-                    ]}
-                    links={[
-                      { title: 'Student Enrollment', description: 'Admit accepted learners into the main student register.', to: '/students/enroll', badge: 'live' },
-                      { title: 'Students Register', description: 'Review converted applicants in the institution roster.', to: '/students' },
-                      { title: 'Settings', description: 'Align admissions with the institution structure and level mix.', to: '/settings' },
-                    ]}
-                    checklist={[
-                      { title: 'Level-aware admissions', description: 'Supports daycare intake, K-12 class entry, and tertiary faculty/program admission.', status: 'success' },
-                      { title: 'Institution code routing', description: 'Applicants and staff log into the correct institution using institution code plus identity.', status: 'success' },
-                      { title: 'Promotion alignment', description: 'Admission destinations respect the active education levels configured for the school.', status: 'info' },
-                    ]}
-                  />
+                  <Navigate to="/students/enroll" replace />
                 </ProtectedRoute>
               }
             />
@@ -148,26 +132,7 @@ const AppRouter = () => {
               path="/staff"
               element={
                 <ProtectedRoute allowedRoles={['institution_admin']}>
-                  <WorkspaceHubPage
-                    title="Staff and HR"
-                    description="Coordinate contracts, role assignment, timetable load, and internal access for teaching and non-teaching teams."
-                    metrics={[
-                      { label: 'Active Staff', value: '286', helper: 'Teaching and support workforce in service.' },
-                      { label: 'Open Roles', value: '7', helper: 'Recruitment or replacement positions.' },
-                      { label: 'Departments', value: '12', helper: 'Administrative and academic units.' },
-                      { label: 'Role Profiles', value: '8', helper: 'Operational roles configured in the portal.' },
-                    ]}
-                    links={[
-                      { title: 'Students Register', description: 'Cross-check teacher allocations and class stewardship.', to: '/students' },
-                      { title: 'Create Admin or Teacher', description: 'Create institution admin and teacher user accounts.', to: '/staff/users', badge: 'access' },
-                      { title: 'Timetable Generator', description: 'Balance teacher load and room assignments.', to: '/timetable/generator', badge: 'planner' },
-                      { title: 'Settings', description: 'Adjust access permissions and institution setup.', to: '/settings' },
-                    ]}
-                    checklist={[
-                      { title: 'Role-aware access', description: 'Teacher, student, parent, finance, library, and transport roles are segregated by workspace.', status: 'success' },
-                      { title: 'Institution-aware menus', description: 'Staff see only modules relevant to their role and the school level model.', status: 'success' },
-                    ]}
-                  />
+                  <Navigate to="/staff/users" replace />
                 </ProtectedRoute>
               }
             />
@@ -550,6 +515,7 @@ const AppRouter = () => {
             }
           >
             <Route path="/super-admin" element={<PlatformHomePage />} />
+            <Route path="/super-admin/users" element={<PlatformUserManagementPage />} />
             <Route path="/super-admin/institutions" element={<InstitutionListPage />} />
             <Route path="/super-admin/institutions/new" element={<InstitutionOnboardPage />} />
             <Route path="/super-admin/analytics" element={<PlatformAnalyticsPage />} />

@@ -1,6 +1,7 @@
 const { models } = require('../../config/database');
 const { hasPermission } = require('../../shared/constants/permissions');
 const { isTokenBlacklisted, verifyAccessToken } = require('../../shared/helpers/auth');
+const { store } = require('../../shared/store/runtime-store');
 
 const extractToken = (req) => {
   const header = req.headers.authorization || '';
@@ -9,6 +10,11 @@ const extractToken = (req) => {
   }
   return header.replace('Bearer ', '').trim();
 };
+
+const findRuntimeSuperAdmin = (userId) =>
+  [store.platform.superAdmin, ...(store.platform.superAdmins || [])].find(
+    (item) => item.id === userId
+  ) || null;
 
 const authenticate = async (req, res, next) => {
   const token = extractToken(req);
@@ -21,9 +27,34 @@ const authenticate = async (req, res, next) => {
 
   try {
     const payload = verifyAccessToken(token);
-    const user = await models.User.findByPk(payload.sub, {
-      include: [{ model: models.Institution, as: 'institution' }],
-    });
+    let user = null;
+
+    if (payload.role === 'super_admin') {
+      const runtimeSuperAdmin = findRuntimeSuperAdmin(payload.sub);
+      if (!runtimeSuperAdmin) {
+        return res.status(401).json({ success: false, message: 'User account is inactive.' });
+      }
+
+      user = {
+        ...runtimeSuperAdmin,
+        institution: {
+          id: 'platform',
+          name: 'EDUOVA Master Control',
+          code: 'MASTER',
+          education_levels: ['DC', 'PR', 'JH', 'SH', 'TR'],
+          settings: {
+            platform: {
+              god_mode: true,
+              cluster: store.platform.cluster,
+            },
+          },
+        },
+      };
+    } else {
+      user = await models.User.findByPk(payload.sub, {
+        include: [{ model: models.Institution, as: 'institution' }],
+      });
+    }
 
     if (!user || !user.is_active) {
       return res.status(401).json({ success: false, message: 'User account is inactive.' });
@@ -54,6 +85,9 @@ const resolveInstitution = (req, res, next) => {
 };
 
 const authorize = (roles = [], permission = null) => (req, res, next) => {
+  if (req.user?.role === 'super_admin') {
+    return next();
+  }
   if (roles.length && !roles.includes(req.user.role)) {
     return res.status(403).json({ success: false, message: 'Insufficient role privileges.' });
   }

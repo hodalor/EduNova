@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Lock, Mail, ShieldCheck } from 'lucide-react';
+import { Lock, ShieldCheck, UserCog } from 'lucide-react';
 import { useMutation } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
@@ -14,7 +14,7 @@ import { useAuthStore } from '../../store/authStore';
 
 const loginSchema = z.object({
   institution_code: z.string().min(1, 'Platform code is required'),
-  identity: z.string().email(),
+  identity: z.string().min(1, 'Super admin username is required'),
   password: z.string().min(8),
 });
 
@@ -31,9 +31,9 @@ const SuperAdminLoginPage = () => {
   } = useForm<LoginValues>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
-      institution_code: 'PLATFORM',
-      identity: 'superadmin@eduova.test',
-      password: 'Eduova123',
+      institution_code: 'master',
+      identity: 'superadmin',
+      password: '12345678',
     },
   });
 
@@ -65,9 +65,10 @@ const SuperAdminLoginPage = () => {
           {...register('institution_code')}
         />
         <Input
-          label="Super Admin Email"
+          label="Super Admin Username"
           error={errors.identity?.message}
-          prefix={<Mail className="h-4 w-4" />}
+          helperText="Use `superadmin` as the master username."
+          prefix={<UserCog className="h-4 w-4" />}
           {...register('identity')}
         />
         <Input
@@ -77,6 +78,9 @@ const SuperAdminLoginPage = () => {
           prefix={<Lock className="h-4 w-4" />}
           {...register('password')}
         />
+        <p className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+          Default master access: school id `master`, username `superadmin`, password `12345678`.
+        </p>
         <Button type="submit" className="w-full" size="lg" loading={mutation.isPending || isSubmitting}>
           Access Control Plane
         </Button>

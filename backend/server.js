@@ -32,7 +32,13 @@ io.on('connection', (socket) => {
 const startServer = async () => {
   try {
     await connectDatabase();
-    await connectRedis();
+    try {
+      await connectRedis();
+    } catch (error) {
+      logger.warn('Redis unavailable during bootstrap; continuing in degraded mode', {
+        error: error.message,
+      });
+    }
     communicationService.registerEventSubscribers();
 
     server.listen(env.PORT, () => {

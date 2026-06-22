@@ -10,7 +10,7 @@ module.exports = {
   listStudents: wrap((req) =>
     studentsService.listStudents({
       institutionId: req.institutionId,
-      parentId: req.query.parent_id || req.user.id,
+      parentId: req.user.role === 'parent' ? req.query.parent_id || req.user.id : req.query.parent_id,
     })
   ),
   getStudent: wrap((req) =>
@@ -28,6 +28,8 @@ module.exports = {
     const data = await studentsService.createStudent({
       institutionId: req.institutionId,
       payload: req.body,
+      actorId: req.user.id,
+      ip: req.ip,
     });
     res.status(201).json({
       success: true,

@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { BellRing, FileText, Receipt, UserPlus } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import {
   Bar,
   BarChart,
@@ -20,6 +21,7 @@ import Card from '../../components/ui/Card';
 import PageLoader from '../../components/ui/PageLoader';
 import Stat from '../../components/ui/Stat';
 import Table from '../../components/ui/Table';
+import { isTertiaryInstitution } from '../../lib/institution';
 import { useAuthStore } from '../../store/authStore';
 import PageHeader from '../shared/PageHeader';
 import ParentWorkspacePage from '../workspace/ParentWorkspacePage';
@@ -56,7 +58,9 @@ interface DashboardAlert {
 }
 
 const DashboardPage = () => {
+  const navigate = useNavigate();
   const role = useAuthStore((state) => state.role);
+  const institution = useAuthStore((state) => state.tenantContext || state.institution);
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['dashboard-overview'],
     queryFn: eduovaApi.analytics.getOverview,
@@ -161,17 +165,33 @@ const DashboardPage = () => {
 
       <Card title="Quick Actions" description="Launch the most common administrative workflows.">
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <Button variant="secondary" leftIcon={<UserPlus className="h-4 w-4" />}>
+          <Button
+            variant="secondary"
+            leftIcon={<UserPlus className="h-4 w-4" />}
+            onClick={() => navigate('/students/enroll')}
+          >
             New Student
           </Button>
-          <Button variant="secondary" leftIcon={<Receipt className="h-4 w-4" />}>
-            Record Payment
+          <Button
+            variant="secondary"
+            leftIcon={<FileText className="h-4 w-4" />}
+            onClick={() => navigate('/staff/users')}
+          >
+            Create User
           </Button>
-          <Button variant="secondary" leftIcon={<BellRing className="h-4 w-4" />}>
-            Send Notice
+          <Button
+            variant="secondary"
+            leftIcon={<BellRing className="h-4 w-4" />}
+            onClick={() => navigate('/academics/structure')}
+          >
+            Academic Setup
           </Button>
-          <Button variant="secondary" leftIcon={<FileText className="h-4 w-4" />}>
-            Generate Report
+          <Button
+            variant="secondary"
+            leftIcon={<Receipt className="h-4 w-4" />}
+            onClick={() => navigate(isTertiaryInstitution(institution) ? '/tertiary' : '/finance')}
+          >
+            {isTertiaryInstitution(institution) ? 'Tertiary Setup' : 'Finance'}
           </Button>
         </div>
       </Card>

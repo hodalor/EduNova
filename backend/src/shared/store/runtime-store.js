@@ -2,11 +2,32 @@ const clone = (value) => JSON.parse(JSON.stringify(value));
 
 const initialStore = {
   platform: {
+    cluster: {
+      cluster_name: 'eduova_test-cluster',
+      engine: 'postgresql',
+      host: '127.0.0.1',
+      port: 5432,
+      strategy: 'single_cluster_multi_database',
+    },
+    superAdmin: {
+      id: 'usr-super-master',
+      institution_id: 'platform',
+      username: 'superadmin',
+      email: 'superadmin@eduova.test',
+      first_name: 'Master',
+      last_name: 'Operator',
+      role: 'super_admin',
+      password_hash: null,
+      is_active: true,
+      god_mode: true,
+    },
+    superAdmins: [],
     institutions: [
       {
         id: 'test-inst',
         name: 'EDUOVA Academy',
         code: 'EDUOVA',
+        education_levels: ['PR', 'JH', 'SH'],
         subscription_plan: 'enterprise',
         status: 'active',
         trial_ends_at: '2026-07-31T23:59:59.000Z',
@@ -14,12 +35,26 @@ const initialStore = {
         active_students: 2,
         active_staff: 24,
         modules_enabled: 'all',
+        settings: {
+          tenant_database: {
+            cluster_name: 'eduova_test-cluster',
+            database_name: 'eduova_eduova',
+            database_user: 'postgres',
+            schema_name: 'public',
+            provision_status: 'provisioned',
+          },
+          workspace_profile: {
+            label: 'basic_secondary',
+            menus: ['admissions', 'students', 'academics', 'attendance', 'finance', 'communication'],
+          },
+        },
         created_at: '2026-06-01T08:00:00.000Z',
       },
       {
         id: 'inst-growth',
         name: 'North Ridge School',
         code: 'NRS',
+        education_levels: ['DC', 'PR'],
         subscription_plan: 'growth',
         status: 'trial',
         trial_ends_at: '2026-07-15T23:59:59.000Z',
@@ -35,6 +70,19 @@ const initialStore = {
           'hostel',
           'timetable',
         ],
+        settings: {
+          tenant_database: {
+            cluster_name: 'eduova_test-cluster',
+            database_name: 'eduova_nrs',
+            database_user: 'postgres',
+            schema_name: 'public',
+            provision_status: 'provisioned',
+          },
+          workspace_profile: {
+            label: 'daycare_primary',
+            menus: ['admissions', 'students', 'attendance', 'communication', 'transport', 'finance'],
+          },
+        },
         created_at: '2026-05-11T10:15:00.000Z',
       },
     ],

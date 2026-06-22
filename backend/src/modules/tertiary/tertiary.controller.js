@@ -7,6 +7,9 @@ const wrap = (handler) => async (req, res) =>
   });
 
 module.exports = {
+  getOverview: wrap((req) =>
+    tertiaryService.getOverview({ institutionId: req.institutionId })
+  ),
   getStudentRegistrationState: wrap((req) =>
     tertiaryService.getStudentRegistrationState({
       institutionId: req.institutionId,
@@ -28,6 +31,18 @@ module.exports = {
       studentId: req.params.studentId,
     })
   ),
+  listFaculties: wrap((req) =>
+    tertiaryService.listFaculties({ institutionId: req.institutionId })
+  ),
+  createFaculty: async (req, res) => {
+    const data = await tertiaryService.createFaculty({
+      institutionId: req.institutionId,
+      payload: req.body,
+      userId: req.user.id,
+      ip: req.ip,
+    });
+    res.status(201).json({ success: true, data });
+  },
   listDepartments: wrap((req) =>
     tertiaryService.listDepartments({ institutionId: req.institutionId })
   ),
@@ -43,4 +58,13 @@ module.exports = {
   listPrograms: wrap((req) =>
     tertiaryService.listPrograms({ institutionId: req.institutionId })
   ),
+  createProgram: async (req, res) => {
+    const data = await tertiaryService.createProgram({
+      institutionId: req.institutionId,
+      payload: req.body,
+      userId: req.user.id,
+      ip: req.ip,
+    });
+    res.status(201).json({ success: true, data });
+  },
 };

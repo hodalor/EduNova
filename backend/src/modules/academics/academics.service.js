@@ -1,9 +1,112 @@
+const crypto = require('crypto');
+
+const { models, sequelize } = require('../../config/database');
 const { logAudit } = require('../../shared/services/audit-log.service');
-const { requireLevelConfig } = require('../../shared/services/level-config.service');
+const { getLevelConfig, requireLevelConfig } = require('../../shared/services/level-config.service');
 const { store } = require('../../shared/store/runtime-store');
 const analyticsService = require('../analytics/analytics.service');
 
-const listAcademicStructure = async ({ institutionId, levelCode }) => {
+const databaseReady = () =>
+  Boolean(
+    models.Institution &&
+      models.EducationLevel &&
+      models.AcademicYear &&
+      models.TermSemester &&
+      models.Subject &&
+      models.Class &&
+      models.ClassSubject &&
+      sequelize?.transaction
+  );
+
+const cloneSettings = (settings) => JSON.parse(JSON.stringify(settings || {}));
+
+const ensureAcademicSettings = (settings) => {
+  const next = cloneSettings(settings);
+  next.academics = next.academics || {};
+  next.academics.groups = next.academics.groups || [];
+  next.academics.periods = next.academics.periods || [];
+  next.academics.offerings = next.academics.offerings || [];
+  next.academics.progression_rules =
+    next.academics.progression_rules || [
+      'Students only see courses or subjects assigned to their class or level.',
+      'Registration opens only for the active academic period.',
+    ];
+  return next;
+};
+
+const ensureLevelRecord = async ({ institutionId, levelCode, transaction }) => {
+  let level = await models.EducationLevel.findOne({
+    where: { institution_id: institutionId, level_code: levelCode },
+    transaction,
+  });
+
+  if (!level) {
+    const config = getLevelConfig(levelCode) || {};
+    level = await models.EducationLevel.create(
+      {
+        institution_id: institutionId,
+        level_code: levelCode,
+        level_name:
+          {
+            DC: 'Daycare',
+            PR: 'Primary',
+            JH: 'Junior High',
+            SH: 'Senior High',
+            TR: 'Tertiary',
+          }[levelCode] || levelCode,
+        age_min: config.ageMin || null,
+        age_max: config.ageMax || null,
+      },
+      { transaction }
+    );
+  }
+
+  return level;
+};
+
+const ensureCurrentAcademicYear = async ({ institutionId, transaction }) => {
+  const existing = await models.AcademicYear.findOne({
+    where: { institution_id: institutionId, is_current: true },
+    transaction,
+  });
+  if (existing) {
+    return existing;
+  }
+
+  const year = new Date().getFullYear();
+  return models.AcademicYear.create(
+    {
+      institution_id: institutionId,
+      name: `${year}/${year + 1}`,
+      start_date: `${year}-01-01`,
+      end_date: `${year}-12-31`,
+      is_current: true,
+    },
+    { transaction }
+  );
+};
+
+const listAcademicStructureFromDatabase = async ({ institutionId, levelCode }) => {
+  const institution = await models.Institution.findByPk(institutionId);
+  if (!institution) {
+    throw Object.assign(new Error('Institution not found.'), { statusCode: 404 });
+  }
+
+  const settings = ensureAcademicSettings(institution.settings);
+  const groups = settings.academics.groups.filter(
+    (item) => !levelCode || item.level_code === String(levelCode).toUpperCase()
+  );
+  const groupIds = new Set(groups.map((item) => item.id));
+
+  return {
+    groups,
+    periods: settings.academics.periods.filter((item) => groupIds.has(item.group_id)),
+    offerings: settings.academics.offerings.filter((item) => groupIds.has(item.group_id)),
+    progression_rules: [...settings.academics.progression_rules],
+  };
+};
+
+const listAcademicStructureFromRuntime = async ({ institutionId, levelCode }) => {
   const groups = store.academics.structure.groups.filter(
     (item) =>
       item.institution_id === institutionId && (!levelCode || item.level_code === levelCode)
@@ -22,7 +125,90 @@ const listAcademicStructure = async ({ institutionId, levelCode }) => {
   };
 };
 
-const createAcademicGroup = async ({ institutionId, userId, payload, ip }) => {
+const listAcademicStructure = async (context) => {
+  if (databaseReady()) {
+    return listAcademicStructureFromDatabase(context);
+  }
+  return listAcademicStructureFromRuntime(context);
+};
+
+const createAcademicGroupFromDatabase = async ({ institutionId, userId, payload, ip }) => {
+  const transaction = await sequelize.transaction();
+
+  try {
+    const institution = await models.Institution.findByPk(institutionId, { transaction });
+    if (!institution) {
+      throw Object.assign(new Error('Institution not found.'), { statusCode: 404 });
+    }
+
+    const settings = ensureAcademicSettings(institution.settings);
+    const levelCode = String(payload.level_code || '').toUpperCase();
+    requireLevelConfig(levelCode);
+
+    const normalizedCode = String(payload.code || '')
+      .trim()
+      .toUpperCase();
+
+    const duplicate = settings.academics.groups.find((item) => item.code === normalizedCode);
+    if (duplicate) {
+      throw Object.assign(new Error('A class or level with this code already exists.'), {
+        statusCode: 409,
+      });
+    }
+
+    const levelRecord = await ensureLevelRecord({ institutionId, levelCode, transaction });
+    const group = {
+      id: payload.id || crypto.randomUUID(),
+      institution_id: institutionId,
+      name: payload.name,
+      code: normalizedCode,
+      group_type: payload.group_type || 'level',
+      level_code: levelCode,
+      calendar_type: payload.calendar_type || 'term',
+      level_record_id: levelRecord.id,
+    };
+
+    if (group.group_type === 'class') {
+      const academicYear = await ensureCurrentAcademicYear({ institutionId, transaction });
+      const classRecord = await models.Class.create(
+        {
+          institution_id: institutionId,
+          level_id: levelRecord.id,
+          name: payload.name,
+          stream: payload.stream || null,
+          capacity:
+            payload.capacity === '' || payload.capacity === null || payload.capacity === undefined
+              ? null
+              : Number(payload.capacity),
+          academic_year_id: academicYear.id,
+        },
+        { transaction }
+      );
+      group.class_record_id = classRecord.id;
+      group.academic_year_id = academicYear.id;
+    }
+
+    settings.academics.groups.push(group);
+    await institution.update({ settings }, { transaction });
+    await transaction.commit();
+
+    await logAudit({
+      userId,
+      action: 'CREATE',
+      resourceType: 'academic_group',
+      resourceId: group.id,
+      newValues: group,
+      ip,
+    });
+
+    return group;
+  } catch (error) {
+    await transaction.rollback();
+    throw error;
+  }
+};
+
+const createAcademicGroupFromRuntime = async ({ institutionId, userId, payload, ip }) => {
   const group = {
     id: payload.id || `grp-${store.academics.structure.groups.length + 1}`,
     institution_id: institutionId,
@@ -48,7 +234,88 @@ const createAcademicGroup = async ({ institutionId, userId, payload, ip }) => {
   return group;
 };
 
-const createAcademicPeriod = async ({ institutionId, userId, payload, ip }) => {
+const createAcademicGroup = async (context) => {
+  if (databaseReady()) {
+    return createAcademicGroupFromDatabase(context);
+  }
+  return createAcademicGroupFromRuntime(context);
+};
+
+const createAcademicPeriodFromDatabase = async ({ institutionId, userId, payload, ip }) => {
+  const transaction = await sequelize.transaction();
+
+  try {
+    const institution = await models.Institution.findByPk(institutionId, { transaction });
+    if (!institution) {
+      throw Object.assign(new Error('Institution not found.'), { statusCode: 404 });
+    }
+
+    const settings = ensureAcademicSettings(institution.settings);
+    const group = settings.academics.groups.find((item) => item.id === payload.group_id);
+    if (!group) {
+      throw Object.assign(new Error('Academic group not found.'), { statusCode: 404 });
+    }
+
+    const period = {
+      id: payload.id || crypto.randomUUID(),
+      institution_id: institutionId,
+      group_id: payload.group_id,
+      name: payload.name,
+      sequence: Number(payload.sequence || 1),
+      calendar_type: payload.calendar_type || group.calendar_type,
+      status: payload.status || 'planned',
+      registration_open: Boolean(payload.registration_open),
+      start_date: payload.start_date || null,
+      end_date: payload.end_date || null,
+    };
+
+    if (['term', 'semester'].includes(period.calendar_type)) {
+      const academicYear = await ensureCurrentAcademicYear({ institutionId, transaction });
+      const type = period.calendar_type === 'semester' ? 'semester' : 'term';
+
+      if (period.status === 'active') {
+        await models.TermSemester.update(
+          { is_current: false },
+          { where: { academic_year_id: academicYear.id }, transaction }
+        );
+      }
+
+      const record = await models.TermSemester.create(
+        {
+          academic_year_id: academicYear.id,
+          name: period.name,
+          type,
+          start_date: period.start_date || academicYear.start_date,
+          end_date: period.end_date || academicYear.end_date,
+          is_current: period.status === 'active',
+        },
+        { transaction }
+      );
+      period.term_semester_id = record.id;
+      period.academic_year_id = academicYear.id;
+    }
+
+    settings.academics.periods.push(period);
+    await institution.update({ settings }, { transaction });
+    await transaction.commit();
+
+    await logAudit({
+      userId,
+      action: 'CREATE',
+      resourceType: 'academic_period',
+      resourceId: period.id,
+      newValues: period,
+      ip,
+    });
+
+    return period;
+  } catch (error) {
+    await transaction.rollback();
+    throw error;
+  }
+};
+
+const createAcademicPeriodFromRuntime = async ({ institutionId, userId, payload, ip }) => {
   const group = store.academics.structure.groups.find(
     (item) => item.id === payload.group_id && item.institution_id === institutionId
   );
@@ -83,7 +350,131 @@ const createAcademicPeriod = async ({ institutionId, userId, payload, ip }) => {
   return period;
 };
 
-const createAcademicOffering = async ({ institutionId, userId, payload, ip }) => {
+const createAcademicPeriod = async (context) => {
+  if (databaseReady()) {
+    return createAcademicPeriodFromDatabase(context);
+  }
+  return createAcademicPeriodFromRuntime(context);
+};
+
+const createAcademicOfferingFromDatabase = async ({ institutionId, userId, payload, ip }) => {
+  const transaction = await sequelize.transaction();
+
+  try {
+    const institution = await models.Institution.findByPk(institutionId, { transaction });
+    if (!institution) {
+      throw Object.assign(new Error('Institution not found.'), { statusCode: 404 });
+    }
+
+    const settings = ensureAcademicSettings(institution.settings);
+    const group = settings.academics.groups.find((item) => item.id === payload.group_id);
+    if (!group) {
+      throw Object.assign(new Error('Academic group not found.'), { statusCode: 404 });
+    }
+
+    const period = settings.academics.periods.find(
+      (item) => item.id === payload.period_id && item.group_id === payload.group_id
+    );
+    if (!period) {
+      throw Object.assign(new Error('Academic period not found for this group.'), {
+        statusCode: 404,
+      });
+    }
+
+    const normalizedCode = String(payload.code || '')
+      .trim()
+      .toUpperCase();
+    const duplicate = settings.academics.offerings.find(
+      (item) =>
+        item.group_id === payload.group_id &&
+        item.period_id === payload.period_id &&
+        item.code === normalizedCode
+    );
+    if (duplicate) {
+      throw Object.assign(
+        new Error('A subject or course with this code already exists in the selected period.'),
+        { statusCode: 409 }
+      );
+    }
+
+    const levelRecord = await ensureLevelRecord({
+      institutionId,
+      levelCode: group.level_code,
+      transaction,
+    });
+    const subject = await models.Subject.create(
+      {
+        institution_id: institutionId,
+        level_id: levelRecord.id,
+        name: payload.name,
+        code: normalizedCode,
+        subject_type: payload.is_core === false ? 'elective' : 'core',
+        credit_hours:
+          payload.credit_hours === '' || payload.credit_hours === null || payload.credit_hours === undefined
+            ? null
+            : Number(payload.credit_hours),
+        is_active: true,
+      },
+      { transaction }
+    );
+
+    if (group.class_record_id) {
+      await models.ClassSubject.findOrCreate({
+        where: {
+          class_id: group.class_record_id,
+          subject_id: subject.id,
+          teacher_id: null,
+        },
+        defaults: {
+          class_id: group.class_record_id,
+          subject_id: subject.id,
+          teacher_id: null,
+          periods_per_week: Number(payload.periods_per_week || 0),
+        },
+        transaction,
+      });
+    }
+
+    const offering = {
+      id: payload.id || crypto.randomUUID(),
+      institution_id: institutionId,
+      group_id: payload.group_id,
+      period_id: payload.period_id,
+      type: payload.type || 'subject',
+      code: normalizedCode,
+      name: payload.name,
+      credit_hours:
+        payload.credit_hours === '' || payload.credit_hours === null || payload.credit_hours === undefined
+          ? null
+          : Number(payload.credit_hours),
+      is_core: payload.is_core !== false,
+      prerequisite_codes: payload.prerequisite_codes || [],
+      next_offering_codes: payload.next_offering_codes || [],
+      subject_id: subject.id,
+      level_record_id: levelRecord.id,
+    };
+
+    settings.academics.offerings.push(offering);
+    await institution.update({ settings }, { transaction });
+    await transaction.commit();
+
+    await logAudit({
+      userId,
+      action: 'CREATE',
+      resourceType: 'academic_offering',
+      resourceId: offering.id,
+      newValues: offering,
+      ip,
+    });
+
+    return offering;
+  } catch (error) {
+    await transaction.rollback();
+    throw error;
+  }
+};
+
+const createAcademicOfferingFromRuntime = async ({ institutionId, userId, payload, ip }) => {
   const group = store.academics.structure.groups.find(
     (item) => item.id === payload.group_id && item.institution_id === institutionId
   );
@@ -132,6 +523,13 @@ const createAcademicOffering = async ({ institutionId, userId, payload, ip }) =>
   });
 
   return offering;
+};
+
+const createAcademicOffering = async (context) => {
+  if (databaseReady()) {
+    return createAcademicOfferingFromDatabase(context);
+  }
+  return createAcademicOfferingFromRuntime(context);
 };
 
 const calculateGrade = ({ levelCode, score }) => {

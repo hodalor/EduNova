@@ -18,8 +18,11 @@ const ProtectedRoute = ({ children, allowedRoles }: ProtectedRouteProps) => {
   if (!isAuthenticated && !accessToken) {
     return <Navigate to="/login" replace />;
   }
+  if (role === 'super_admin') {
+    return children;
+  }
   if (allowedRoles?.length && role && !allowedRoles.includes(role)) {
-    return <Navigate to={role === 'super_admin' ? '/super-admin' : '/'} replace />;
+    return <Navigate to="/" replace />;
   }
 
   return children;

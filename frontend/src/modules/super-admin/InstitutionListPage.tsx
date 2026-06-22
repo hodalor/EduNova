@@ -1,12 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { PauseCircle, PlusCircle, RefreshCw } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 
 import { eduovaApi } from '../../api/eduovaApi';
 import Button from '../../components/ui/Button';
 import Card from '../../components/ui/Card';
 import PageLoader from '../../components/ui/PageLoader';
+import { useAuthStore } from '../../store/authStore';
+import type { EducationLevelCode } from '../../types/auth';
 import PageHeader from '../shared/PageHeader';
 
 interface InstitutionRecord {
@@ -19,10 +21,20 @@ interface InstitutionRecord {
   active_staff: number;
   monthly_revenue: number;
   trial_ends_at: string;
+  education_levels?: EducationLevelCode[];
+  settings?: {
+    tenant_database?: {
+      database_name?: string;
+      cluster_name?: string;
+    };
+  };
 }
 
 const InstitutionListPage = () => {
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const setTenantContext = useAuthStore((state) => state.setTenantContext);
+  const tenantContext = useAuthStore((state) => state.tenantContext);
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['super-admin', 'institutions'],
     queryFn: eduovaApi.superAdmin.institutions,
@@ -62,7 +74,7 @@ const InstitutionListPage = () => {
     <div className="space-y-6">
       <PageHeader
         title="Institutions"
-        description="Monitor institution status, capacity, revenue, and subscription posture across the EDUOVA SaaS platform."
+        description="Monitor school status, level mix, tenant database allocation, and choose the active school scope for platform actions."
         actions={
           <div className="flex gap-3">
             <Button variant="secondary" leftIcon={<RefreshCw className="h-4 w-4" />} onClick={() => refetch()}>
@@ -75,12 +87,25 @@ const InstitutionListPage = () => {
         }
       />
 
+      {tenantContext ? (
+        <Card title="School Scope Active" description="A school context is currently selected for institution-level actions.">
+          <div className="flex flex-wrap items-center gap-3">
+            <p className="text-sm text-slate-600">
+              Active school: <span className="font-semibold text-brand-navy">{tenantContext.name}</span>
+            </p>
+            <Button variant="secondary" onClick={() => setTenantContext(null)}>
+              Clear Scope
+            </Button>
+          </div>
+        </Card>
+      ) : null}
+
       <Card title="All Schools" description="Platform-wide institution inventory with plan and lifecycle actions.">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-slate-200 text-sm">
             <thead className="bg-slate-50">
               <tr>
-                {['Institution', 'Plan', 'Status', 'Students', 'Staff', 'MRR', 'Trial Ends', 'Actions'].map((label) => (
+                {['Institution', 'Levels', 'Tenant DB', 'Plan', 'Status', 'Students', 'Staff', 'MRR', 'Trial Ends', 'Actions'].map((label) => (
                   <th key={label} className="px-4 py-3 text-left font-semibold text-slate-600">
                     {label}
                   </th>
@@ -93,6 +118,17 @@ const InstitutionListPage = () => {
                   <td className="px-4 py-3">
                     <div className="font-semibold text-brand-navy">{institution.name}</div>
                     <div className="text-xs uppercase tracking-wide text-slate-400">{institution.code}</div>
+                  </td>
+                  <td className="px-4 py-3">
+                    {(institution.education_levels || []).join(', ') || 'Not set'}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="font-medium text-brand-navy">
+                      {institution.settings?.tenant_database?.database_name || 'pending'}
+                    </div>
+                    <div className="text-xs text-slate-400">
+                      {institution.settings?.tenant_database?.cluster_name || 'cluster pending'}
+                    </div>
                   </td>
                   <td className="px-4 py-3 capitalize">{institution.subscription_plan}</td>
                   <td className="px-4 py-3">
@@ -122,6 +158,15 @@ const InstitutionListPage = () => {
                         loading={trialMutation.isPending}
                       >
                         Extend Trial
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          setTenantContext(institution);
+                          navigate('/');
+                        }}
+                      >
+                        Set School Scope
                       </Button>
                     </div>
                   </td>

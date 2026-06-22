@@ -181,10 +181,11 @@ export const demoTertiaryLoginResponse: LoginResponse = {
 
 export const demoSuperAdminLoginResponse: LoginResponse = {
   user: {
-    id: 'usr-super-001',
-    first_name: 'Platform',
-    last_name: 'Admin',
+    id: 'usr-super-master',
+    first_name: 'Master',
+    last_name: 'Operator',
     email: 'superadmin@eduova.test',
+    username: 'superadmin',
     role: 'super_admin',
     institution_id: 'platform',
     phone: '+233200000099',
@@ -192,10 +193,22 @@ export const demoSuperAdminLoginResponse: LoginResponse = {
   },
   institution: {
     id: 'platform',
-    name: 'EDUOVA Platform',
-    code: 'PLATFORM',
+    name: 'EDUOVA Master Control',
+    code: 'MASTER',
     subscription_plan: 'enterprise',
     education_levels: ['DC', 'PR', 'JH', 'SH', 'TR'],
+    settings: {
+      platform: {
+        god_mode: true,
+        cluster: {
+          cluster_name: 'eduova_test-cluster',
+          engine: 'postgresql',
+          host: '127.0.0.1',
+          port: 5432,
+          strategy: 'single_cluster_multi_database',
+        },
+      },
+    },
   },
   permissions: ['*:*'],
   tokens: {
@@ -212,22 +225,50 @@ export const superAdminData = {
       name: 'EDUOVA Academy',
       code: 'EDUOVA',
       subscription_plan: 'enterprise',
+      education_levels: ['PR', 'JH', 'SH'],
       status: 'active',
       active_students: 2,
       active_staff: 24,
       monthly_revenue: 12000,
       trial_ends_at: '2026-07-31T23:59:59.000Z',
+      settings: {
+        tenant_database: {
+          cluster_name: 'eduova_test-cluster',
+          database_name: 'eduova_eduova',
+          database_user: 'postgres',
+          schema_name: 'public',
+          provision_status: 'provisioned',
+        },
+        workspace_profile: {
+          label: 'basic_secondary',
+          menus: ['admissions', 'students', 'academics', 'attendance', 'finance', 'communication'],
+        },
+      },
     },
     {
       id: 'inst-growth',
       name: 'North Ridge School',
       code: 'NRS',
       subscription_plan: 'growth',
+      education_levels: ['DC', 'PR'],
       status: 'trial',
       active_students: 612,
       active_staff: 51,
       monthly_revenue: 4500,
       trial_ends_at: '2026-07-15T23:59:59.000Z',
+      settings: {
+        tenant_database: {
+          cluster_name: 'eduova_test-cluster',
+          database_name: 'eduova_nrs',
+          database_user: 'postgres',
+          schema_name: 'public',
+          provision_status: 'provisioned',
+        },
+        workspace_profile: {
+          label: 'daycare_primary',
+          menus: ['admissions', 'students', 'attendance', 'communication', 'transport', 'finance'],
+        },
+      },
     },
   ],
   analytics: {

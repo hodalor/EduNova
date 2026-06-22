@@ -7,6 +7,7 @@ const logger = require('../../config/logger');
 const { redisClient } = require('../../config/redis');
 const { models } = require('../../config/database');
 const { getPermissionsForRole } = require('../../shared/constants/permissions');
+const { store } = require('../../shared/store/runtime-store');
 const {
   comparePassword,
   hashPassword,
@@ -26,7 +27,68 @@ const {
   revokeRefreshToken,
 } = require('../../shared/helpers/auth');
 
+const getRuntimeSuperAdminInstitution = () => ({
+  id: 'platform',
+  name: 'EDUOVA Master Control',
+  code: 'MASTER',
+  subscription_plan: 'enterprise',
+  education_levels: ['DC', 'PR', 'JH', 'SH', 'TR'],
+  settings: {
+    platform: {
+      god_mode: true,
+      cluster: store.platform.cluster,
+    },
+  },
+});
+
+const getRuntimeSuperAdmins = () => [
+  store.platform.superAdmin,
+  ...(store.platform.superAdmins || []),
+];
+
+const findRuntimeSuperAdminById = (id) =>
+  getRuntimeSuperAdmins().find((item) => item.id === id) || null;
+
+const findRuntimeSuperAdminByIdentity = (identity) =>
+  getRuntimeSuperAdmins().find((item) => {
+    const username = String(item.username || '').trim().toLowerCase();
+    const email = String(item.email || '').trim().toLowerCase();
+    return username === identity || email === identity;
+  }) || null;
+
+const ensureRuntimeSuperAdmin = async () => {
+  if (!store.platform.superAdmin.password_hash) {
+    store.platform.superAdmin.password_hash = await hashPassword('12345678');
+  }
+
+  return {
+    ...store.platform.superAdmin,
+    institution: getRuntimeSuperAdminInstitution(),
+    profile_photo: null,
+    phone: '+233200000099',
+  };
+};
+
 const buildProfile = async (user) => {
+  if (user.role === 'super_admin' && findRuntimeSuperAdminById(user.id)) {
+    return {
+      id: user.id,
+      institution_id: user.institution_id,
+      email: user.email,
+      username: user.username,
+      phone: user.phone,
+      role: user.role,
+      first_name: user.first_name,
+      last_name: user.last_name,
+      profile_photo: user.profile_photo,
+      email_verified: true,
+      phone_verified: true,
+      last_login: user.last_login || null,
+      institution: getRuntimeSuperAdminInstitution(),
+      permissions: getPermissionsForRole(user.role),
+    };
+  }
+
   const institution = user.institution || (await models.Institution.findByPk(user.institution_id));
 
   return {
@@ -47,6 +109,10 @@ const buildProfile = async (user) => {
 };
 
 const resolveInstitutionId = async ({ institution_id, institution_code }) => {
+  if (String(institution_code || '').toUpperCase() === 'MASTER') {
+    return 'platform';
+  }
+
   if (institution_id) {
     return institution_id;
   }
@@ -62,8 +128,36 @@ const resolveInstitutionId = async ({ institution_id, institution_code }) => {
 };
 
 const login = async ({ email, identity, password, institution_id, institution_code, otp_code }) => {
-  const institutionId = await resolveInstitutionId({ institution_id, institution_code });
   const loginIdentity = (email || identity || '').trim().toLowerCase();
+  const isPlatformLogin = String(institution_code || '').toUpperCase() === 'MASTER';
+
+  if (isPlatformLogin) {
+    await ensureRuntimeSuperAdmin();
+    const superAdmin = findRuntimeSuperAdminByIdentity(loginIdentity);
+    if (!superAdmin) {
+      throw Object.assign(new Error('Invalid super admin credentials.'), { status: 401 });
+    }
+    const valid = await comparePassword(password, superAdmin.password_hash);
+    if (!valid) {
+      throw Object.assign(new Error('Invalid super admin credentials.'), { status: 401 });
+    }
+
+    const access_token = signAccessToken(superAdmin);
+    const refresh_token = await signRefreshToken(superAdmin);
+
+    return {
+      user: await buildProfile(superAdmin),
+      institution: getRuntimeSuperAdminInstitution(),
+      permissions: getPermissionsForRole(superAdmin.role),
+      tokens: {
+        access_token,
+        refresh_token,
+        expires_in: 15 * 60,
+      },
+    };
+  }
+
+  const institutionId = await resolveInstitutionId({ institution_id, institution_code });
   const lock = await isLocked(loginIdentity, institutionId);
   if (lock.locked) {
     throw Object.assign(new Error(`Account locked. Try again in ${lock.retryIn} seconds.`), { status: 429 });
@@ -130,6 +224,26 @@ const refresh = async ({ refresh_token }) => {
   const session = await redisClient.get(`auth:refresh:${payload.jti}`);
   if (!session) {
     throw Object.assign(new Error('Refresh token session not found.'), { status: 401 });
+  }
+
+  if (payload.role === 'super_admin') {
+    await ensureRuntimeSuperAdmin();
+    const superAdmin = findRuntimeSuperAdminById(payload.sub);
+    if (!superAdmin) {
+      throw Object.assign(new Error('Super admin account is inactive.'), { status: 401 });
+    }
+    const access_token = signAccessToken(superAdmin);
+    const rotated_refresh_token = await rotateRefreshToken(refresh_token, superAdmin);
+
+    return {
+      user: await buildProfile(superAdmin),
+      permissions: getPermissionsForRole(superAdmin.role),
+      tokens: {
+        access_token,
+        refresh_token: rotated_refresh_token,
+        expires_in: 15 * 60,
+      },
+    };
   }
 
   const user = await models.User.findByPk(payload.sub, {

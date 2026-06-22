@@ -95,13 +95,15 @@ const AcademicStructurePage = () => {
   const periods: AcademicPeriod[] = data?.periods || [];
   const offerings: AcademicOffering[] = data?.offerings || [];
 
-  const selectedGroupPeriods = useMemo(
-    () => periods.filter((item) => item.group_id === offeringForm.group_id),
-    [offeringForm.group_id, periods]
+  const selectedGroupPeriods: AcademicPeriod[] = useMemo(
+    () => (data?.periods || []).filter((item: AcademicPeriod) => item.group_id === offeringForm.group_id),
+    [data?.periods, offeringForm.group_id]
   );
 
   const updateStructureCache = (section: 'groups' | 'periods' | 'offerings', entry: unknown) => {
-    queryClient.setQueryData<StructureResponse | undefined>(['academic-structure'], (current) => {
+    queryClient.setQueryData<StructureResponse | undefined>(
+      ['academic-structure'],
+      (current: StructureResponse | undefined) => {
       if (!current) {
         return current;
       }
@@ -110,7 +112,8 @@ const AcademicStructurePage = () => {
         ...current,
         [section]: [...current[section], entry],
       };
-    });
+      }
+    );
   };
 
   const createGroup = useMutation({
@@ -452,7 +455,7 @@ const AcademicStructurePage = () => {
 
         <Card title="Progression Logic" description="How the system decides what students can take next.">
           <div className="space-y-3">
-            {(data?.progression_rules || []).map((rule) => (
+            {(data?.progression_rules || []).map((rule: string) => (
               <Alert key={rule} title={rule} variant="success" />
             ))}
           </div>

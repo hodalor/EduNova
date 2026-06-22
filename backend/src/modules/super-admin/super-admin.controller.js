@@ -15,6 +15,15 @@ module.exports = {
     });
     res.status(201).json({ success: true, data });
   },
+  listPlatformUsers: wrap(() => service.listPlatformUsers()),
+  createPlatformUser: async (req, res) => {
+    const data = await service.createPlatformUser({
+      payload: req.body,
+      userId: req.user.id,
+      ip: req.ip,
+    });
+    res.status(201).json({ success: true, data });
+  },
   listInstitutions: wrap(() => service.listInstitutions()),
   getInstitutionDetail: wrap((req) => service.getInstitutionDetail(req.params.id)),
   suspendInstitution: wrap((req) =>

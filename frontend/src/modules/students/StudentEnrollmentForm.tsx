@@ -1,14 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useQuery } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { useNavigate } from 'react-router-dom';
 import { z } from 'zod';
 
+import { eduovaApi } from '../../api/eduovaApi';
 import Alert from '../../components/ui/Alert';
 import Button from '../../components/ui/Button';
 import Card from '../../components/ui/Card';
 import FileUpload from '../../components/ui/FileUpload';
 import Input from '../../components/ui/Input';
+import PageLoader from '../../components/ui/PageLoader';
 import ProgressBar from '../../components/ui/ProgressBar';
 import Select from '../../components/ui/Select';
 import PageHeader from '../shared/PageHeader';
@@ -16,26 +19,81 @@ import { useCreateStudent } from './hooks/useCreateStudent';
 
 const draftKey = 'eduova.studentEnrollmentDraft';
 
-const enrollmentSchema = z.object({
-  level: z.string().min(1, 'Education level is required'),
-  fullName: z.string().min(3, 'Student name is required'),
-  email: z.string().optional(),
-  dateOfBirth: z.string().min(1, 'Date of birth is required'),
-  guardianName: z.string().min(3, 'Guardian name is required'),
-  guardianPhone: z.string().min(6, 'Guardian phone is required'),
-  parentLink: z.string().optional(),
-  medicalNotes: z.string().optional(),
-  dietaryRestrictions: z.string().optional(),
-  pickupPersons: z.string().optional(),
-  previousSchool: z.string().optional(),
-  previousResults: z.string().optional(),
-  program: z.string().optional(),
-  qualification: z.string().optional(),
-  assignedClass: z.string().min(1, 'Class assignment is required'),
-  feePlan: z.string().min(1, 'Fee plan is required'),
-});
+const enrollmentSchema = z
+  .object({
+    level: z.string().min(1, 'Education level is required'),
+    firstName: z.string().min(2, 'First name is required'),
+    lastName: z.string().min(2, 'Last name is required'),
+    email: z.string().optional(),
+    dateOfBirth: z.string().min(1, 'Date of birth is required'),
+    guardianName: z.string().min(3, 'Guardian name is required'),
+    guardianPhone: z.string().min(6, 'Guardian phone is required'),
+    parentLink: z.string().optional(),
+    medicalNotes: z.string().optional(),
+    dietaryRestrictions: z.string().optional(),
+    pickupPersons: z.string().optional(),
+    previousSchool: z.string().optional(),
+    previousResults: z.string().optional(),
+    qualification: z.string().optional(),
+    facultyId: z.string().optional(),
+    departmentId: z.string().optional(),
+    programId: z.string().optional(),
+    groupId: z.string().min(1, 'Class or level assignment is required'),
+    feePlan: z.string().min(1, 'Fee plan is required'),
+  })
+  .superRefine((values, context) => {
+    if (values.level === 'TR' && !values.facultyId) {
+      context.addIssue({
+        code: 'custom',
+        path: ['facultyId'],
+        message: 'Faculty is required for tertiary enrollment',
+      });
+    }
+    if (values.level === 'TR' && !values.departmentId) {
+      context.addIssue({
+        code: 'custom',
+        path: ['departmentId'],
+        message: 'Department is required for tertiary enrollment',
+      });
+    }
+    if (values.level === 'TR' && !values.programId) {
+      context.addIssue({
+        code: 'custom',
+        path: ['programId'],
+        message: 'Program is required for tertiary enrollment',
+      });
+    }
+  });
 
 type EnrollmentValues = z.infer<typeof enrollmentSchema>;
+
+interface AcademicGroup {
+  id: string;
+  name: string;
+  code: string;
+  group_type: 'class' | 'level';
+  level_code: string;
+  calendar_type: string;
+}
+
+interface AcademicStructureResponse {
+  groups: AcademicGroup[];
+}
+
+interface TertiaryOverview {
+  faculties: Array<{ id: string; name: string; code: string }>;
+  departments: Array<{ id: string; name: string; code: string; faculty_id: string }>;
+  programs: Array<{
+    id: string;
+    name: string;
+    code: string;
+    credential: string;
+    department_id: string;
+    faculty_id: string;
+    duration: string;
+    calendar: string;
+  }>;
+}
 
 const steps = [
   'Level',
@@ -48,7 +106,8 @@ const steps = [
 
 const defaultValues: EnrollmentValues = {
   level: 'PR',
-  fullName: '',
+  firstName: '',
+  lastName: '',
   email: '',
   dateOfBirth: '',
   guardianName: '',
@@ -59,9 +118,11 @@ const defaultValues: EnrollmentValues = {
   pickupPersons: '',
   previousSchool: '',
   previousResults: '',
-  program: '',
   qualification: '',
-  assignedClass: '',
+  facultyId: '',
+  departmentId: '',
+  programId: '',
+  groupId: '',
   feePlan: 'Standard Term Plan',
 };
 
@@ -69,6 +130,14 @@ const StudentEnrollmentForm = () => {
   const navigate = useNavigate();
   const [step, setStep] = useState(0);
   const createStudent = useCreateStudent();
+  const { data: structure, isLoading: structureLoading } = useQuery<AcademicStructureResponse>({
+    queryKey: ['academic-structure', 'enrollment'],
+    queryFn: eduovaApi.academics.structure,
+  });
+  const { data: tertiaryOverview, isLoading: tertiaryLoading } = useQuery<TertiaryOverview>({
+    queryKey: ['tertiary-overview', 'enrollment'],
+    queryFn: eduovaApi.tertiary.overview,
+  });
 
   const savedDraft = useMemo(() => {
     const draft = window.localStorage.getItem(draftKey);
@@ -79,6 +148,7 @@ const StudentEnrollmentForm = () => {
     register,
     handleSubmit,
     watch,
+    setValue,
     trigger,
     formState: { errors },
   } = useForm<EnrollmentValues>({
@@ -91,18 +161,47 @@ const StudentEnrollmentForm = () => {
 
   const values = watch();
   const completion = ((step + 1) / steps.length) * 100;
+  const groups: AcademicGroup[] = structure?.groups || [];
+  const availableGroups = groups.filter((item: AcademicGroup) => item.level_code === values.level);
+  const faculties: TertiaryOverview['faculties'] = tertiaryOverview?.faculties || [];
+  const departments: TertiaryOverview['departments'] = (tertiaryOverview?.departments || []).filter(
+    (item: TertiaryOverview['departments'][number]) =>
+      !values.facultyId || item.faculty_id === values.facultyId
+  );
+  const programs: TertiaryOverview['programs'] = (tertiaryOverview?.programs || []).filter(
+    (item: TertiaryOverview['programs'][number]) =>
+      (!values.facultyId || item.faculty_id === values.facultyId) &&
+      (!values.departmentId || item.department_id === values.departmentId)
+  );
+  const selectedGroup = availableGroups.find((item: AcademicGroup) => item.id === values.groupId);
+  const selectedProgram = programs.find(
+    (item: TertiaryOverview['programs'][number]) => item.id === values.programId
+  );
 
   useEffect(() => {
     window.localStorage.setItem(draftKey, JSON.stringify(values));
   }, [values]);
 
+  useEffect(() => {
+    if (values.facultyId && !departments.some((item) => item.id === values.departmentId)) {
+      setValue('departmentId', '');
+      setValue('programId', '');
+    }
+  }, [departments, setValue, values.departmentId, values.facultyId]);
+
+  useEffect(() => {
+    if (values.departmentId && !programs.some((item) => item.id === values.programId)) {
+      setValue('programId', '');
+    }
+  }, [programs, setValue, values.departmentId, values.programId]);
+
   const nextStep = async () => {
     const fieldsByStep: Array<Array<keyof EnrollmentValues>> = [
       ['level'],
-      ['fullName', 'email', 'dateOfBirth'],
+      ['firstName', 'lastName', 'email', 'dateOfBirth'],
       ['guardianName', 'guardianPhone'],
       [],
-      ['assignedClass', 'feePlan'],
+      ['groupId', 'feePlan'],
       [],
     ];
 
@@ -115,10 +214,34 @@ const StudentEnrollmentForm = () => {
   const previousStep = () => setStep((current) => Math.max(current - 1, 0));
 
   const onSubmit = handleSubmit(async (payload) => {
-    await createStudent.mutateAsync(payload);
+    await createStudent.mutateAsync({
+      level_code: payload.level,
+      first_name: payload.firstName,
+      last_name: payload.lastName,
+      email: payload.email || undefined,
+      date_of_birth: payload.dateOfBirth,
+      guardian_name: payload.guardianName,
+      guardian_phone: payload.guardianPhone,
+      parent_link: payload.parentLink || undefined,
+      medical_notes: payload.medicalNotes || undefined,
+      dietary_restrictions: payload.dietaryRestrictions || undefined,
+      pickup_persons: payload.pickupPersons || undefined,
+      previous_school: payload.previousSchool || undefined,
+      previous_results: payload.previousResults || undefined,
+      qualification: payload.qualification || undefined,
+      faculty_id: payload.facultyId || undefined,
+      department_id: payload.departmentId || undefined,
+      program_id: payload.programId || undefined,
+      group_id: payload.groupId,
+      fee_plan: payload.feePlan,
+    });
     window.localStorage.removeItem(draftKey);
     navigate('/students');
   });
+
+  if (structureLoading || tertiaryLoading) {
+    return <PageLoader />;
+  }
 
   return (
     <div className="space-y-6">
@@ -167,7 +290,8 @@ const StudentEnrollmentForm = () => {
         {step === 1 ? (
           <Card title="Personal Information" description="Capture core student biodata and a profile photo.">
             <div className="grid gap-4 xl:grid-cols-2">
-              <Input label="Full Name" error={errors.fullName?.message} {...register('fullName')} />
+              <Input label="First Name" error={errors.firstName?.message} {...register('firstName')} />
+              <Input label="Last Name" error={errors.lastName?.message} {...register('lastName')} />
               <Input label="Email" error={errors.email?.message} {...register('email')} />
               <Input
                 label="Date of Birth"
@@ -221,8 +345,31 @@ const StudentEnrollmentForm = () => {
               ) : null}
               {values.level === 'TR' ? (
                 <>
-                  <Input label="Program Selection" {...register('program')} />
-                  <Input label="Qualification Upload Reference" {...register('qualification')} />
+                  <Select label="Faculty" error={errors.facultyId?.message} {...register('facultyId')}>
+                    <option value="">Select faculty</option>
+                    {faculties.map((faculty) => (
+                      <option key={faculty.id} value={faculty.id}>
+                        {faculty.name}
+                      </option>
+                    ))}
+                  </Select>
+                  <Select label="Department" error={errors.departmentId?.message} {...register('departmentId')}>
+                    <option value="">Select department</option>
+                    {departments.map((department) => (
+                      <option key={department.id} value={department.id}>
+                        {department.name}
+                      </option>
+                    ))}
+                  </Select>
+                  <Select label="Program" error={errors.programId?.message} {...register('programId')}>
+                    <option value="">Select program</option>
+                    {programs.map((program) => (
+                      <option key={program.id} value={program.id}>
+                        {program.name}
+                      </option>
+                    ))}
+                  </Select>
+                  <Input label="Qualification Reference" {...register('qualification')} />
                   <div className="xl:col-span-2">
                     <FileUpload multiple={false} />
                   </div>
@@ -244,16 +391,19 @@ const StudentEnrollmentForm = () => {
         {step === 4 ? (
           <Card title="Class Assignment and Fees" description="Assign class placement and preview fee structure.">
             <div className="grid gap-4 xl:grid-cols-2">
-              <Input
-                label="Assigned Class"
-                error={errors.assignedClass?.message}
-                {...register('assignedClass')}
-              />
+              <Select label="Assigned Class or Level" error={errors.groupId?.message} {...register('groupId')}>
+                <option value="">Select assignment</option>
+                {availableGroups.map((group) => (
+                  <option key={group.id} value={group.id}>
+                    {group.name} ({group.code})
+                  </option>
+                ))}
+              </Select>
               <Input label="Fee Structure" error={errors.feePlan?.message} {...register('feePlan')} />
               <div className="xl:col-span-2 rounded-3xl bg-slate-50 p-5">
                 <p className="text-sm font-semibold text-brand-navy">Fee Preview</p>
                 <p className="mt-2 text-sm text-slate-600">
-                  Tuition, ICT levy, extracurricular fee, and transport options will be confirmed at submission.
+                  Tuition and fee lines will follow the selected class or level and the school setup.
                 </p>
               </div>
             </div>
@@ -265,7 +415,9 @@ const StudentEnrollmentForm = () => {
             <div className="grid gap-4 md:grid-cols-2">
               <div className="surface-muted p-4">
                 <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Student</p>
-                <p className="mt-2 font-semibold text-brand-navy">{values.fullName || 'Not provided'}</p>
+                <p className="mt-2 font-semibold text-brand-navy">
+                  {[values.firstName, values.lastName].filter(Boolean).join(' ') || 'Not provided'}
+                </p>
                 <p className="mt-1 text-sm text-slate-500">{values.level}</p>
               </div>
               <div className="surface-muted p-4">
@@ -276,13 +428,26 @@ const StudentEnrollmentForm = () => {
               <div className="surface-muted p-4">
                 <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Class Assignment</p>
                 <p className="mt-2 font-semibold text-brand-navy">
-                  {values.assignedClass || 'Pending assignment'}
+                  {selectedGroup?.name || 'Pending assignment'}
                 </p>
               </div>
               <div className="surface-muted p-4">
                 <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Fee Plan</p>
                 <p className="mt-2 font-semibold text-brand-navy">{values.feePlan}</p>
               </div>
+              {values.level === 'TR' ? (
+                <div className="surface-muted p-4 md:col-span-2">
+                  <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Tertiary Roadmap</p>
+                  <p className="mt-2 font-semibold text-brand-navy">
+                    {selectedProgram?.name || 'Program not selected'}
+                  </p>
+                  <p className="mt-1 text-sm text-slate-500">
+                    {selectedProgram
+                      ? `${selectedProgram.credential} · ${selectedProgram.duration} · ${selectedProgram.calendar}`
+                      : 'Faculty, department, and program selection will drive the semester roadmap.'}
+                  </p>
+                </div>
+              ) : null}
             </div>
           </Card>
         ) : null}

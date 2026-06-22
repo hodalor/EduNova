@@ -67,8 +67,8 @@ const StudentCourseRegistrationPage = () => {
   const totalCredits = useMemo(
     () =>
       (data?.eligible_courses || [])
-        .filter((course) => selectedCourseIds.includes(course.id))
-        .reduce((sum, course) => sum + Number(course.credit_hours || 0), 0),
+        .filter((course: RegistrationCourse) => selectedCourseIds.includes(course.id))
+        .reduce((sum: number, course: RegistrationCourse) => sum + Number(course.credit_hours || 0), 0),
     [data?.eligible_courses, selectedCourseIds]
   );
 
@@ -77,7 +77,8 @@ const StudentCourseRegistrationPage = () => {
   }
 
   const alreadyRegisteredCount = data.already_registered.reduce(
-    (sum, item) => sum + Number(item.courses?.length || 0),
+    (sum: number, item: { id: string; courses?: RegistrationCourse[] }) =>
+      sum + Number(item.courses?.length || 0),
     0
   );
 
@@ -171,7 +172,7 @@ const StudentCourseRegistrationPage = () => {
           }
         >
           <div className="space-y-3">
-            {(data.eligible_courses || []).map((course) => (
+            {(data.eligible_courses || []).map((course: RegistrationCourse) => (
               <label
                 key={course.id}
                 className="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 px-4 py-3 transition hover:bg-slate-50"
@@ -240,7 +241,7 @@ const StudentCourseRegistrationPage = () => {
         <Card title="Blocked Courses" description="Courses outside your current eligibility are not selectable.">
           <div className="space-y-3">
             {data.blocked_courses.length ? (
-              data.blocked_courses.map((course) => (
+              data.blocked_courses.map((course: RegistrationCourse) => (
                 <div key={course.id} className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
                   <div className="flex items-center justify-between gap-3">
                     <div>
@@ -265,7 +266,7 @@ const StudentCourseRegistrationPage = () => {
         <Card title="Next Semester Preview" description="What comes next if you clear this semester without resits.">
           <div className="space-y-3">
             {data.next_period_preview.length ? (
-              data.next_period_preview.map((course) => (
+              data.next_period_preview.map((course: RegistrationCourse) => (
                 <div key={course.id} className="rounded-2xl border border-slate-200 px-4 py-3">
                   <div className="flex items-center justify-between gap-3">
                     <div>

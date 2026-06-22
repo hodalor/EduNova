@@ -18,6 +18,27 @@ export interface InstitutionSummary {
   logo_url?: string | null;
   education_levels?: EducationLevelCode[];
   settings?: {
+    tenant_database?: {
+      cluster_name?: string;
+      database_name?: string;
+      database_user?: string;
+      schema_name?: string;
+      provision_status?: string;
+    };
+    workspace_profile?: {
+      label?: string;
+      menus?: string[];
+    };
+    platform?: {
+      god_mode?: boolean;
+      cluster?: {
+        cluster_name?: string;
+        engine?: string;
+        host?: string;
+        port?: number;
+        strategy?: string;
+      };
+    };
     tertiary?: {
       calendar_model?: 'semester' | 'trimester' | 'quarter';
       credentials?: string[];
@@ -35,6 +56,7 @@ export interface AuthUser {
   first_name: string;
   last_name: string;
   email: string;
+  username?: string;
   role: UserRole;
   institution_id: string;
   phone?: string | null;

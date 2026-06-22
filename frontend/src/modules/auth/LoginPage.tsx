@@ -3,6 +3,7 @@ import { Mail, Lock, School } from 'lucide-react';
 import { useMutation } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
+import { Link } from 'react-router-dom';
 import { useNavigate } from 'react-router-dom';
 import { z } from 'zod';
 
@@ -74,6 +75,17 @@ const LoginPage = () => {
         <Button type="submit" className="w-full" size="lg" loading={mutation.isPending || isSubmitting}>
           Sign In
         </Button>
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+          Super admin:
+          {' '}
+          use
+          {' '}
+          <Link className="font-semibold text-brand-navy underline" to="/super-admin/login">
+            master control login
+          </Link>
+          {' '}
+          with `master / superadmin / 12345678`.
+        </div>
       </form>
     </AuthLayout>
   );

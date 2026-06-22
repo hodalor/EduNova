@@ -21,7 +21,9 @@ const axiosInstance = axios.create({
 
 axiosInstance.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   const accessToken = tokenStorage.getAccessToken();
-  const institutionId = useAuthStore.getState().institution?.id;
+  const { institution, tenantContext, role } = useAuthStore.getState();
+  const institutionId =
+    role === 'super_admin' ? tenantContext?.id : tenantContext?.id || institution?.id;
 
   if (accessToken) {
     config.headers.set('Authorization', `Bearer ${accessToken}`);

@@ -4,12 +4,8 @@ import {
   BookOpen,
   BriefcaseBusiness,
   Building2,
-  Bus,
-  CalendarClock,
   ClipboardCheck,
-  ContactRound,
   CreditCard,
-  Factory,
   FileBarChart2,
   GraduationCap,
   Layers3,
@@ -18,7 +14,6 @@ import {
   PanelLeftOpen,
   Settings,
   Users2,
-  Warehouse,
   Bell,
   ChevronRight,
   ShieldCheck,
@@ -60,53 +55,78 @@ const supportsAcademics = (institution: InstitutionSummary | null) =>
   hasLevel(institution, 'SH') ||
   hasLevel(institution, 'TR');
 
-const supportsBoarding = (institution: InstitutionSummary | null) =>
-  hasLevel(institution, 'SH') || hasLevel(institution, 'TR');
-
 const institutionNavGroups: NavGroup[] = [
   {
-    label: 'Dashboard',
-    items: [{ name: 'Overview', to: '/', icon: LayoutDashboard }],
-  },
-  {
-    label: 'Admissions',
+    label: 'Core',
     items: [
-      {
-        name: 'Applications',
-        to: '/admissions',
-        icon: ContactRound,
-        roles: ['institution_admin'],
-      },
-    ],
-  },
-  {
-    label: 'Students',
-    items: [
+      { name: 'Overview', to: '/', icon: LayoutDashboard },
       {
         name: 'Students',
         to: '/students',
         icon: GraduationCap,
         roles: ['institution_admin', 'teacher', 'librarian'],
       },
+      {
+        name: 'Staff Access',
+        to: '/staff/users',
+        icon: Users2,
+        roles: ['institution_admin'],
+      },
     ],
   },
   {
-    label: 'Academics',
+    label: 'Setup',
     items: [
       {
-        name: 'Academics',
+        name: 'Academic Setup',
+        to: '/academics/structure',
+        icon: Layers3,
+        roles: ['institution_admin'],
+        visible: supportsAcademics,
+      },
+      {
+        name: 'Daycare Setup',
+        to: '/daycare',
+        icon: Baby,
+        roles: ['institution_admin'],
+        visible: isDaycareInstitution,
+      },
+      {
+        name: 'Tertiary Setup',
+        to: '/tertiary',
+        icon: Building2,
+        roles: ['institution_admin'],
+        visible: isTertiaryInstitution,
+      },
+    ],
+  },
+  {
+    label: 'Workflows',
+    items: [
+      {
+        name: 'Results Entry',
         to: '/academics/results-entry',
         icon: BookOpen,
         roles: ['institution_admin', 'teacher'],
         visible: supportsAcademics,
       },
       {
-        name: 'Academic Structure',
-        to: '/academics/structure',
-        icon: Layers3,
-        roles: ['institution_admin'],
-        visible: supportsAcademics,
+        name: 'Attendance',
+        to: '/attendance/taking',
+        icon: ClipboardCheck,
+        roles: ['institution_admin', 'teacher'],
       },
+      {
+        name: 'Finance',
+        to: '/finance',
+        icon: CreditCard,
+        roles: ['institution_admin', 'accountant'],
+      },
+    ],
+  },
+  {
+    label: 'Student',
+    items: [
       {
         name: 'My Academics',
         to: '/student/academics',
@@ -121,33 +141,11 @@ const institutionNavGroups: NavGroup[] = [
         roles: ['student'],
         visible: isTertiaryInstitution,
       },
-    ],
-  },
-  {
-    label: 'Attendance',
-    items: [
-      {
-        name: 'Attendance',
-        to: '/attendance/taking',
-        icon: ClipboardCheck,
-        roles: ['institution_admin', 'teacher'],
-      },
       {
         name: 'My Attendance',
         to: '/student/attendance',
         icon: ClipboardCheck,
         roles: ['student'],
-      },
-    ],
-  },
-  {
-    label: 'Finance',
-    items: [
-      {
-        name: 'Finance',
-        to: '/finance',
-        icon: CreditCard,
-        roles: ['institution_admin', 'accountant'],
       },
       {
         name: 'My Finance',
@@ -158,85 +156,7 @@ const institutionNavGroups: NavGroup[] = [
     ],
   },
   {
-    label: 'Institution',
-    items: [
-      {
-        name: 'Staff',
-        to: '/staff',
-        icon: Users2,
-        roles: ['institution_admin'],
-      },
-      {
-        name: 'User Access',
-        to: '/staff/users',
-        icon: Users2,
-        roles: ['institution_admin'],
-      },
-      {
-        name: 'Communication',
-        to: '/communication',
-        icon: BriefcaseBusiness,
-        roles: [
-          'institution_admin',
-          'teacher',
-          'student',
-          'parent',
-          'driver',
-          'accountant',
-          'librarian',
-        ],
-      },
-      {
-        name: 'Timetable',
-        to: '/timetable/view',
-        icon: CalendarClock,
-        roles: ['institution_admin', 'teacher', 'student'],
-        visible: supportsAcademics,
-      },
-      {
-        name: 'Transport',
-        to: '/transport',
-        icon: Bus,
-        roles: ['institution_admin', 'parent', 'student', 'driver'],
-      },
-      {
-        name: 'Discipline',
-        to: '/discipline',
-        icon: ShieldCheck,
-        roles: ['institution_admin', 'teacher'],
-        visible: supportsAcademics,
-      },
-      {
-        name: 'Hostel',
-        to: '/hostel',
-        icon: Factory,
-        roles: ['institution_admin'],
-        visible: supportsBoarding,
-      },
-      {
-        name: 'Inventory',
-        to: '/inventory',
-        icon: Warehouse,
-        roles: ['institution_admin', 'librarian'],
-      },
-      {
-        name: 'Daycare',
-        to: '/daycare',
-        icon: Baby,
-        roles: ['institution_admin', 'teacher'],
-        visible: isDaycareInstitution,
-      },
-      {
-        name: 'Tertiary',
-        to: '/tertiary',
-        icon: Building2,
-        roles: ['institution_admin', 'teacher'],
-        visible: isTertiaryInstitution,
-      },
-    ],
-  },
-  {
-    label: 'Reports',
+    label: 'Administration',
     items: [
       {
         name: 'Analytics',
@@ -244,11 +164,6 @@ const institutionNavGroups: NavGroup[] = [
         icon: FileBarChart2,
         roles: ['institution_admin', 'accountant'],
       },
-    ],
-  },
-  {
-    label: 'Settings',
-    items: [
       {
         name: 'Settings',
         to: '/settings',
@@ -261,15 +176,32 @@ const institutionNavGroups: NavGroup[] = [
 
 const superAdminNavGroups = [
   { label: 'Control Plane', items: [{ name: 'Overview', to: '/super-admin', icon: ShieldCheck }] },
-  { label: 'Institutions', items: [{ name: 'Schools', to: '/super-admin/institutions', icon: GraduationCap }] },
-  { label: 'Onboarding', items: [{ name: 'Onboard', to: '/super-admin/institutions/new', icon: ContactRound }] },
+  { label: 'Platform Users', items: [{ name: 'Users', to: '/super-admin/users', icon: Users2 }] },
+  { label: 'Institutions', items: [{ name: 'Institutions', to: '/super-admin/institutions', icon: GraduationCap }] },
   { label: 'Analytics', items: [{ name: 'Platform KPIs', to: '/super-admin/analytics', icon: FileBarChart2 }] },
   { label: 'Audit', items: [{ name: 'Audit Trail', to: '/super-admin/audit-logs', icon: BriefcaseBusiness }] },
 ];
 
-const buildNavGroups = (role: UserRole | null, institution: InstitutionSummary | null): NavGroup[] => {
+const buildNavGroups = (
+  role: UserRole | null,
+  institution: InstitutionSummary | null,
+  tenantContext: InstitutionSummary | null
+): NavGroup[] => {
+  const activeInstitution = tenantContext || institution;
+
   if (role === 'super_admin') {
-    return superAdminNavGroups;
+    const tenantGroups = institutionNavGroups
+      .map((group) => ({
+        ...group,
+        items: group.items.filter((item) => (item.visible ? item.visible(activeInstitution) : true)),
+      }))
+      .filter((group) => group.items.length > 0);
+
+    return [
+      ...superAdminNavGroups,
+      { label: 'School Workspaces', items: [{ name: 'School Menus', to: '/', icon: LayoutDashboard }] },
+      ...tenantGroups,
+    ];
   }
 
   return institutionNavGroups
@@ -277,7 +209,7 @@ const buildNavGroups = (role: UserRole | null, institution: InstitutionSummary |
       ...group,
       items: group.items.filter((item) => {
         const matchesRole = !item.roles?.length || (role ? item.roles.includes(role) : false);
-        const visible = item.visible ? item.visible(institution) : true;
+        const visible = item.visible ? item.visible(activeInstitution) : true;
         return matchesRole && visible;
       }),
     }))
@@ -288,8 +220,10 @@ export const Sidebar = () => {
   const collapsed = useUiStore((state) => state.sidebarCollapsed);
   const role = useAuthStore((state) => state.role);
   const institution = useAuthStore((state) => state.institution);
-  const groups = buildNavGroups(role, institution);
-  const workspaceLabel = getWorkspaceLabel(institution);
+  const tenantContext = useAuthStore((state) => state.tenantContext);
+  const activeInstitution = tenantContext || institution;
+  const groups = buildNavGroups(role, institution, tenantContext);
+  const workspaceLabel = getWorkspaceLabel(activeInstitution);
 
   return (
     <aside
@@ -309,24 +243,23 @@ export const Sidebar = () => {
                 EDUOVA
               </p>
               <p className="mt-1 text-sm font-semibold text-white">
-                {institution?.name || 'Education Platform'}
+                {activeInstitution?.name || 'Education Platform'}
               </p>
               <p className="mt-1 text-xs uppercase tracking-[0.16em] text-slate-400">
-                {role === 'super_admin' ? 'Platform Control' : workspaceLabel}
+                {role === 'super_admin' && tenantContext
+                  ? `Platform Master · ${tenantContext.name}`
+                  : role === 'super_admin'
+                    ? 'Platform Master'
+                    : workspaceLabel}
               </p>
             </div>
           ) : null}
         </div>
       </div>
-      <div className="scrollbar-hidden flex-1 space-y-6 overflow-y-auto px-3 py-5">
+      <div className="scrollbar-hidden flex-1 overflow-y-auto px-2 py-4">
         {groups.map((group) => (
-          <div key={group.label}>
-            {!collapsed ? (
-              <p className="px-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-                {group.label}
-              </p>
-            ) : null}
-            <div className="mt-2 space-y-1">
+          <div key={group.label} className="space-y-0.5">
+            <div className="space-y-0.5">
               {group.items.map((item) => {
                 const Icon = item.icon;
                 return (
@@ -336,7 +269,7 @@ export const Sidebar = () => {
                     end={item.to === '/'}
                     className={({ isActive }) =>
                       cn(
-                        'flex items-center gap-3 rounded-r-2xl px-3 py-3 text-sm font-medium text-slate-200 transition hover:bg-white/10',
+                        'flex items-center gap-3 rounded-r-2xl px-3 py-2.5 text-sm font-medium text-slate-200 transition hover:bg-white/10',
                         isActive ? 'nav-active text-white' : ''
                       )
                     }
@@ -359,10 +292,13 @@ export const Topbar = () => {
   const user = useAuthStore((state) => state.user);
   const role = useAuthStore((state) => state.role);
   const institution = useAuthStore((state) => state.institution);
+  const tenantContext = useAuthStore((state) => state.tenantContext);
+  const setTenantContext = useAuthStore((state) => state.setTenantContext);
   const logout = useAuthStore((state) => state.logout);
   const collapsed = useUiStore((state) => state.sidebarCollapsed);
   const notificationBadgeCount = useUiStore((state) => state.notificationBadgeCount);
   const toggleSidebar = useUiStore((state) => state.toggleSidebar);
+  const activeInstitution = tenantContext || institution;
   const crumbs = location.pathname
     .split('/')
     .filter(Boolean)
@@ -390,11 +326,20 @@ export const Topbar = () => {
               ))}
             </div>
             <h2 className="mt-1 text-2xl font-semibold text-brand-navy">
-              {getRoleHomeTitle(role, institution)}
+              {getRoleHomeTitle(role, activeInstitution)}
             </h2>
             <p className="mt-1 text-sm text-slate-500">
-              {institution?.name || 'EDUOVA'} · {getWorkspaceLabel(institution)}
+              {activeInstitution?.name || 'EDUOVA'} · {getWorkspaceLabel(activeInstitution)}
             </p>
+            {role === 'super_admin' && tenantContext ? (
+              <p className="mt-1 text-xs font-semibold uppercase tracking-[0.14em] text-brand-gold">
+                School scope active
+              </p>
+            ) : role === 'super_admin' ? (
+              <p className="mt-1 text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
+                No school scope selected
+              </p>
+            ) : null}
           </div>
         </div>
         <div className="flex items-center gap-3">
@@ -425,7 +370,10 @@ export const Topbar = () => {
             }
             items={[
               { label: 'My Profile' },
-              { label: 'Institution Settings' },
+              { label: role === 'super_admin' ? 'Platform Settings' : 'Institution Settings' },
+              ...(role === 'super_admin' && tenantContext
+                ? [{ label: 'Clear School Scope', onSelect: () => setTenantContext(null) }]
+                : []),
               { label: 'Logout', onSelect: logout, destructive: true },
             ]}
           />

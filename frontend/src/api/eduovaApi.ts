@@ -12,14 +12,9 @@ import {
   demoTertiaryLoginResponse,
   demoTertiaryStudentLoginResponse,
   financeData,
-  studentsData,
-  academicStructureData,
   attendanceData,
   superAdminData,
-  tertiaryRegistrationData,
-  tertiaryData,
   timetableData,
-  userManagementData,
 } from '../utils/mockData';
 import type { LoginResponse } from '../types/auth';
 
@@ -47,6 +42,11 @@ const selectLoginFallback = (payload: { identity: string; institution_code: stri
   return demoLoginResponse;
 };
 
+const isMasterSuperAdminLogin = (payload: { identity: string; password: string; institution_code: string }) =>
+  payload.institution_code.trim().toUpperCase() === 'MASTER' &&
+  payload.identity.trim().toLowerCase() === 'superadmin' &&
+  payload.password === '12345678';
+
 async function safeRequest<T>(request: () => Promise<T>, fallback: T): Promise<T> {
   try {
     return await request();
@@ -62,26 +62,35 @@ export const eduovaApi = {
       identity: string;
       password: string;
       institution_code: string;
-    }): Promise<LoginResponse> =>
-      safeRequest(
+    }): Promise<LoginResponse> => {
+      if (isMasterSuperAdminLogin(payload)) {
+        return eduovaApi.auth.superAdminLogin(payload);
+      }
+
+      return safeRequest(
         async () => {
           const { data } = await authApi.post('/auth/login', payload);
           return data.data || data;
         },
         selectLoginFallback(payload)
-      ),
+      );
+    },
     superAdminLogin: async (payload: {
       identity: string;
       password: string;
       institution_code: string;
-    }): Promise<LoginResponse> =>
-      safeRequest(
-        async () => {
-          const { data } = await authApi.post('/auth/login', payload);
-          return data.data || data;
-        },
-        demoSuperAdminLoginResponse
-      ),
+    }): Promise<LoginResponse> => {
+      try {
+        const { data } = await authApi.post('/auth/login', payload);
+        return data.data || data;
+      } catch (error) {
+        if (isMasterSuperAdminLogin(payload)) {
+          await wait();
+          return demoSuperAdminLoginResponse;
+        }
+        throw error;
+      }
+    },
   },
   analytics: {
     getOverview: () =>
@@ -98,13 +107,9 @@ export const eduovaApi = {
       safeRequest(async () => (await axiosInstance.get('/analytics/alerts/active')).data.data, analyticsData.alerts),
   },
   students: {
-    list: () => safeRequest(async () => (await axiosInstance.get('/students')).data.data, studentsData.list),
-    detail: (id: string) =>
-      safeRequest(async () => (await axiosInstance.get(`/students/${id}`)).data.data, studentsData.detail),
-    create: async (payload: unknown) => {
-      await wait(400);
-      return payload;
-    },
+    list: async () => (await axiosInstance.get('/students')).data.data,
+    detail: async (id: string) => (await axiosInstance.get(`/students/${id}`)).data.data,
+    create: async (payload: unknown) => (await axiosInstance.post('/students', payload)).data.data,
     update: async (payload: unknown) => {
       await wait(300);
       return payload;
@@ -126,23 +131,13 @@ export const eduovaApi = {
       safeRequest(async () => (await axiosInstance.get('/finance/fee-structures')).data.data, financeData.feeStructures),
   },
   academics: {
-    structure: () =>
-      safeRequest(async () => (await axiosInstance.get('/academics/structure')).data.data, academicStructureData),
+    structure: async () => (await axiosInstance.get('/academics/structure')).data.data,
     createGroup: async (payload: Record<string, unknown>) =>
-      safeRequest(async () => (await axiosInstance.post('/academics/groups', payload)).data.data, {
-        id: `grp-${Date.now()}`,
-        ...payload,
-      }),
+      (await axiosInstance.post('/academics/groups', payload)).data.data,
     createPeriod: async (payload: Record<string, unknown>) =>
-      safeRequest(async () => (await axiosInstance.post('/academics/periods', payload)).data.data, {
-        id: `prd-${Date.now()}`,
-        ...payload,
-      }),
+      (await axiosInstance.post('/academics/periods', payload)).data.data,
     createOffering: async (payload: Record<string, unknown>) =>
-      safeRequest(async () => (await axiosInstance.post('/academics/offerings', payload)).data.data, {
-        id: `off-${Date.now()}`,
-        ...payload,
-      }),
+      (await axiosInstance.post('/academics/offerings', payload)).data.data,
     assessments: () =>
       safeRequest(async () => (await axiosInstance.get('/academics/assessments')).data.data, academicsData.assessments),
     reportCards: () =>
@@ -166,59 +161,36 @@ export const eduovaApi = {
       safeRequest(async () => (await axiosInstance.get('/v1/daycare/present-now')).data.data, daycareData),
   },
   tertiary: {
-    overview: () =>
-      safeRequest(async () => (await axiosInstance.get('/v1/tertiary/programs')).data.data, tertiaryData),
-    studentRegistration: (studentId: string) =>
-      safeRequest(
-        async () => (await axiosInstance.get(`/v1/tertiary/student-registration/${studentId}`)).data.data,
-        tertiaryRegistrationData
-      ),
+    overview: async () => (await axiosInstance.get('/v1/tertiary/overview')).data.data,
+    createFaculty: async (payload: Record<string, unknown>) =>
+      (await axiosInstance.post('/v1/tertiary/faculties', payload)).data.data,
+    createDepartment: async (payload: Record<string, unknown>) =>
+      (await axiosInstance.post('/v1/tertiary/departments', payload)).data.data,
+    createProgram: async (payload: Record<string, unknown>) =>
+      (await axiosInstance.post('/v1/tertiary/programs', payload)).data.data,
+    studentRegistration: async (studentId: string) =>
+      (await axiosInstance.get(`/v1/tertiary/student-registration/${studentId}`)).data.data,
     registerCourses: async (payload: Record<string, unknown>) =>
-      safeRequest(async () => (await axiosInstance.post('/v1/tertiary/course-registration', payload)).data.data, {
-        id: `reg-${Date.now()}`,
-        registered_at: new Date().toISOString(),
-        ...payload,
-      }),
+      (await axiosInstance.post('/v1/tertiary/course-registration', payload)).data.data,
   },
   users: {
-    list: () =>
-      safeRequest(async () => (await axiosInstance.get('/v1/users')).data.data, userManagementData.users),
+    list: async () => (await axiosInstance.get('/v1/users')).data.data,
     create: async (payload: Record<string, unknown>) =>
-      safeRequest(
-        async () => (await axiosInstance.post('/v1/users', payload)).data.data,
-        {
-          id: `usr-${Date.now()}`,
-          status: 'pending_activation',
-          ...payload,
-        }
-      ),
+      (await axiosInstance.post('/v1/users', payload)).data.data,
   },
   superAdmin: {
-    institutions: () =>
-      safeRequest(
-        async () => (await axiosInstance.get('/super-admin/institutions')).data.data,
-        superAdminData.institutions
-      ),
-    institutionDetail: (id: string) =>
-      safeRequest(
-        async () => (await axiosInstance.get(`/super-admin/institutions/${id}`)).data.data,
-        superAdminData.institutions.find((item) => item.id === id) || superAdminData.institutions[0]
-      ),
+    users: async () => (await axiosInstance.get('/super-admin/users')).data.data,
+    createUser: async (payload: Record<string, unknown>) =>
+      (await axiosInstance.post('/super-admin/users', payload)).data.data,
+    institutions: async () => (await axiosInstance.get('/super-admin/institutions')).data.data,
+    institutionDetail: async (id: string) =>
+      (await axiosInstance.get(`/super-admin/institutions/${id}`)).data.data,
     onboardInstitution: async (payload: unknown) =>
-      safeRequest(
-        async () => (await axiosInstance.post('/super-admin/institutions', payload)).data.data,
-        payload
-      ),
+      (await axiosInstance.post('/super-admin/institutions', payload)).data.data,
     suspendInstitution: async (id: string) =>
-      safeRequest(
-        async () => (await axiosInstance.put(`/super-admin/institutions/${id}/suspend`)).data.data,
-        { id, status: 'suspended' }
-      ),
+      (await axiosInstance.put(`/super-admin/institutions/${id}/suspend`)).data.data,
     extendTrial: async (id: string, days = 14) =>
-      safeRequest(
-        async () => (await axiosInstance.post(`/super-admin/institutions/${id}/trial`, { days })).data.data,
-        { id, days }
-      ),
+      (await axiosInstance.post(`/super-admin/institutions/${id}/trial`, { days })).data.data,
     analytics: () =>
       safeRequest(
         async () => (await axiosInstance.get('/super-admin/analytics')).data.data,

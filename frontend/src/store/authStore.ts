@@ -9,11 +9,13 @@ interface AuthState {
   token: string | null;
   refreshToken: string | null;
   institution: InstitutionSummary | null;
+  tenantContext: InstitutionSummary | null;
   permissions: string[];
   role: UserRole | null;
   isAuthenticated: boolean;
   setSession: (payload: LoginResponse) => void;
   updateAccessToken: (token: string, refreshToken?: string) => void;
+  setTenantContext: (institution: InstitutionSummary | null) => void;
   logout: () => void;
 }
 
@@ -42,6 +44,7 @@ export const useAuthStore = create<AuthState>()(
       token: tokenStorage.getAccessToken(),
       refreshToken: tokenStorage.getRefreshToken(),
       institution: null,
+      tenantContext: null,
       permissions: [],
       role: null,
       isAuthenticated: Boolean(tokenStorage.getAccessToken()),
@@ -53,6 +56,7 @@ export const useAuthStore = create<AuthState>()(
           token: payload.tokens.access_token,
           refreshToken: payload.tokens.refresh_token,
           institution: payload.institution,
+          tenantContext: null,
           permissions: payload.permissions,
           role: normalizeRole(payload.user.role),
           isAuthenticated: true,
@@ -66,6 +70,10 @@ export const useAuthStore = create<AuthState>()(
           isAuthenticated: true,
         }));
       },
+      setTenantContext: (institution) =>
+        set({
+          tenantContext: institution,
+        }),
       logout: () => {
         tokenStorage.clearTokens();
         set({
@@ -73,6 +81,7 @@ export const useAuthStore = create<AuthState>()(
           token: null,
           refreshToken: null,
           institution: null,
+          tenantContext: null,
           permissions: [],
           role: null,
           isAuthenticated: false,
@@ -87,6 +96,7 @@ export const useAuthStore = create<AuthState>()(
           ...currentState,
           ...state,
           user: normalizeUser(state.user || null),
+          tenantContext: state.tenantContext || null,
           role: normalizeRole(state.role),
         };
       },
@@ -95,6 +105,7 @@ export const useAuthStore = create<AuthState>()(
         token: state.token,
         refreshToken: state.refreshToken,
         institution: state.institution,
+        tenantContext: state.tenantContext,
         permissions: state.permissions,
         role: state.role,
         isAuthenticated: state.isAuthenticated,
