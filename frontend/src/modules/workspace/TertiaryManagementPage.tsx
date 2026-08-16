@@ -73,9 +73,9 @@ const TertiaryManagementPage = () => {
     queryFn: eduovaApi.tertiary.overview,
     enabled: Boolean(activeInstitutionId && isTertiaryInstitution(activeInstitution)),
   });
-  const faculties = data?.faculties || [];
-  const departments = data?.departments || [];
-  const programs = data?.programs || [];
+  const faculties = useMemo(() => data?.faculties || [], [data?.faculties]);
+  const departments = useMemo(() => data?.departments || [], [data?.departments]);
+  const programs = useMemo(() => data?.programs || [], [data?.programs]);
   const selectedFaculty = faculties.find((faculty: TertiaryOverview['faculties'][number]) => faculty.id === selectedFacultyId) || null;
   const selectedDepartment = departments.find((department: TertiaryOverview['departments'][number]) => department.id === selectedDepartmentId) || null;
   const facultyDepartments = useMemo(

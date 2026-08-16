@@ -176,8 +176,37 @@ const signRefreshToken = async (user) => {
   return token;
 };
 
-const verifyAccessToken = (token) => jwt.verify(token, env.JWT_SECRET);
-const verifyRefreshToken = (token) => jwt.verify(token, env.JWT_REFRESH_SECRET);
+const normalizeJwtError = (error, fallbackMessage = 'Invalid or expired token.') => {
+  const normalized = error instanceof Error ? error : new Error(String(error));
+  if (!normalized.status && !normalized.statusCode) {
+    normalized.status = 401;
+  }
+  if (
+    !normalized.message ||
+    normalized.message.startsWith('jwt') ||
+    normalized.message === 'invalid signature' ||
+    normalized.message === 'invalid token'
+  ) {
+    normalized.message = fallbackMessage;
+  }
+  return normalized;
+};
+
+const verifyAccessToken = (token) => {
+  try {
+    return jwt.verify(token, env.JWT_SECRET);
+  } catch (error) {
+    throw normalizeJwtError(error, 'Invalid or expired access token.');
+  }
+};
+
+const verifyRefreshToken = (token) => {
+  try {
+    return jwt.verify(token, env.JWT_REFRESH_SECRET);
+  } catch (error) {
+    throw normalizeJwtError(error, 'Invalid or expired refresh token.');
+  }
+};
 
 const blacklistToken = async (token, ttlSeconds = ACCESS_TTL_SECONDS) =>
   safeRedisSet(`auth:blacklist:${token}`, '1', 'EX', ttlSeconds);

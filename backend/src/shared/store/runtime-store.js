@@ -522,6 +522,8 @@ const initialStore = {
     ],
     milestones: {},
     pickupPins: {},
+    policies: [],
+    milestoneBands: [],
   },
 };
 

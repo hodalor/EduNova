@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { BellRing, FileText, Receipt, UserPlus } from 'lucide-react';
+import { Baby, BellRing, FileText, Receipt, UserPlus } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import {
   Bar,
@@ -21,7 +21,7 @@ import Card from '../../components/ui/Card';
 import PageLoader from '../../components/ui/PageLoader';
 import Stat from '../../components/ui/Stat';
 import Table from '../../components/ui/Table';
-import { isTertiaryInstitution } from '../../lib/institution';
+import { isTertiaryInstitution, isDaycareInstitution, supportsAcademics, supportsFinance } from '../../lib/institution';
 import { useAuthStore } from '../../store/authStore';
 import PageHeader from '../shared/PageHeader';
 import ParentWorkspacePage from '../workspace/ParentWorkspacePage';
@@ -179,20 +179,42 @@ const DashboardPage = () => {
           >
             Create User
           </Button>
-          <Button
-            variant="secondary"
-            leftIcon={<BellRing className="h-4 w-4" />}
-            onClick={() => navigate('/academics/structure')}
-          >
-            Academic Setup
-          </Button>
-          <Button
-            variant="secondary"
-            leftIcon={<Receipt className="h-4 w-4" />}
-            onClick={() => navigate(isTertiaryInstitution(institution) ? '/tertiary' : '/finance')}
-          >
-            {isTertiaryInstitution(institution) ? 'Tertiary Setup' : 'Finance'}
-          </Button>
+          {supportsAcademics(institution) ? (
+            <Button
+              variant="secondary"
+              leftIcon={<BellRing className="h-4 w-4" />}
+              onClick={() => navigate('/academics/structure')}
+            >
+              Academic Setup
+            </Button>
+          ) : null}
+          {isDaycareInstitution(institution) ? (
+            <Button
+              variant="secondary"
+              leftIcon={<Baby className="h-4 w-4" />}
+              onClick={() => navigate('/daycare')}
+            >
+              Daycare Setup
+            </Button>
+          ) : null}
+          {isTertiaryInstitution(institution) ? (
+            <Button
+              variant="secondary"
+              leftIcon={<Receipt className="h-4 w-4" />}
+              onClick={() => navigate('/tertiary')}
+            >
+              Tertiary Setup
+            </Button>
+          ) : null}
+          {supportsFinance(institution) ? (
+            <Button
+              variant="secondary"
+              leftIcon={<Receipt className="h-4 w-4" />}
+              onClick={() => navigate('/finance')}
+            >
+              Finance
+            </Button>
+          ) : null}
         </div>
       </Card>
     </div>

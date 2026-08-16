@@ -24,9 +24,12 @@ import { cn } from '../../lib/cn';
 import {
   getRoleHomeTitle,
   getWorkspaceLabel,
-  hasLevel,
   isDaycareInstitution,
   isTertiaryInstitution,
+  supportsAcademics,
+  supportsAnalytics,
+  supportsBasicAttendance,
+  supportsFinance,
 } from '../../lib/institution';
 import { useAuthStore } from '../../store/authStore';
 import { useUiStore } from '../../store/uiStore';
@@ -49,11 +52,8 @@ type NavGroup = {
   items: NavItem[];
 };
 
-const supportsAcademics = (institution: InstitutionSummary | null) =>
-  hasLevel(institution, 'PR') ||
-  hasLevel(institution, 'JH') ||
-  hasLevel(institution, 'SH') ||
-  hasLevel(institution, 'TR');
+const supportsAttendance = (institution: InstitutionSummary | null) =>
+  isDaycareInstitution(institution) || supportsBasicAttendance(institution);
 
 const institutionNavGroups: NavGroup[] = [
   {
@@ -115,12 +115,14 @@ const institutionNavGroups: NavGroup[] = [
         to: '/attendance/taking',
         icon: ClipboardCheck,
         roles: ['institution_admin', 'teacher'],
+        visible: supportsAttendance,
       },
       {
         name: 'Finance',
         to: '/finance',
         icon: CreditCard,
         roles: ['institution_admin', 'accountant'],
+        visible: supportsFinance,
       },
     ],
   },
@@ -163,6 +165,7 @@ const institutionNavGroups: NavGroup[] = [
         to: '/analytics/finance',
         icon: FileBarChart2,
         roles: ['institution_admin', 'accountant'],
+        visible: supportsAnalytics,
       },
       {
         name: 'Settings',

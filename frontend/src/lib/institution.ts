@@ -22,6 +22,20 @@ export const isTertiaryInstitution = (institution?: InstitutionSummary | null) =
 export const isDaycareInstitution = (institution?: InstitutionSummary | null) =>
   hasLevel(institution, 'DC');
 
+export const isBasicInstitution = (institution?: InstitutionSummary | null) =>
+  hasLevel(institution, 'PR') ||
+  hasLevel(institution, 'JH') ||
+  hasLevel(institution, 'SH');
+
+export const supportsAcademics = (institution?: InstitutionSummary | null) =>
+  isBasicInstitution(institution) || isTertiaryInstitution(institution);
+
+export const supportsBasicAttendance = supportsAcademics;
+
+export const supportsFinance = supportsAcademics;
+
+export const supportsAnalytics = supportsAcademics;
+
 export const getAcademicStructureLabel = (institution?: InstitutionSummary | null) => {
   const tertiaryCalendar = institution?.settings?.tertiary?.calendar_model;
   if (tertiaryCalendar) {

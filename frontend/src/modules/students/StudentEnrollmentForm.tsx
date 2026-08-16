@@ -116,7 +116,7 @@ const steps = [
 ];
 
 const defaultValues: EnrollmentValues = {
-  level: 'PR',
+  level: '',
   firstName: '',
   lastName: '',
   email: '',
@@ -144,11 +144,11 @@ const StudentEnrollmentForm = () => {
   const activeInstitution = tenantContext || institution;
   const activeInstitutionId = activeInstitution?.id || null;
   const allowedLevels = getInstitutionLevels(activeInstitution);
-  const activeLevelSet = useMemo(
-    () => (allowedLevels.length ? allowedLevels : (['PR'] as EducationLevelCode[])),
+  const activeLevelSet = useMemo<EducationLevelCode[]>(
+    () => (allowedLevels.length ? allowedLevels : []),
     [allowedLevels]
   );
-  const defaultLevel = activeLevelSet[0];
+  const defaultLevel = activeLevelSet[0] || '';
   const isTertiaryOnly = activeLevelSet.length === 1 && activeLevelSet[0] === 'TR';
   const isBasicOnly = activeLevelSet.length > 0 && !activeLevelSet.includes('TR');
   const assignmentLabel = isTertiaryOnly ? 'Level' : isBasicOnly ? 'Class' : 'Class or Level';

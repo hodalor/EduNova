@@ -126,6 +126,22 @@ const getOfferingLabel = (institution: InstitutionSummary | null) => {
   return 'Subject or Course';
 };
 
+const pluralizeLabel = (label: string) => {
+  if (label === 'Class') {
+    return 'Classes';
+  }
+  if (label === 'Class or Level') {
+    return 'Classes or Levels';
+  }
+  if (label === 'Term or Semester') {
+    return 'Terms or Semesters';
+  }
+  if (label === 'Subject or Course') {
+    return 'Subjects or Courses';
+  }
+  return `${label}s`;
+};
+
 const initialGroupForm = {
   name: '',
   code: '',
@@ -176,18 +192,38 @@ const AcademicStructurePage = () => {
   const [periodForm, setPeriodForm] = useState(initialPeriodForm);
   const [offeringForm, setOfferingForm] = useState(initialOfferingForm);
 
-  const allowedLevels = getInstitutionLevels(activeInstitution);
+  const allowedLevels = useMemo(
+    () => getInstitutionLevels(activeInstitution),
+    [activeInstitution]
+  );
   const groupLabel = getGroupLabel(activeInstitution, role);
   const periodLabel = getPeriodLabel(activeInstitution);
   const offeringLabel = getOfferingLabel(activeInstitution);
-  const levelOptions = allowedLevels.map((code) => ({ code, label: educationLevelLabels[code] }));
-  const showCourseOption = allowedLevels.includes('TR');
-  const groups: AcademicGroup[] = (data?.groups || []).filter(
-    (group: AcademicGroup) =>
-      !allowedLevels.length || allowedLevels.includes(group.level_code as EducationLevelCode)
+  const groupListLabel = pluralizeLabel(groupLabel);
+  const periodListLabel = pluralizeLabel(periodLabel);
+  const offeringListLabel = pluralizeLabel(offeringLabel);
+  const levelOptions = useMemo(
+    () => allowedLevels.map((code) => ({ code, label: educationLevelLabels[code] })),
+    [allowedLevels]
   );
-  const periods: AcademicPeriod[] = useMemo(() => data?.periods || [], [data?.periods]);
-  const offerings: AcademicOffering[] = useMemo(() => data?.offerings || [], [data?.offerings]);
+  const showCourseOption = allowedLevels.includes('TR');
+  const groups: AcademicGroup[] = useMemo(
+    () =>
+      (data?.groups || []).filter(
+        (group: AcademicGroup) =>
+          !allowedLevels.length || allowedLevels.includes(group.level_code as EducationLevelCode)
+      ),
+    [allowedLevels, data?.groups]
+  );
+  const visibleGroupIds = useMemo(() => new Set(groups.map((group) => group.id)), [groups]);
+  const periods: AcademicPeriod[] = useMemo(
+    () => (data?.periods || []).filter((period: AcademicPeriod) => visibleGroupIds.has(period.group_id)),
+    [data?.periods, visibleGroupIds]
+  );
+  const offerings: AcademicOffering[] = useMemo(
+    () => (data?.offerings || []).filter((offering: AcademicOffering) => visibleGroupIds.has(offering.group_id)),
+    [data?.offerings, visibleGroupIds]
+  );
   const selectedGroup = groups.find((group) => group.id === selectedGroupId) || null;
 
   const selectedGroupPeriods: AcademicPeriod[] = useMemo(() => {
@@ -227,15 +263,26 @@ const AcademicStructurePage = () => {
       const nextLevelCode = levelOptions.some((item) => item.code === current.level_code)
         ? current.level_code
         : levelOptions[0].code;
+      const nextGroupType =
+        allowedLevels.length === 1 && allowedLevels[0] === 'TR' ? 'level' : current.group_type;
+      const nextCalendarType =
+        current.level_code === nextLevelCode && current.calendar_type
+          ? current.calendar_type
+          : getDefaultCalendarForLevel(nextLevelCode);
+
+      if (
+        current.group_type === nextGroupType &&
+        current.level_code === nextLevelCode &&
+        current.calendar_type === nextCalendarType
+      ) {
+        return current;
+      }
 
       return {
         ...current,
-        group_type:
-          allowedLevels.length === 1 && allowedLevels[0] === 'TR'
-            ? 'level'
-            : current.group_type,
+        group_type: nextGroupType,
         level_code: nextLevelCode,
-        calendar_type: current.calendar_type || getDefaultCalendarForLevel(nextLevelCode),
+        calendar_type: nextCalendarType,
       };
     });
   }, [allowedLevels, levelOptions]);
@@ -369,15 +416,15 @@ const AcademicStructurePage = () => {
   };
 
   const tabMeta: Array<{ id: StructureTab; label: string; count: number }> = [
-    { id: 'groups', label: `${groupLabel}s`, count: groups.length },
+    { id: 'groups', label: groupListLabel, count: groups.length },
     {
       id: 'periods',
-      label: `${periodLabel}${periodLabel === 'Term or Semester' ? 's' : 's'}`,
+      label: periodListLabel,
       count: selectedGroupId ? periods.filter((period) => period.group_id === selectedGroupId).length : periods.length,
     },
     {
       id: 'offerings',
-      label: `${offeringLabel}${offeringLabel === 'Subject or Course' ? 's' : 's'}`,
+      label: offeringListLabel,
       count: selectedGroupId
         ? offerings.filter((offering) => offering.group_id === selectedGroupId).length
         : offerings.length,
@@ -426,46 +473,11 @@ const AcademicStructurePage = () => {
         <div className="mt-6 grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
           <div className="overflow-x-auto">
             {activeTab === 'groups' ? (
-              <table className="min-w-full divide-y divide-slate-200 text-sm">
-                <thead className="bg-slate-50">
-                  <tr>
-                    {['Name', 'Type', 'Education Level', 'Calendar', 'Periods', 'Offerings'].map((label) => (
-                      <th key={label} className="px-4 py-3 text-left font-semibold text-slate-600">
-                        {label}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 bg-white">
-                  {groups.map((group) => (
-                    <tr
-                      key={group.id}
-                      className={`cursor-pointer transition hover:bg-slate-50 ${
-                        selectedGroupId === group.id ? 'bg-brand-navy/5' : ''
-                      }`}
-                      onClick={() => setSelectedGroupId(group.id)}
-                    >
-                      <td className="px-4 py-3">
-                        <div className="font-semibold text-brand-navy">{group.name}</div>
-                        <div className="text-xs uppercase tracking-wide text-slate-400">{group.code}</div>
-                      </td>
-                      <td className="px-4 py-3 capitalize">{group.group_type}</td>
-                      <td className="px-4 py-3">{educationLevelLabels[group.level_code as EducationLevelCode] || group.level_code}</td>
-                      <td className="px-4 py-3 capitalize">{calendarLabels[group.calendar_type] || group.calendar_type}</td>
-                      <td className="px-4 py-3">{periods.filter((period) => period.group_id === group.id).length}</td>
-                      <td className="px-4 py-3">{offerings.filter((offering) => offering.group_id === group.id).length}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            ) : null}
-
-            {activeTab === 'periods' ? (
-              selectedGroup ? (
+              groups.length ? (
                 <table className="min-w-full divide-y divide-slate-200 text-sm">
                   <thead className="bg-slate-50">
                     <tr>
-                      {['Name', 'Sequence', 'Calendar', 'Status', 'Registration'].map((label) => (
+                      {['Name', 'Type', 'Education Level', 'Calendar', 'Periods', 'Offerings'].map((label) => (
                         <th key={label} className="px-4 py-3 text-left font-semibold text-slate-600">
                           {label}
                         </th>
@@ -473,17 +485,64 @@ const AcademicStructurePage = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 bg-white">
-                    {selectedGroupPeriods.map((period) => (
-                      <tr key={period.id} className="hover:bg-slate-50">
-                        <td className="px-4 py-3 font-semibold text-brand-navy">{period.name}</td>
-                        <td className="px-4 py-3">#{period.sequence}</td>
-                        <td className="px-4 py-3 capitalize">{calendarLabels[period.calendar_type as keyof typeof calendarLabels] || period.calendar_type}</td>
-                        <td className="px-4 py-3 capitalize">{period.status}</td>
-                        <td className="px-4 py-3">{period.registration_open ? 'Open' : 'Closed'}</td>
+                    {groups.map((group) => (
+                      <tr
+                        key={group.id}
+                        className={`cursor-pointer transition hover:bg-slate-50 ${
+                          selectedGroupId === group.id ? 'bg-brand-navy/5' : ''
+                        }`}
+                        onClick={() => setSelectedGroupId(group.id)}
+                      >
+                        <td className="px-4 py-3">
+                          <div className="font-semibold text-brand-navy">{group.name}</div>
+                          <div className="text-xs uppercase tracking-wide text-slate-400">{group.code}</div>
+                        </td>
+                        <td className="px-4 py-3 capitalize">{group.group_type}</td>
+                        <td className="px-4 py-3">{educationLevelLabels[group.level_code as EducationLevelCode] || group.level_code}</td>
+                        <td className="px-4 py-3 capitalize">{calendarLabels[group.calendar_type] || group.calendar_type}</td>
+                        <td className="px-4 py-3">{periods.filter((period) => period.group_id === group.id).length}</td>
+                        <td className="px-4 py-3">{offerings.filter((offering) => offering.group_id === group.id).length}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
+              ) : (
+                <p className="rounded-2xl border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-500">
+                  No {groupListLabel.toLowerCase()} added yet.
+                </p>
+              )
+            ) : null}
+
+            {activeTab === 'periods' ? (
+              selectedGroup ? (
+                selectedGroupPeriods.length ? (
+                  <table className="min-w-full divide-y divide-slate-200 text-sm">
+                    <thead className="bg-slate-50">
+                      <tr>
+                        {['Name', 'Sequence', 'Calendar', 'Status', 'Registration'].map((label) => (
+                          <th key={label} className="px-4 py-3 text-left font-semibold text-slate-600">
+                            {label}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 bg-white">
+                      {selectedGroupPeriods.map((period) => (
+                        <tr key={period.id} className="hover:bg-slate-50">
+                          <td className="px-4 py-3 font-semibold text-brand-navy">{period.name}</td>
+                          <td className="px-4 py-3">#{period.sequence}</td>
+                          <td className="px-4 py-3 capitalize">{calendarLabels[period.calendar_type as keyof typeof calendarLabels] || period.calendar_type}</td>
+                          <td className="px-4 py-3 capitalize">{period.status}</td>
+                          <td className="px-4 py-3">{period.registration_open ? 'Open' : 'Closed'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                ) : (
+                  <p className="rounded-2xl border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-500">
+                    No {periodListLabel.toLowerCase()} linked to this {groupLabel.toLowerCase()} yet.
+                  </p>
+                )
               ) : (
                 <p className="rounded-2xl border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-500">
                   Select a {groupLabel.toLowerCase()} first.
@@ -493,32 +552,38 @@ const AcademicStructurePage = () => {
 
             {activeTab === 'offerings' ? (
               selectedGroup ? (
-                <table className="min-w-full divide-y divide-slate-200 text-sm">
-                  <thead className="bg-slate-50">
-                    <tr>
-                      {['Code', 'Name', 'Type', periodLabel, 'Credits', 'Status'].map((label) => (
-                        <th key={label} className="px-4 py-3 text-left font-semibold text-slate-600">
-                          {label}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 bg-white">
-                    {selectedGroupOfferings.map((offering) => {
-                      const offeringPeriod = periods.find((period) => period.id === offering.period_id);
-                      return (
-                        <tr key={offering.id} className="hover:bg-slate-50">
-                          <td className="px-4 py-3 font-semibold text-brand-navy">{offering.code}</td>
-                          <td className="px-4 py-3">{offering.name}</td>
-                          <td className="px-4 py-3 capitalize">{offering.type}</td>
-                          <td className="px-4 py-3">{offeringPeriod?.name || '-'}</td>
-                          <td className="px-4 py-3">{offering.credit_hours ?? '-'}</td>
-                          <td className="px-4 py-3">{offering.is_core ? 'Core' : 'Elective'}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                selectedGroupOfferings.length ? (
+                  <table className="min-w-full divide-y divide-slate-200 text-sm">
+                    <thead className="bg-slate-50">
+                      <tr>
+                        {['Code', 'Name', 'Type', periodLabel, 'Credits', 'Status'].map((label) => (
+                          <th key={label} className="px-4 py-3 text-left font-semibold text-slate-600">
+                            {label}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 bg-white">
+                      {selectedGroupOfferings.map((offering) => {
+                        const offeringPeriod = periods.find((period) => period.id === offering.period_id);
+                        return (
+                          <tr key={offering.id} className="hover:bg-slate-50">
+                            <td className="px-4 py-3 font-semibold text-brand-navy">{offering.code}</td>
+                            <td className="px-4 py-3">{offering.name}</td>
+                            <td className="px-4 py-3 capitalize">{offering.type}</td>
+                            <td className="px-4 py-3">{offeringPeriod?.name || '-'}</td>
+                            <td className="px-4 py-3">{offering.credit_hours ?? '-'}</td>
+                            <td className="px-4 py-3">{offering.is_core ? 'Core' : 'Elective'}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                ) : (
+                  <p className="rounded-2xl border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-500">
+                    No {offeringListLabel.toLowerCase()} linked to this {groupLabel.toLowerCase()} yet.
+                  </p>
+                )
               ) : (
                 <p className="rounded-2xl border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-500">
                   Select a {groupLabel.toLowerCase()} first.

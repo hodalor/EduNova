@@ -42,8 +42,7 @@ export const eduovaApi = {
     },
   },
   analytics: {
-    getOverview: () =>
-      safeRequest(async () => (await axiosInstance.get('/analytics/overview')).data.data, dashboardOverview),
+    getOverview: async () => (await axiosInstance.get('/analytics/overview')).data.data,
     getFinance: () =>
       safeRequest(async () => (await axiosInstance.get('/analytics/finance/revenue')).data.data, analyticsData.finance),
     getAcademics: () =>
@@ -106,8 +105,23 @@ export const eduovaApi = {
       safeRequest(async () => (await axiosInstance.get('/timetable/config')).data.data, timetableData.subjects),
   },
   daycare: {
-    overview: () =>
-      safeRequest(async () => (await axiosInstance.get('/v1/daycare/present-now')).data.data, daycareData),
+    overview: async () => (await axiosInstance.get('/v1/daycare/present-now')).data.data,
+    createClass: async (payload: Record<string, unknown>) =>
+      (await axiosInstance.post('/v1/daycare/classes', payload)).data.data,
+    updateClass: async (classId: string, payload: Record<string, unknown>) =>
+      (await axiosInstance.patch(`/v1/daycare/classes/${classId}`, payload)).data.data,
+    deleteClass: async (classId: string) =>
+      (await axiosInstance.delete(`/v1/daycare/classes/${classId}`)).data.data,
+    createPolicy: async (payload: Record<string, unknown>) =>
+      (await axiosInstance.post('/v1/daycare/policies', payload)).data.data,
+    deletePolicy: async (index: number) =>
+      (await axiosInstance.delete(`/v1/daycare/policies/${index}`)).data.data,
+    createMilestoneBand: async (payload: Record<string, unknown>) =>
+      (await axiosInstance.post('/v1/daycare/milestone-bands', payload)).data.data,
+    deleteMilestoneBand: async (id: string) =>
+      (await axiosInstance.delete(`/v1/daycare/milestone-bands/${id}`)).data.data,
+    updateSettings: async (payload: Record<string, unknown>) =>
+      (await axiosInstance.patch('/v1/daycare/settings', payload)).data.data,
   },
   tertiary: {
     overview: async () => (await axiosInstance.get('/v1/tertiary/overview')).data.data,

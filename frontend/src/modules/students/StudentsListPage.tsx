@@ -11,10 +11,29 @@ import PageLoader from '../../components/ui/PageLoader';
 import SearchInput from '../../components/ui/SearchInput';
 import Select from '../../components/ui/Select';
 import Table from '../../components/ui/Table';
+import { getInstitutionLevels } from '../../lib/institution';
+import { useAuthStore } from '../../store/authStore';
+import type { EducationLevelCode } from '../../types/auth';
 import PageHeader from '../shared/PageHeader';
 import { type StudentListItem, useStudents } from './hooks/useStudents';
 
+const LEVEL_LABELS: Record<EducationLevelCode, string> = {
+  DC: 'Day Care',
+  PR: 'Primary',
+  JH: 'Junior High',
+  SH: 'Senior High',
+  TR: 'Tertiary',
+};
+
 const StudentsListPage = () => {
+  const institution = useAuthStore((state) => state.institution);
+  const tenantContext = useAuthStore((state) => state.tenantContext);
+  const activeInstitution = tenantContext || institution;
+  const allowedLevels = useMemo<EducationLevelCode[]>(
+    () => getInstitutionLevels(activeInstitution),
+    [activeInstitution]
+  );
+
   const [search, setSearch] = useState('');
   const [level, setLevel] = useState('all');
   const [className, setClassName] = useState('all');
@@ -55,11 +74,9 @@ const StudentsListPage = () => {
           <SearchInput placeholder="Search name or student number" onDebouncedChange={setSearch} />
           <Select label="Education Level" value={level} onChange={(event) => setLevel(event.target.value)}>
             <option value="all">All levels</option>
-            <option value="DC">Day Care</option>
-            <option value="PR">Primary</option>
-            <option value="JH">Junior High</option>
-            <option value="SH">Senior High</option>
-            <option value="TR">Tertiary</option>
+            {allowedLevels.map((code) => (
+              <option key={code} value={code}>{LEVEL_LABELS[code]}</option>
+            ))}
           </Select>
           <Select label="Class" value={className} onChange={(event) => setClassName(event.target.value)}>
             <option value="all">All classes</option>

@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 
+const { Op } = require('sequelize');
 const speakeasy = require('speakeasy');
 const QRCode = require('qrcode');
 
@@ -135,9 +136,13 @@ const login = async ({ email, identity, password, institution_id, institution_co
   }
 
   const user = await models.User.findOne({
-    where: email || loginIdentity.includes('@')
-      ? { email: email || loginIdentity, institution_id: institutionId }
-      : { phone: loginIdentity, institution_id: institutionId },
+    where: {
+      institution_id: institutionId,
+      [Op.or]: [
+        { email: email || loginIdentity },
+        ...(email ? [] : [{ phone: loginIdentity }]),
+      ],
+    },
     include: [{ model: models.Institution, as: 'institution' }],
   });
 
@@ -191,36 +196,193 @@ const login = async ({ email, identity, password, institution_id, institution_co
 };
 
 const refresh = async ({ refresh_token }) => {
-  const payload = verifyRefreshToken(refresh_token);
-  const session = await redisClient.get(`auth:refresh:${payload.jti}`);
-  if (!session) {
-    throw Object.assign(new Error('Refresh token session not found.'), { status: 401 });
+  try {
+    let payload;
+    try {
+      payload = verifyRefreshToken(refresh_token);
+    } catch (jwtError) {
+      const normalized = jwtError instanceof Error ? jwtError : new Error(String(jwtError));
+      normalized.status = 401;
+      if (!normalized.message || normalized.message.startsWith('jwt')) {
+        normalized.message = 'Invalid or expired refresh token.';
+      }
+      throw normalized;
+    }
+    // #region debug-point A:refresh-entry
+    (() => {
+      const fs = require('fs');
+      const p = '.dbg/login-refresh-500.env';
+      let u = 'http://127.0.0.1:7777/event';
+      let s = 'login-refresh-500';
+      try {
+        const e = fs.readFileSync(p, 'utf8');
+        u = e.match(/DEBUG_SERVER_URL=(.+)/)?.[1] || u;
+        s = e.match(/DEBUG_SESSION_ID=(.+)/)?.[1] || s;
+      } catch {}
+      fetch(u, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: s,
+          runId: 'pre-fix',
+          hypothesisId: 'A',
+          location: 'backend/src/modules/auth/auth.service.js:refresh-entry',
+          msg: '[DEBUG] refresh entry',
+          data: { sub: payload.sub, role: payload.role, institution_id: payload.institution_id, jti: payload.jti },
+          ts: Date.now(),
+        }),
+      }).catch(() => {});
+    })();
+    // #endregion
+    let session = null;
+    try {
+      session = await redisClient.get(`auth:refresh:${payload.jti}`);
+    } catch (_redisErr) {
+      session = null;
+    }
+    // #region debug-point B:refresh-session
+    (() => {
+      const fs = require('fs');
+      const p = '.dbg/login-refresh-500.env';
+      let u = 'http://127.0.0.1:7777/event';
+      let s = 'login-refresh-500';
+      try {
+        const e = fs.readFileSync(p, 'utf8');
+        u = e.match(/DEBUG_SERVER_URL=(.+)/)?.[1] || u;
+        s = e.match(/DEBUG_SESSION_ID=(.+)/)?.[1] || s;
+      } catch {}
+      fetch(u, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: s,
+          runId: 'pre-fix',
+          hypothesisId: 'B',
+          location: 'backend/src/modules/auth/auth.service.js:refresh-session',
+          msg: '[DEBUG] refresh session lookup',
+          data: { jti: payload.jti, hasSession: Boolean(session), sessionPreview: session ? String(session).slice(0, 160) : null },
+          ts: Date.now(),
+        }),
+      }).catch(() => {});
+    })();
+    // #endregion
+    if (!session) {
+      throw Object.assign(new Error('Refresh token session not found.'), { status: 401 });
+    }
+
+    const user =
+      payload.role === 'super_admin'
+        ? await findPlatformUserById(payload.sub)
+        : await models.User.findByPk(payload.sub, {
+            include: [{ model: models.Institution, as: 'institution' }],
+          });
+    // #region debug-point C:refresh-user
+    (() => {
+      const fs = require('fs');
+      const p = '.dbg/login-refresh-500.env';
+      let u = 'http://127.0.0.1:7777/event';
+      let s = 'login-refresh-500';
+      try {
+        const e = fs.readFileSync(p, 'utf8');
+        u = e.match(/DEBUG_SERVER_URL=(.+)/)?.[1] || u;
+        s = e.match(/DEBUG_SESSION_ID=(.+)/)?.[1] || s;
+      } catch {}
+      fetch(u, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: s,
+          runId: 'pre-fix',
+          hypothesisId: 'C',
+          location: 'backend/src/modules/auth/auth.service.js:refresh-user',
+          msg: '[DEBUG] refresh user lookup',
+          data: {
+            role: payload.role,
+            requestedUserId: payload.sub,
+            foundUser: Boolean(user),
+            foundInstitutionId: user?.institution_id || null,
+            isActive: user?.is_active ?? null,
+            hasInstitutionRelation: Boolean(user?.institution),
+          },
+          ts: Date.now(),
+        }),
+      }).catch(() => {});
+    })();
+    // #endregion
+    if (!user || !user.is_active) {
+      throw Object.assign(new Error('User account is inactive.'), { status: 401 });
+    }
+
+    const access_token = signAccessToken(user);
+    const rotated_refresh_token = await rotateRefreshToken(refresh_token, user);
+    const profile = await buildProfile(user);
+    // #region debug-point D:refresh-success
+    (() => {
+      const fs = require('fs');
+      const p = '.dbg/login-refresh-500.env';
+      let u = 'http://127.0.0.1:7777/event';
+      let s = 'login-refresh-500';
+      try {
+        const e = fs.readFileSync(p, 'utf8');
+        u = e.match(/DEBUG_SERVER_URL=(.+)/)?.[1] || u;
+        s = e.match(/DEBUG_SESSION_ID=(.+)/)?.[1] || s;
+      } catch {}
+      fetch(u, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: s,
+          runId: 'pre-fix',
+          hypothesisId: 'D',
+          location: 'backend/src/modules/auth/auth.service.js:refresh-success',
+          msg: '[DEBUG] refresh success',
+          data: { userId: user.id, role: user.role, profileInstitutionId: profile?.institution?.id || null },
+          ts: Date.now(),
+        }),
+      }).catch(() => {});
+    })();
+    // #endregion
+
+    logger.info('Refresh token rotated', { user_id: user.id });
+
+    return {
+      user: profile,
+      permissions: getPermissionsForRole(user.role),
+      tokens: {
+        access_token,
+        refresh_token: rotated_refresh_token,
+        expires_in: 15 * 60,
+      },
+    };
+  } catch (error) {
+    // #region debug-point E:refresh-error
+    (() => {
+      const fs = require('fs');
+      const p = '.dbg/login-refresh-500.env';
+      let u = 'http://127.0.0.1:7777/event';
+      let s = 'login-refresh-500';
+      try {
+        const e = fs.readFileSync(p, 'utf8');
+        u = e.match(/DEBUG_SERVER_URL=(.+)/)?.[1] || u;
+        s = e.match(/DEBUG_SESSION_ID=(.+)/)?.[1] || s;
+      } catch {}
+      fetch(u, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: s,
+          runId: 'pre-fix',
+          hypothesisId: 'E',
+          location: 'backend/src/modules/auth/auth.service.js:refresh-error',
+          msg: '[DEBUG] refresh error',
+          data: { message: error?.message || null, status: error?.status || null, stack: error?.stack ? String(error.stack).split('\n').slice(0, 5).join(' | ') : null },
+          ts: Date.now(),
+        }),
+      }).catch(() => {});
+    })();
+    // #endregion
+    throw error;
   }
-
-  const user =
-    payload.role === 'super_admin'
-      ? await findPlatformUserById(payload.sub)
-      : await models.User.findByPk(payload.sub, {
-          include: [{ model: models.Institution, as: 'institution' }],
-        });
-  if (!user || !user.is_active) {
-    throw Object.assign(new Error('User account is inactive.'), { status: 401 });
-  }
-
-  const access_token = signAccessToken(user);
-  const rotated_refresh_token = await rotateRefreshToken(refresh_token, user);
-
-  logger.info('Refresh token rotated', { user_id: user.id });
-
-  return {
-    user: await buildProfile(user),
-    permissions: getPermissionsForRole(user.role),
-    tokens: {
-      access_token,
-      refresh_token: rotated_refresh_token,
-      expires_in: 15 * 60,
-    },
-  };
 };
 
 const logout = async ({ token, refresh_token }) => {
