@@ -31,7 +31,29 @@ const schema = Joi.object({
   TWILIO_SID: Joi.string().allow('').required(),
   TWILIO_TOKEN: Joi.string().allow('').required(),
   TWILIO_PHONE: Joi.string().required(),
-  FRONTEND_URL: Joi.string().uri().required(),
+  FRONTEND_URL: Joi.string()
+    .custom((value, helpers) => {
+      const uris = String(value || '')
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+      if (uris.length === 0) {
+        return helpers.message({ custom: '"FRONTEND_URL" is required' });
+      }
+      for (const uri of uris) {
+        if (!/^https?:\/\/[^\s]+$/.test(uri)) {
+          try {
+            new URL(uri);
+          } catch (_error) {
+            return helpers.message({
+              custom: `"FRONTEND_URL" entry "${uri}" must be a valid uri (comma-separated list of uris is accepted)`,
+            });
+          }
+        }
+      }
+      return value;
+    })
+    .required(),
   CORS_ORIGINS: Joi.string().allow('').optional(),
   MOBILE_API_KEY: Joi.string().required(),
   MAX_FILE_SIZE: Joi.number().integer().positive().default(5242880),

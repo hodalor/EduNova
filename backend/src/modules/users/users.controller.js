@@ -26,4 +26,11 @@ module.exports = {
       data,
     });
   },
+  searchParents: wrap((req) =>
+    usersService.searchParents({
+      institutionId: req.institutionId,
+      search: req.query.search,
+      limit: Number(req.query.limit) || 20,
+    })
+  ),
 };

@@ -32,9 +32,10 @@ export const supportsAcademics = (institution?: InstitutionSummary | null) =>
 
 export const supportsBasicAttendance = supportsAcademics;
 
-export const supportsFinance = supportsAcademics;
+export const supportsFinance = (institution?: InstitutionSummary | null) =>
+  isDaycareInstitution(institution) || isBasicInstitution(institution) || isTertiaryInstitution(institution);
 
-export const supportsAnalytics = supportsAcademics;
+export const supportsAnalytics = supportsFinance;
 
 export const getAcademicStructureLabel = (institution?: InstitutionSummary | null) => {
   const tertiaryCalendar = institution?.settings?.tertiary?.calendar_model;

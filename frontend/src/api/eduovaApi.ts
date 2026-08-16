@@ -66,17 +66,29 @@ export const eduovaApi = {
   finance: {
     dashboard: () =>
       safeRequest(async () => (await axiosInstance.get('/finance/dashboard')).data.data, financeData.dashboard),
-    invoices: () =>
-      safeRequest(async () => (await axiosInstance.get('/finance/invoices')).data.data, financeData.invoices),
+    invoices: async () => (await axiosInstance.get('/finance/invoices')).data.data,
+    createInvoice: async (payload: Record<string, unknown>) =>
+      (await axiosInstance.post('/finance/invoices', payload)).data.data,
+    payments: async () => (await axiosInstance.get('/finance/payments')).data.data,
+    recordPayment: async (payload: Record<string, unknown>) =>
+      (await axiosInstance.post('/finance/payments', payload)).data.data,
     defaulters: () =>
       safeRequest(
         async () => (await axiosInstance.get('/finance/reports/defaulters')).data.data,
         analyticsData.finance.defaulters
       ),
+    debtors: async () => (await axiosInstance.get('/finance/debtors')).data.data,
     expenses: () =>
       safeRequest(async () => (await axiosInstance.get('/finance/expenses')).data.data, financeData.expenses),
     feeStructures: () =>
       safeRequest(async () => (await axiosInstance.get('/finance/fee-structures')).data.data, financeData.feeStructures),
+    paymentTerms: async () => (await axiosInstance.get('/finance/payment-terms')).data.data,
+    createPaymentTerm: async (payload: Record<string, unknown>) =>
+      (await axiosInstance.post('/finance/payment-terms', payload)).data.data,
+    updatePaymentTerm: async (id: string, payload: Record<string, unknown>) =>
+      (await axiosInstance.patch(`/finance/payment-terms/${id}`, payload)).data.data,
+    deletePaymentTerm: async (id: string) =>
+      (await axiosInstance.delete(`/finance/payment-terms/${id}`)).data.data,
   },
   academics: {
     structure: async () => (await axiosInstance.get('/v1/academics/structure')).data.data,
@@ -140,6 +152,12 @@ export const eduovaApi = {
     list: async () => (await axiosInstance.get('/v1/users')).data.data,
     create: async (payload: Record<string, unknown>) =>
       (await axiosInstance.post('/v1/users', payload)).data.data,
+    searchParents: async (search: string, limit = 20) =>
+      (
+        await axiosInstance.get('/v1/users/parents', {
+          params: { search, limit },
+        })
+      ).data.data,
   },
   superAdmin: {
     users: async () => (await axiosInstance.get('/super-admin/users')).data.data,

@@ -17,6 +17,7 @@ router.use(
 );
 
 router.get('/', controller.listUsers);
+router.get('/parents', controller.searchParents);
 router.post('/', controller.createUser);
 
 module.exports = router;

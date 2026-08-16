@@ -13,6 +13,7 @@ import {
   AlertTriangle,
   CheckCircle2,
 } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 import { eduovaApi } from '../../api/eduovaApi';
 import Badge from '../../components/ui/Badge';
@@ -64,7 +65,15 @@ const SESSION_OPTIONS = [
 const sessionLabel = (value: string) =>
   SESSION_OPTIONS.find((opt) => opt.value === value)?.label || value || 'Full Day';
 
-const NewClassForm = ({ onSubmit, onCancel }: { onSubmit: (payload: Record<string, unknown>) => void; onCancel: () => void }) => {
+const NewClassForm = ({
+  onSubmit,
+  onCancel,
+  loading,
+}: {
+  onSubmit: (payload: Record<string, unknown>) => void;
+  onCancel: () => void;
+  loading?: boolean;
+}) => {
   const [name, setName] = useState('');
   const [code, setCode] = useState('');
   const [capacity, setCapacity] = useState<string>('');
@@ -95,14 +104,22 @@ const NewClassForm = ({ onSubmit, onCancel }: { onSubmit: (payload: Record<strin
         <Input label="Age Max (years)" type="number" min={0} max={18} step={0.5} value={ageMax} onChange={(e) => setAgeMax(e.target.value)} placeholder="5" />
       </div>
       <div className="flex justify-end gap-3 pt-2">
-        <Button type="button" variant="ghost" onClick={onCancel}>Cancel</Button>
-        <Button type="submit" leftIcon={<Save className="h-4 w-4" />}>Save Class</Button>
+        <Button type="button" variant="secondary" onClick={onCancel} disabled={loading}>Cancel</Button>
+        <Button type="submit" leftIcon={<Save className="h-4 w-4" />} loading={loading}>Save Class</Button>
       </div>
     </form>
   );
 };
 
-const PolicyForm = ({ onSubmit, onCancel }: { onSubmit: (payload: { body: string }) => void; onCancel: () => void }) => {
+const PolicyForm = ({
+  onSubmit,
+  onCancel,
+  loading,
+}: {
+  onSubmit: (payload: { body: string }) => void;
+  onCancel: () => void;
+  loading?: boolean;
+}) => {
   const [body, setBody] = useState('');
 
   const submit = (e: React.FormEvent) => {
@@ -125,14 +142,22 @@ const PolicyForm = ({ onSubmit, onCancel }: { onSubmit: (payload: { body: string
         />
       </label>
       <div className="flex justify-end gap-3 pt-2">
-        <Button type="button" variant="ghost" onClick={onCancel}>Cancel</Button>
-        <Button type="submit" leftIcon={<Save className="h-4 w-4" />}>Add Policy</Button>
+        <Button type="button" variant="secondary" onClick={onCancel} disabled={loading}>Cancel</Button>
+        <Button type="submit" leftIcon={<Save className="h-4 w-4" />} loading={loading}>Add Policy</Button>
       </div>
     </form>
   );
 };
 
-const MilestoneForm = ({ onSubmit, onCancel }: { onSubmit: (payload: { age_band: string; focus: string }) => void; onCancel: () => void }) => {
+const MilestoneForm = ({
+  onSubmit,
+  onCancel,
+  loading,
+}: {
+  onSubmit: (payload: { age_band: string; focus: string }) => void;
+  onCancel: () => void;
+  loading?: boolean;
+}) => {
   const [ageBand, setAgeBand] = useState('');
   const [focus, setFocus] = useState('');
 
@@ -149,8 +174,8 @@ const MilestoneForm = ({ onSubmit, onCancel }: { onSubmit: (payload: { age_band:
         <Input label="Focus Area" required value={focus} onChange={(e) => setFocus(e.target.value)} placeholder="e.g. Gross motor & sensory play" />
       </div>
       <div className="flex justify-end gap-3 pt-2">
-        <Button type="button" variant="ghost" onClick={onCancel}>Cancel</Button>
-        <Button type="submit" leftIcon={<Save className="h-4 w-4" />}>Add Milestone Band</Button>
+        <Button type="button" variant="secondary" onClick={onCancel} disabled={loading}>Cancel</Button>
+        <Button type="submit" leftIcon={<Save className="h-4 w-4" />} loading={loading}>Add Milestone Band</Button>
       </div>
     </form>
   );
@@ -185,14 +210,7 @@ const SettingsCard = ({
         <div>
           <span className="text-sm font-semibold text-slate-700">Guardian Pickup PIN</span>
           <div className="mt-2 flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3">
-            <div>
-              <p className="font-medium text-slate-900">{pickupPinRequired ? 'Required' : 'Optional'}</p>
-              <p className="text-sm text-slate-500">
-                {pickupPinRequired
-                  ? 'Staff must enter a 6-digit PIN to verify each pickup.'
-                  : 'PIN is only required for unrecognized adults.'}
-              </p>
-            </div>
+            <p className="font-medium text-slate-900">{pickupPinRequired ? 'Required' : 'Optional'}</p>
             <button
               type="button"
               role="switch"
@@ -217,6 +235,7 @@ const SettingsCard = ({
         <Button
           leftIcon={<Save className="h-4 w-4" />}
           disabled={!changed || saving}
+          loading={saving}
           onClick={() => onSave({ session_model: sessionModel, pickup_pin_required: pickupPinRequired })}
         >
           Save Settings
@@ -255,7 +274,9 @@ const DaycareManagementPage = () => {
     onSuccess: () => {
       setShowClassForm(false);
       refresh();
+      toast.success('Daycare class created.');
     },
+    onError: () => toast.error('Unable to create class.'),
   });
 
   const deleteClass = useMutation({
@@ -263,7 +284,9 @@ const DaycareManagementPage = () => {
     onSuccess: () => {
       setPendingDelete(null);
       refresh();
+      toast.success('Class removed.');
     },
+    onError: () => toast.error('Unable to delete class.'),
   });
 
   const createPolicy = useMutation({
@@ -271,7 +294,9 @@ const DaycareManagementPage = () => {
     onSuccess: () => {
       setShowPolicyForm(false);
       refresh();
+      toast.success('Care policy added.');
     },
+    onError: () => toast.error('Unable to add policy.'),
   });
 
   const deletePolicy = useMutation({
@@ -279,7 +304,9 @@ const DaycareManagementPage = () => {
     onSuccess: () => {
       setPendingDelete(null);
       refresh();
+      toast.success('Policy removed.');
     },
+    onError: () => toast.error('Unable to remove policy.'),
   });
 
   const createMilestone = useMutation({
@@ -288,7 +315,9 @@ const DaycareManagementPage = () => {
     onSuccess: () => {
       setShowMilestoneForm(false);
       refresh();
+      toast.success('Milestone band added.');
     },
+    onError: () => toast.error('Unable to add milestone band.'),
   });
 
   const deleteMilestone = useMutation({
@@ -296,7 +325,9 @@ const DaycareManagementPage = () => {
     onSuccess: () => {
       setPendingDelete(null);
       refresh();
+      toast.success('Milestone band removed.');
     },
+    onError: () => toast.error('Unable to remove milestone band.'),
   });
 
   const updateSettings = useMutation({
@@ -304,7 +335,9 @@ const DaycareManagementPage = () => {
     onSuccess: () => {
       refresh();
       queryClient.invalidateQueries({ queryKey: ['institution'] });
+      toast.success('Daycare settings updated.');
     },
+    onError: () => toast.error('Unable to save settings.'),
   });
 
   const classes = data?.classes || [];
@@ -315,42 +348,12 @@ const DaycareManagementPage = () => {
     const sessionModel = data?.sessionModel || institution?.settings?.daycare?.session_model || 'fullDay';
     const pickupPin = data?.pickupPinRequired ?? institution?.settings?.daycare?.pickup_pin_required;
     return [
-      {
-        label: 'Session Model',
-        value: sessionLabel(sessionModel),
-        helper: 'Configured daycare attendance pattern.',
-        icon: Clock3,
-      },
-      {
-        label: 'Pickup PIN',
-        value: pickupPin ? 'Required' : 'Optional',
-        helper: 'Guardian release protection status.',
-        icon: ShieldCheck,
-      },
-      {
-        label: 'Classes / Rooms',
-        value: `${classes.length}`,
-        helper: 'Active groups and classrooms.',
-        icon: GraduationCap,
-      },
-      {
-        label: 'Present Now',
-        value: `${data?.presentNow?.length || 0}`,
-        helper: 'Children checked in today.',
-        icon: Users,
-      },
-      {
-        label: 'Milestone Bands',
-        value: `${milestones.length}`,
-        helper: 'Age-based observation groupings.',
-        icon: Baby,
-      },
-      {
-        label: 'Care Policies',
-        value: `${policies.length}`,
-        helper: 'Safety, medical, and pickup rules.',
-        icon: Stethoscope,
-      },
+      { label: 'Session Model', value: sessionLabel(sessionModel), icon: Clock3 },
+      { label: 'Pickup PIN', value: pickupPin ? 'Required' : 'Optional', icon: ShieldCheck },
+      { label: 'Classes / Rooms', value: `${classes.length}`, icon: GraduationCap },
+      { label: 'Present Now', value: `${data?.presentNow?.length || 0}`, icon: Users },
+      { label: 'Milestone Bands', value: `${milestones.length}`, icon: Baby },
+      { label: 'Care Policies', value: `${policies.length}`, icon: Stethoscope },
     ];
   }, [data, institution, classes.length, milestones.length, policies.length]);
 
@@ -362,22 +365,21 @@ const DaycareManagementPage = () => {
     <div className="space-y-6">
       <PageHeader
         title="Daycare Operations"
-        description="Manage child care workflows, pickup controls, classroom structure, and readiness milestones for early-years institutions."
+        description="Manage child care workflows, pickup controls, classroom structure, and readiness milestones."
       />
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
         {statItems.map((item) => {
           const Icon = item.icon;
           return (
             <Card key={item.label} className="h-full">
-              <div className="flex items-start justify-between gap-4">
+              <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-slate-500">{item.label}</p>
-                  <p className="mt-3 truncate text-3xl font-bold capitalize text-brand-navy">{item.value}</p>
-                  <p className="mt-2 text-sm text-slate-500">{item.helper}</p>
+                  <p className="truncate text-xs font-medium text-slate-500">{item.label}</p>
+                  <p className="mt-1 truncate text-xl font-bold capitalize text-brand-navy">{item.value}</p>
                 </div>
-                <span className="rounded-2xl bg-brand-navy/5 p-3 text-brand-navy">
-                  <Icon className="h-6 w-6" />
+                <span className="shrink-0 rounded-xl bg-brand-navy/5 p-2 text-brand-navy">
+                  <Icon className="h-5 w-5" />
                 </span>
               </div>
             </Card>
@@ -395,10 +397,7 @@ const DaycareManagementPage = () => {
 
           <TabsContent value="overview">
             <div className="grid gap-6 md:grid-cols-2">
-              <Card
-                title="Operational Settings"
-                description="How your center runs each day — session shape and pickup safety."
-              >
+              <Card title="Operational Settings">
                 <SettingsCard
                   initial={{
                     sessionModel: data?.sessionModel || institution?.settings?.daycare?.session_model || 'fullDay',
@@ -410,7 +409,7 @@ const DaycareManagementPage = () => {
                 />
               </Card>
 
-              <Card title="Quick Snapshot" description="Summary of today's readiness for operations.">
+              <Card title="Quick Snapshot">
                 <div className="space-y-3">
                   <div className="flex items-start gap-3 rounded-2xl border border-slate-200 p-4">
                     <div className="mt-1 rounded-full bg-brand-navy/5 p-2 text-brand-navy">
@@ -477,21 +476,25 @@ const DaycareManagementPage = () => {
           <TabsContent value="classes">
             <div className="space-y-6">
               <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-slate-500">
-                    Create classrooms and rooms so students, attendance, and milestones all group under the right level.
-                  </p>
-                </div>
-                <Button leftIcon={<Plus className="h-4 w-4" />} onClick={() => setShowClassForm((v) => !v)}>
+                <p className="text-sm text-slate-500">
+                  Create classrooms and rooms so students, attendance, and milestones all group under the right level.
+                </p>
+                <Button
+                  leftIcon={<Plus className="h-4 w-4" />}
+                  onClick={() => setShowClassForm((v) => !v)}
+                  disabled={createClass.isPending}
+                  loading={showClassForm && createClass.isPending}
+                >
                   {showClassForm ? 'Hide Form' : 'Add Class / Room'}
                 </Button>
               </div>
 
               {showClassForm ? (
-                <Card title="New Class / Room" description="Fills a row in the Class table below once saved.">
+                <Card title="New Class / Room">
                   <NewClassForm
                     onSubmit={(payload) => createClass.mutate(payload)}
                     onCancel={() => setShowClassForm(false)}
+                    loading={createClass.isPending}
                   />
                 </Card>
               ) : null}
@@ -501,7 +504,11 @@ const DaycareManagementPage = () => {
                   title="No classrooms yet"
                   message="Add a class to get started. Each class appears in the Students filter, attendance roster, and milestone tracking."
                   cta={
-                    <Button leftIcon={<Plus className="h-4 w-4" />} onClick={() => setShowClassForm(true)}>
+                    <Button
+                      leftIcon={<Plus className="h-4 w-4" />}
+                      onClick={() => setShowClassForm(true)}
+                      disabled={createClass.isPending}
+                    >
                       Add Class / Room
                     </Button>
                   }
@@ -540,6 +547,8 @@ const DaycareManagementPage = () => {
                                 variant="danger"
                                 size="sm"
                                 leftIcon={<Trash2 className="h-4 w-4" />}
+                                loading={deleteClass.isPending && pendingDelete?.kind === 'class' && pendingDelete.id === c.id}
+                                disabled={deleteClass.isPending && !(pendingDelete?.kind === 'class' && pendingDelete.id === c.id)}
                                 onClick={() => setPendingDelete({ kind: 'class', id: c.id, name: c.name })}
                               >
                                 Delete
@@ -559,12 +568,12 @@ const DaycareManagementPage = () => {
             <div className="grid gap-6 xl:grid-cols-[1fr_1fr]">
               <Card
                 title="Pickup & Safeguarding Policies"
-                description="Operational rules that govern release and child safety."
                 action={
                   <Button
                     variant="secondary"
                     leftIcon={<Plus className="h-4 w-4" />}
                     onClick={() => setShowPolicyForm((v) => !v)}
+                    disabled={createPolicy.isPending}
                   >
                     {showPolicyForm ? 'Hide Form' : 'Add Policy'}
                   </Button>
@@ -575,6 +584,7 @@ const DaycareManagementPage = () => {
                     <PolicyForm
                       onSubmit={(payload) => createPolicy.mutate(payload)}
                       onCancel={() => setShowPolicyForm(false)}
+                      loading={createPolicy.isPending}
                     />
                   </div>
                 ) : null}
@@ -596,7 +606,7 @@ const DaycareManagementPage = () => {
                         </div>
                         <button
                           type="button"
-                          className="shrink-0 rounded-full p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
+                          className="shrink-0 rounded-full p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50"
                           onClick={() =>
                             setPendingDelete({
                               kind: 'policy',
@@ -604,6 +614,7 @@ const DaycareManagementPage = () => {
                               label: policy.length > 48 ? `${policy.slice(0, 48)}…` : policy,
                             })
                           }
+                          disabled={deletePolicy.isPending}
                           aria-label="Delete policy"
                         >
                           <Trash2 className="h-4 w-4" />
@@ -616,12 +627,12 @@ const DaycareManagementPage = () => {
 
               <Card
                 title="Development Milestones"
-                description="Track focus areas by age band for reporting and school readiness."
                 action={
                   <Button
                     variant="secondary"
                     leftIcon={<Plus className="h-4 w-4" />}
                     onClick={() => setShowMilestoneForm((v) => !v)}
+                    disabled={createMilestone.isPending}
                   >
                     {showMilestoneForm ? 'Hide Form' : 'Add Milestone Band'}
                   </Button>
@@ -632,6 +643,7 @@ const DaycareManagementPage = () => {
                     <MilestoneForm
                       onSubmit={(payload) => createMilestone.mutate(payload)}
                       onCancel={() => setShowMilestoneForm(false)}
+                      loading={createMilestone.isPending}
                     />
                   </div>
                 ) : null}
@@ -656,7 +668,7 @@ const DaycareManagementPage = () => {
                           <Badge variant="info">Readiness</Badge>
                           <button
                             type="button"
-                            className="rounded-full p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
+                            className="rounded-full p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50"
                             onClick={() =>
                               setPendingDelete({
                                 kind: 'milestone',
@@ -664,6 +676,7 @@ const DaycareManagementPage = () => {
                                 label: `${item.ageBand} yrs — ${item.focus}`,
                               })
                             }
+                            disabled={deleteMilestone.isPending}
                             aria-label="Delete milestone band"
                           >
                             <Trash2 className="h-4 w-4" />

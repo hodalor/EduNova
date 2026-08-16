@@ -29,7 +29,10 @@ const sanitizeInput = require('./shared/middleware/sanitizeInput');
 
 const allowedOrigins = Array.from(
   new Set(
-    [env.FRONTEND_URL, ...(env.CORS_ORIGINS ? env.CORS_ORIGINS.split(',') : [])]
+    [
+      ...(env.FRONTEND_URL ? String(env.FRONTEND_URL).split(',') : []),
+      ...(env.CORS_ORIGINS ? env.CORS_ORIGINS.split(',') : []),
+    ]
       .map((origin) => origin.trim())
       .filter(Boolean)
   )
@@ -76,6 +79,15 @@ const createApp = () => {
     })
   );
 
+  app.get('/api/health', (_req, res) => {
+    res.status(200).json({
+      success: true,
+      message: 'EDUOVA backend is healthy.',
+      environment: env.NODE_ENV,
+      timestamp: new Date().toISOString(),
+    });
+  });
+
   app.get('/api/v1/health', (_req, res) => {
     res.status(200).json({
       success: true,
@@ -89,16 +101,27 @@ const createApp = () => {
   app.use('/api/super-admin', superAdminRoutes);
   app.use('/api/communication', communicationRoutes);
   app.use('/api/v1/communication', communicationRoutes);
+  app.use('/api/analytics', analyticsRoutes);
   app.use('/api/v1/analytics', analyticsRoutes);
+  app.use('/api/finance', financeRoutes);
   app.use('/api/v1/finance', financeRoutes);
+  app.use('/api/academics', academicsRoutes);
   app.use('/api/v1/academics', academicsRoutes);
+  app.use('/api/attendance', attendanceRoutes);
   app.use('/api/v1/attendance', attendanceRoutes);
+  app.use('/api/timetable', timetableRoutes);
   app.use('/api/v1/timetable', timetableRoutes);
+  app.use('/api/transport', transportRoutes);
   app.use('/api/v1/transport', transportRoutes);
+  app.use('/api/students', studentsRoutes);
   app.use('/api/v1/students', studentsRoutes);
+  app.use('/api/users', usersRoutes);
   app.use('/api/v1/users', usersRoutes);
+  app.use('/api/daycare', daycareRoutes);
   app.use('/api/v1/daycare', daycareRoutes);
+  app.use('/api/tertiary', tertiaryRoutes);
   app.use('/api/v1/tertiary', tertiaryRoutes);
+  app.use('/api/media', mediaRoutes);
   app.use('/api/v1/media', mediaRoutes);
 
   app.use(notFound);

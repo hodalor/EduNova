@@ -11,9 +11,13 @@ const { redisClient, connectRedis } = require('./src/config/redis');
 
 const app = createApp();
 const server = http.createServer(app);
+const frontendOrigins = String(env.FRONTEND_URL || '')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
 const io = new Server(server, {
   cors: {
-    origin: env.FRONTEND_URL,
+    origin: frontendOrigins,
     credentials: true,
   },
 });

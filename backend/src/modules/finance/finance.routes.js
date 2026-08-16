@@ -20,8 +20,14 @@ router.use(
 
 router.get('/invoices', controller.listInvoices);
 router.post('/invoices', controller.createInvoice);
+router.get('/payments', controller.listPayments);
 router.post('/payments', controller.recordPayment);
+router.get('/debtors', reportGenerationRateLimiter, controller.listDebtors);
 router.get('/reports/defaulters', reportGenerationRateLimiter, controller.getOverdueInvoices);
 router.get('/fee-structures', withCacheHeaders({ maxAge: 3600 }), controller.listFeeStructures);
+router.get('/payment-terms', withCacheHeaders({ maxAge: 300 }), controller.listPaymentTerms);
+router.post('/payment-terms', controller.createPaymentTerm);
+router.patch('/payment-terms/:id', controller.updatePaymentTerm);
+router.delete('/payment-terms/:id', controller.deletePaymentTerm);
 
 module.exports = router;

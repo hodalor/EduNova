@@ -3,6 +3,7 @@ const { getPermissionsForRole } = require('../../shared/constants/permissions');
 const { hashPassword } = require('../../shared/helpers/auth');
 const { logAudit } = require('../../shared/services/audit-log.service');
 const { store } = require('../../shared/store/runtime-store');
+const { Op } = require('sequelize');
 
 const allowedRoles = ['institution_admin', 'teacher'];
 const allowedEmploymentTypes = ['full_time', 'part_time', 'contract'];
@@ -255,7 +256,68 @@ const createUser = async ({ institutionId, payload, actorId, ip }) => {
   return createUserInRuntime({ institutionId, payload, actorId, ip });
 };
 
+const serializeParent = (item) => ({
+  id: item.id,
+  institution_id: item.institution_id,
+  email: item.email,
+  phone: item.phone,
+  role: item.role,
+  first_name: item.first_name,
+  last_name: item.last_name,
+  full_name: `${item.first_name || ''} ${item.last_name || ''}`.trim(),
+  is_active: item.is_active,
+  status: item.status || (item.is_active ? 'active' : 'inactive'),
+});
+
+const searchParentsFromRuntime = async ({ institutionId, search, limit = 20 }) => {
+  const query = String(search || '').trim().toLowerCase();
+  const matches = store.users.accounts
+    .filter((item) => {
+      if (item.institution_id !== institutionId || item.role !== 'parent') return false;
+      if (!query) return true;
+      const full = `${item.first_name || ''} ${item.last_name || ''}`.toLowerCase();
+      return (
+        full.includes(query) ||
+        String(item.email || '').toLowerCase().includes(query) ||
+        String(item.phone || '').toLowerCase().includes(query)
+      );
+    })
+    .map(serializeParent);
+  return matches.slice(0, limit);
+};
+
+const searchParentsFromDatabase = async ({ institutionId, search, limit = 20 }) => {
+  const where = { institution_id: institutionId, role: 'parent' };
+  const query = String(search || '').trim();
+  if (query) {
+    where[Op.or] = [
+      sequelize.where(
+        sequelize.fn('LOWER', sequelize.literal(`"first_name" || ' ' || "last_name"`)),
+        { [Op.like]: `%${query.toLowerCase()}%` }
+      ),
+      sequelize.where(sequelize.fn('LOWER', sequelize.col('email')), {
+        [Op.like]: `%${query.toLowerCase()}%`,
+      }),
+      { phone: { [Op.iLike]: `%${query}%` } },
+    ];
+  }
+  const rows = await models.User.findAll({ where, limit, order: [['last_name', 'ASC']] });
+  return rows.map(serializeParent);
+};
+
+const searchParents = async ({ institutionId, search, limit }) => {
+  if (models.User && sequelize?.literal) {
+    try {
+      return await searchParentsFromDatabase({ institutionId, search, limit });
+    } catch (_error) {
+      // fall through to runtime
+    }
+  }
+  return searchParentsFromRuntime({ institutionId, search, limit });
+};
+
 module.exports = {
   listUsers,
   createUser,
+  searchParents,
 };

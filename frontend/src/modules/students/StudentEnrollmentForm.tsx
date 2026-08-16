@@ -4,6 +4,8 @@ import { useQuery } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { useNavigate } from 'react-router-dom';
 import { z } from 'zod';
+import { Search, UserCircle2, X } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 import { eduovaApi } from '../../api/eduovaApi';
 import Alert from '../../components/ui/Alert';
@@ -98,6 +100,17 @@ interface TertiaryOverview {
   }>;
 }
 
+interface ParentOption {
+  id: string;
+  full_name: string;
+  first_name: string;
+  last_name: string;
+  email: string | null;
+  phone: string | null;
+  role: string;
+  is_active: boolean;
+}
+
 const levelLabels: Record<EducationLevelCode, string> = {
   DC: 'Daycare',
   PR: 'Primary',
@@ -165,6 +178,20 @@ const StudentEnrollmentForm = () => {
     queryFn: eduovaApi.tertiary.overview,
     enabled: Boolean(activeInstitutionId && isTertiaryInstitution(activeInstitution)),
   });
+
+  const [parentSearch, setParentSearch] = useState('');
+  const [parentSearchOpen, setParentSearchOpen] = useState(false);
+  const [selectedParent, setSelectedParent] = useState<ParentOption | null>(null);
+  const [parentDebounceTimer, setParentDebounceTimer] = useState<number | null>(null);
+
+  const parentsQuery = useQuery<ParentOption[]>({
+    queryKey: ['parents-search', parentSearch, activeInstitutionId],
+    queryFn: () => eduovaApi.users.searchParents(parentSearch, 15),
+    enabled: Boolean(activeInstitutionId) && parentSearchOpen,
+    staleTime: 1000 * 30,
+  });
+  const parentResults: ParentOption[] = parentsQuery.data ?? [];
+  const parentsLoading = parentsQuery.isFetching;
 
   const savedDraft = useMemo(() => {
     const draft = window.localStorage.getItem(draftKey);
@@ -243,6 +270,36 @@ const StudentEnrollmentForm = () => {
       setValue('programId', '');
     }
   }, [programs, setValue, values.departmentId, values.programId]);
+
+  const handleParentSearchChange = (text: string) => {
+    setParentSearch(text);
+    if (parentDebounceTimer) window.clearTimeout(parentDebounceTimer);
+    const timer = window.setTimeout(() => {
+      setParentSearchOpen(true);
+    }, 250);
+    setParentDebounceTimer(timer);
+  };
+
+  const handleSelectParent = (parent: ParentOption) => {
+    setSelectedParent(parent);
+    setValue('parentLink', parent.id);
+    if (!values.guardianName) {
+      setValue('guardianName', parent.full_name);
+    }
+    if (!values.guardianPhone && parent.phone) {
+      setValue('guardianPhone', String(parent.phone));
+    }
+    setParentSearch('');
+    setParentSearchOpen(false);
+    toast.success(`Linked parent: ${parent.full_name}`);
+  };
+
+  const handleClearParent = () => {
+    setSelectedParent(null);
+    setValue('parentLink', '');
+    setParentSearch('');
+    setParentSearchOpen(false);
+  };
 
   const nextStep = async () => {
     const fieldsByStep: Array<Array<keyof EnrollmentValues>> = [
@@ -368,7 +425,88 @@ const StudentEnrollmentForm = () => {
                 error={errors.guardianPhone?.message}
                 {...register('guardianPhone')}
               />
-              <Input label="Link Existing Parent User" {...register('parentLink')} />
+              <div className="xl:col-span-2">
+                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Link Existing Parent User
+                </label>
+                {selectedParent ? (
+                  <div className="flex items-center justify-between gap-4 rounded-2xl border border-brand-gold/30 bg-brand-gold/[0.06] px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white shadow-sm ring-1 ring-slate-200">
+                        <UserCircle2 className="h-5 w-5 text-brand-navy" />
+                      </span>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-brand-navy">
+                          {selectedParent.full_name}
+                        </p>
+                        <p className="truncate text-xs text-slate-500">
+                          {[selectedParent.email, selectedParent.phone].filter(Boolean).join(' · ')}
+                        </p>
+                      </div>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      leftIcon={<X className="h-4 w-4" />}
+                      onClick={handleClearParent}
+                    >
+                      Unlink
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="relative">
+                    <Input
+                      value={parentSearch}
+                      onChange={(event) => handleParentSearchChange(event.target.value)}
+                      onFocus={() => setParentSearchOpen(true)}
+                      onBlur={() => window.setTimeout(() => setParentSearchOpen(false), 200)}
+                      placeholder="Search by parent name, email, or phone…"
+                      prefix={<Search className="h-4 w-4 text-slate-400" />}
+                    />
+                    {parentSearchOpen ? (
+                      <div className="absolute left-0 right-0 top-full z-30 mt-2 max-h-72 overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-xl">
+                        {parentsLoading ? (
+                          <div className="px-4 py-6 text-center text-sm text-slate-400">
+                            Searching parents…
+                          </div>
+                        ) : parentResults.length === 0 ? (
+                          <div className="px-4 py-6 text-center text-sm text-slate-400">
+                            {parentSearch.trim()
+                              ? 'No matching parent accounts found.'
+                              : 'Start typing to search registered parents.'}
+                          </div>
+                        ) : (
+                          parentResults.map((parent) => (
+                            <button
+                              key={parent.id}
+                              type="button"
+                              className="flex w-full items-center gap-3 border-b border-slate-100 px-4 py-3 text-left last:border-0 hover:bg-brand-navy/[0.03]"
+                              onMouseDown={(event) => event.preventDefault()}
+                              onClick={() => handleSelectParent(parent)}
+                            >
+                              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-navy/5 text-brand-navy">
+                                <UserCircle2 className="h-4 w-4" />
+                              </span>
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate text-sm font-semibold text-brand-navy">
+                                  {parent.full_name}
+                                </p>
+                                <p className="truncate text-xs text-slate-500">
+                                  {[parent.email, parent.phone].filter(Boolean).join(' · ')}
+                                </p>
+                              </div>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    ) : null}
+                    <p className="mt-1.5 text-xs text-slate-400">
+                      Skip to create a new guardian account during enrollment.
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
           </Card>
         ) : null}

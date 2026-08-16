@@ -1,7 +1,9 @@
+import { useState } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useQuery } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
-import { ShieldCheck, UserCog, Users2 } from 'lucide-react';
+import { ShieldCheck, UserCog, Users2, UserPlus } from 'lucide-react';
+import toast from 'react-hot-toast';
 import { z } from 'zod';
 
 import { eduovaApi } from '../../api/eduovaApi';
@@ -10,6 +12,7 @@ import Badge from '../../components/ui/Badge';
 import Button from '../../components/ui/Button';
 import Card from '../../components/ui/Card';
 import Input from '../../components/ui/Input';
+import Modal from '../../components/ui/Modal';
 import PageLoader from '../../components/ui/PageLoader';
 import Select from '../../components/ui/Select';
 import Table from '../../components/ui/Table';
@@ -71,6 +74,7 @@ const defaultValues: UserFormValues = {
 
 const UserManagementPage = () => {
   const createStaffUser = useCreateStaffUser();
+  const [showCreate, setShowCreate] = useState(false);
   const { data, isLoading } = useQuery({
     queryKey: ['user-management-users'],
     queryFn: eduovaApi.users.list,
@@ -91,159 +95,61 @@ const UserManagementPage = () => {
   const role = watch('role');
 
   const onSubmit = handleSubmit(async (payload) => {
-    await createStaffUser.mutateAsync(payload);
-    reset(defaultValues);
+    try {
+      await createStaffUser.mutateAsync(payload);
+      reset(defaultValues);
+      setShowCreate(false);
+    } catch (_error) {
+      toast.error('Please correct the highlighted fields and try again.');
+    }
   });
 
   if (isLoading) {
     return <PageLoader />;
   }
 
+  const adminCount = users.filter((item) => item.role === 'institution_admin').length;
+  const teacherCount = users.filter((item) => item.role === 'teacher').length;
+  const pendingCount = users.filter((item) => item.status !== 'active').length;
+
   return (
     <div className="space-y-6">
       <PageHeader
         title="User Access Management"
         description="Create institution admin users and teacher accounts, assign staff identity details, and keep school access under control."
+        actions={
+          <Button
+            variant="primary"
+            leftIcon={<UserPlus className="h-4 w-4" />}
+            onClick={() => setShowCreate(true)}
+          >
+            Create User
+          </Button>
+        }
       />
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
         {[
-          {
-            label: 'Total Staff Users',
-            value: `${users.length}`,
-            helper: 'Admin and teacher accounts currently tracked.',
-            icon: Users2,
-          },
-          {
-            label: 'Institution Admins',
-            value: `${users.filter((item) => item.role === 'institution_admin').length}`,
-            helper: 'Operational admin accounts with school-wide control.',
-            icon: ShieldCheck,
-          },
-          {
-            label: 'Teachers',
-            value: `${users.filter((item) => item.role === 'teacher').length}`,
-            helper: 'Academic staff accounts with teaching permissions.',
-            icon: UserCog,
-          },
-          {
-            label: 'Pending Activation',
-            value: `${users.filter((item) => item.status !== 'active').length}`,
-            helper: 'Accounts waiting for first sign-in or activation.',
-            icon: ShieldCheck,
-          },
+          { label: 'Total Staff Users', value: `${users.length}`, icon: Users2 },
+          { label: 'Institution Admins', value: `${adminCount}`, icon: ShieldCheck },
+          { label: 'Teachers', value: `${teacherCount}`, icon: UserCog },
+          { label: 'Pending Activation', value: `${pendingCount}`, icon: ShieldCheck },
         ].map((item) => {
           const Icon = item.icon;
           return (
             <Card key={item.label} className="h-full">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <p className="text-sm font-medium text-slate-500">{item.label}</p>
-                  <p className="mt-3 text-3xl font-bold text-brand-navy">{item.value}</p>
-                  <p className="mt-2 text-sm text-slate-500">{item.helper}</p>
-                </div>
-                <span className="rounded-2xl bg-brand-navy/5 p-3 text-brand-navy">
-                  <Icon className="h-6 w-6" />
-                </span>
-              </div>
+              <div className="flex items-center justify-between gap-4">
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium text-slate-500">{item.label}</p>
+              <p className="mt-2 text-2xl font-bold text-brand-navy">{item.value}</p>
+            </div>
+            <span className="shrink-0 rounded-2xl bg-brand-navy/5 p-3 text-brand-navy">
+              <Icon className="h-5 w-5" />
+            </span>
+          </div>
             </Card>
           );
         })}
-      </div>
-
-      <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-        <Card title="Create Admin or Teacher" description="Create a new institution admin or teacher account with staff profile details.">
-          <form className="space-y-5" onSubmit={onSubmit}>
-            <div className="grid gap-4 xl:grid-cols-2">
-              <Select label="User Role" error={errors.role?.message} {...register('role')}>
-                <option value="teacher">Teacher</option>
-                <option value="institution_admin">Institution Admin</option>
-              </Select>
-              <Input
-                label="Staff Number"
-                error={errors.staff_number?.message}
-                helperText="Use a unique staff code for payroll, timetable, and HR references."
-                {...register('staff_number')}
-              />
-              <Input label="First Name" error={errors.first_name?.message} {...register('first_name')} />
-              <Input label="Last Name" error={errors.last_name?.message} {...register('last_name')} />
-              <Input label="Email" error={errors.email?.message} {...register('email')} />
-              <Input label="Phone" error={errors.phone?.message} {...register('phone')} />
-              <Input label="Department" error={errors.department?.message} {...register('department')} />
-              <Input label="Designation" error={errors.designation?.message} {...register('designation')} />
-              <Select
-                label="Employment Type"
-                error={errors.employment_type?.message}
-                {...register('employment_type')}
-              >
-                <option value="full_time">Full Time</option>
-                <option value="part_time">Part Time</option>
-                <option value="contract">Contract</option>
-              </Select>
-              <Input
-                label="Date Joined"
-                type="date"
-                error={errors.date_joined?.message}
-                {...register('date_joined')}
-              />
-              <Input label="Qualification" {...register('qualification')} />
-              <Input
-                label={role === 'teacher' ? 'Teaching Specialization' : 'Administrative Focus'}
-                {...register('specialization')}
-              />
-              <div className="xl:col-span-2">
-                <Input
-                  label="Temporary Password"
-                  error={errors.temporary_password?.message}
-                  helperText="The new user signs in with this password first and can change it later."
-                  {...register('temporary_password')}
-                />
-              </div>
-            </div>
-
-            <Alert
-              title={role === 'teacher' ? 'Teacher account setup' : 'Institution admin account setup'}
-              message={
-                role === 'teacher'
-                  ? 'Teacher users will use this account for attendance, assessment, report cards, communication, and timetable access.'
-                  : 'Institution admin users will get school-level control for admissions, students, finance, staff, settings, and reporting.'
-              }
-              variant="info"
-            />
-
-            <div className="flex flex-wrap gap-3">
-              <Button type="submit" loading={createStaffUser.isPending}>
-                Create User Account
-              </Button>
-              <Button type="button" variant="secondary" onClick={() => reset(defaultValues)}>
-                Reset Form
-              </Button>
-            </div>
-          </form>
-        </Card>
-
-        <Card title="Access Rules" description="Operational guidance for school user creation.">
-          <div className="space-y-3">
-            <div className="rounded-2xl border border-slate-200 px-4 py-3">
-              <p className="font-semibold text-brand-navy">Institution Admin</p>
-              <p className="mt-1 text-sm text-slate-500">
-                Use for bursars, registrars, principals, heads, or operations managers who need broader school-level control.
-              </p>
-            </div>
-            <div className="rounded-2xl border border-slate-200 px-4 py-3">
-              <p className="font-semibold text-brand-navy">Teacher</p>
-              <p className="mt-1 text-sm text-slate-500">
-                Use for classroom teachers, lecturers, tutors, form masters, and subject handlers who need academic workflows.
-              </p>
-            </div>
-            <div className="rounded-2xl border border-slate-200 px-4 py-3">
-              <p className="font-semibold text-brand-navy">Mixed School Support</p>
-              <p className="mt-1 text-sm text-slate-500">
-                One school can create staff for daycare, primary, secondary, and tertiary structures while keeping the same identity and role system.
-              </p>
-            </div>
-          </div>
-        </Card>
       </div>
 
       <Table<ManagedUserRow>
@@ -269,6 +175,77 @@ const UserManagementPage = () => {
           },
         ]}
       />
+
+      <Modal
+        open={showCreate}
+        onOpenChange={(open) => {
+          if (!open) {
+            reset(defaultValues);
+          }
+          setShowCreate(open);
+        }}
+        size="xl"
+        title="Create User"
+      >
+        <form className="space-y-5" onSubmit={onSubmit}>
+          <div className="grid gap-4 md:grid-cols-2">
+            <Select label="User Role" error={errors.role?.message} {...register('role')}>
+              <option value="teacher">Teacher</option>
+              <option value="institution_admin">Institution Admin</option>
+            </Select>
+            <Input
+              label="Staff Number"
+              error={errors.staff_number?.message}
+              helperText="Use a unique staff code for payroll, timetable, and HR references."
+              {...register('staff_number')}
+            />
+            <Input label="First Name" error={errors.first_name?.message} {...register('first_name')} />
+            <Input label="Last Name" error={errors.last_name?.message} {...register('last_name')} />
+            <Input label="Email" error={errors.email?.message} {...register('email')} />
+            <Input label="Phone" error={errors.phone?.message} {...register('phone')} />
+            <Input label="Department" error={errors.department?.message} {...register('department')} />
+            <Input label="Designation" error={errors.designation?.message} {...register('designation')} />
+            <Select label="Employment Type" error={errors.employment_type?.message} {...register('employment_type')}>
+              <option value="full_time">Full Time</option>
+              <option value="part_time">Part Time</option>
+              <option value="contract">Contract</option>
+            </Select>
+            <Input label="Date Joined" type="date" error={errors.date_joined?.message} {...register('date_joined')} />
+            <Input label="Qualification" {...register('qualification')} />
+            <Input
+              label={role === 'teacher' ? 'Teaching Specialization' : 'Administrative Focus'}
+              {...register('specialization')}
+            />
+            <div className="md:col-span-2">
+              <Input
+                label="Temporary Password"
+                error={errors.temporary_password?.message}
+                helperText="The new user signs in with this password first and can change it later."
+                {...register('temporary_password')}
+              />
+            </div>
+          </div>
+
+          <Alert
+            title={role === 'teacher' ? 'Teacher account setup' : 'Institution admin account setup'}
+            message={
+              role === 'teacher'
+                ? 'Teacher users will use this account for attendance, assessment, report cards, communication, and timetable access.'
+                : 'Institution admin users will get school-level control for admissions, students, finance, staff, settings, and reporting.'
+            }
+            variant="info"
+          />
+
+          <div className="flex flex-wrap justify-end gap-3">
+            <Button type="button" variant="secondary" onClick={() => { reset(defaultValues); setShowCreate(false); }}>
+              Cancel
+            </Button>
+            <Button type="submit" variant="primary" loading={createStaffUser.isPending} leftIcon={<UserPlus className="h-4 w-4" />}>
+              Create User Account
+            </Button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 };

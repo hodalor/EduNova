@@ -57,6 +57,7 @@ const PayrollRecordFactory = require('./payrollRecord');
 const LeaveTypeFactory = require('./leaveType');
 const LeaveRequestFactory = require('./leaveRequest');
 const AuditLogFactory = require('./auditLog');
+const PaymentTermFactory = require('./paymentTerm');
 
 let cached = null;
 
@@ -128,6 +129,7 @@ module.exports = (sequelize) => {
   models.LeaveType = LeaveTypeFactory(sequelize, DataTypes);
   models.LeaveRequest = LeaveRequestFactory(sequelize, DataTypes);
   models.AuditLog = AuditLogFactory(sequelize, DataTypes);
+  models.PaymentTerm = PaymentTermFactory(sequelize, DataTypes);
   if (models.Institution.associate) models.Institution.associate(models);
   if (models.InstitutionBranch.associate) models.InstitutionBranch.associate(models);
   if (models.AcademicYear.associate) models.AcademicYear.associate(models);
@@ -185,6 +187,7 @@ module.exports = (sequelize) => {
   if (models.LeaveType.associate) models.LeaveType.associate(models);
   if (models.LeaveRequest.associate) models.LeaveRequest.associate(models);
   if (models.AuditLog.associate) models.AuditLog.associate(models);
+  if (models.PaymentTerm.associate) models.PaymentTerm.associate(models);
 
   cached = {
     sequelize,
