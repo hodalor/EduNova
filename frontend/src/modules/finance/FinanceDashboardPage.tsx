@@ -155,7 +155,7 @@ const FinanceDashboardPage = () => {
     queryKey: ['finance-invoices'],
     queryFn: eduovaApi.finance.invoices,
   });
-  const invoices: InvoiceRow[] = invoicesQuery.data ?? [];
+  const invoices = useMemo<InvoiceRow[]>(() => invoicesQuery.data ?? [], [invoicesQuery.data]);
   const invoicesLoading = invoicesQuery.isLoading;
   const invoicesError = invoicesQuery.isError;
   const refetchInvoices = invoicesQuery.refetch;
@@ -164,21 +164,24 @@ const FinanceDashboardPage = () => {
     queryKey: ['finance-payments'],
     queryFn: eduovaApi.finance.payments,
   });
-  const payments: PaymentRow[] = paymentsQuery.data ?? [];
+  const payments = useMemo<PaymentRow[]>(() => paymentsQuery.data ?? [], [paymentsQuery.data]);
   const paymentsLoading = paymentsQuery.isLoading;
 
   const debtorsQuery = useQuery<DebtorRow[]>({
     queryKey: ['finance-debtors'],
     queryFn: eduovaApi.finance.debtors,
   });
-  const debtors: DebtorRow[] = debtorsQuery.data ?? [];
+  const debtors = useMemo<DebtorRow[]>(() => debtorsQuery.data ?? [], [debtorsQuery.data]);
   const debtorsLoading = debtorsQuery.isLoading;
 
   const termsQuery = useQuery<PaymentTermRow[]>({
     queryKey: ['finance-payment-terms'],
     queryFn: eduovaApi.finance.paymentTerms,
   });
-  const paymentTerms: PaymentTermRow[] = termsQuery.data ?? [];
+  const paymentTerms = useMemo<PaymentTermRow[]>(
+    () => termsQuery.data ?? [],
+    [termsQuery.data]
+  );
   const termsLoading = termsQuery.isLoading;
 
   const invoiceForm = useForm<InvoiceValues>({

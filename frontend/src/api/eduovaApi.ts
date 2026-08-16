@@ -1,8 +1,8 @@
+import axios from 'axios';
 import axiosInstance, { authApi } from './axiosInstance';
 import {
   academicsData,
   analyticsData,
-  daycareData,
   dashboardOverview,
   financeData,
   attendanceData,
@@ -21,6 +21,104 @@ async function safeRequest<T>(request: () => Promise<T>, fallback: T): Promise<T
     return fallback;
   }
 }
+
+const asRecord = (value: unknown): Record<string, unknown> =>
+  value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
+
+const asNumber = (value: unknown): number => Number(value) || 0;
+
+const asString = (value: unknown, fallback = ''): string =>
+  typeof value === 'string' && value.trim() ? value : fallback;
+
+const normalizeDashboardOverview = (payload: unknown) => {
+  const raw = asRecord(payload);
+
+  const stats = Array.isArray(raw.stats)
+    ? raw.stats.map((entry, index) => {
+        const item = asRecord(entry);
+        const trend = asRecord(item.trend);
+        const trendValue = asNumber(trend.value);
+        const rawDirection = asString(trend.direction, 'up');
+
+        return {
+          id: asString(item.id, `stat-${index + 1}`),
+          label: asString(item.label, 'Metric'),
+          value: asString(item.value, '0'),
+          icon: asString(item.icon, 'Activity'),
+          trend: {
+            value: trendValue,
+            direction: rawDirection === 'down' ? 'down' : 'up',
+            label: asString(trend.label, trendValue === 0 ? 'No change' : 'vs previous period'),
+          },
+        };
+      })
+    : dashboardOverview.stats;
+
+  const revenueTrend = Array.isArray(raw.revenueTrend)
+    ? raw.revenueTrend.map((entry) => {
+        const item = asRecord(entry);
+        const revenue = asNumber(item.revenue);
+        return {
+          name: asString(item.name, asString(item.month, '')),
+          revenue,
+          billed: asNumber(item.billed) || revenue,
+        };
+      })
+    : dashboardOverview.revenueTrend;
+
+  const enrollmentByLevel = Array.isArray(raw.enrollmentByLevel)
+    ? raw.enrollmentByLevel.map((entry) => {
+        const item = asRecord(entry);
+        return {
+          level: asString(item.level, asString(item.name, 'Other')),
+          count: asNumber(item.count) || asNumber(item.value),
+        };
+      })
+    : dashboardOverview.enrollmentByLevel;
+
+  const recentPayments = Array.isArray(raw.recentPayments)
+    ? raw.recentPayments.map((entry, index) => {
+        const item = asRecord(entry);
+        return {
+          id: asString(item.id, `payment-${index + 1}`),
+          student: asString(item.student, asString(item.studentName, 'Student')),
+          className: asString(item.className, '-'),
+          amount: asNumber(item.amount),
+          method: asString(item.method, 'Bank'),
+          receivedAt: asString(item.receivedAt, asString(item.date, '')),
+          status: asString(item.status, 'verified'),
+        };
+      })
+    : dashboardOverview.recentPayments;
+
+  const alerts = Array.isArray(raw.alerts)
+    ? raw.alerts.map((entry, index) => {
+        const item = asRecord(entry);
+        const rawSeverity = asString(item.severity, 'info');
+        return {
+          id: asString(item.id, `alert-${index + 1}`),
+          title: asString(item.title, asString(item.type, 'Notice')),
+          description: asString(item.description, asString(item.message, 'No additional details.')),
+          severity:
+            rawSeverity === 'danger'
+              ? 'error'
+              : rawSeverity === 'success'
+                ? 'success'
+                : rawSeverity === 'warning'
+                  ? 'warning'
+                  : 'info',
+        };
+      })
+    : dashboardOverview.alerts;
+
+  return {
+    stats,
+    revenueTrend,
+    enrollmentByLevel,
+    recentPayments,
+    alerts,
+  };
+};
 
 export const eduovaApi = {
   auth: {
@@ -42,7 +140,11 @@ export const eduovaApi = {
     },
   },
   analytics: {
-    getOverview: async () => (await axiosInstance.get('/analytics/overview')).data.data,
+    getOverview: () =>
+      safeRequest(
+        async () => normalizeDashboardOverview((await axiosInstance.get('/analytics/overview')).data.data),
+        dashboardOverview
+      ),
     getFinance: () =>
       safeRequest(async () => (await axiosInstance.get('/analytics/finance/revenue')).data.data, analyticsData.finance),
     getAcademics: () =>
@@ -55,9 +157,36 @@ export const eduovaApi = {
       safeRequest(async () => (await axiosInstance.get('/analytics/alerts/active')).data.data, analyticsData.alerts),
   },
   students: {
-    list: async () => (await axiosInstance.get('/students')).data.data,
-    detail: async (id: string) => (await axiosInstance.get(`/students/${id}`)).data.data,
-    create: async (payload: unknown) => (await axiosInstance.post('/students', payload)).data.data,
+    list: async () => {
+      try {
+        return (await axiosInstance.get('/students')).data.data;
+      } catch (error) {
+        if (axios.isAxiosError(error) && error.response?.status === 404) {
+          return (await axiosInstance.get('/v1/students')).data.data;
+        }
+        throw error;
+      }
+    },
+    detail: async (id: string) => {
+      try {
+        return (await axiosInstance.get(`/students/${id}`)).data.data;
+      } catch (error) {
+        if (axios.isAxiosError(error) && error.response?.status === 404) {
+          return (await axiosInstance.get(`/v1/students/${id}`)).data.data;
+        }
+        throw error;
+      }
+    },
+    create: async (payload: unknown) => {
+      try {
+        return (await axiosInstance.post('/students', payload)).data.data;
+      } catch (error) {
+        if (axios.isAxiosError(error) && error.response?.status === 404) {
+          return (await axiosInstance.post('/v1/students', payload)).data.data;
+        }
+        throw error;
+      }
+    },
     update: async (payload: unknown) => {
       await wait(300);
       return payload;

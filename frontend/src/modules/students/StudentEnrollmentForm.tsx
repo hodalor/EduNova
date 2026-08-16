@@ -320,29 +320,33 @@ const StudentEnrollmentForm = () => {
   const previousStep = () => setStep((current) => Math.max(current - 1, 0));
 
   const onSubmit = handleSubmit(async (payload) => {
-    await createStudent.mutateAsync({
-      level_code: payload.level,
-      first_name: payload.firstName,
-      last_name: payload.lastName,
-      email: payload.email || undefined,
-      date_of_birth: payload.dateOfBirth,
-      guardian_name: payload.guardianName,
-      guardian_phone: payload.guardianPhone,
-      parent_link: payload.parentLink || undefined,
-      medical_notes: payload.medicalNotes || undefined,
-      dietary_restrictions: payload.dietaryRestrictions || undefined,
-      pickup_persons: payload.pickupPersons || undefined,
-      previous_school: payload.previousSchool || undefined,
-      previous_results: payload.previousResults || undefined,
-      qualification: payload.qualification || undefined,
-      faculty_id: payload.facultyId || undefined,
-      department_id: payload.departmentId || undefined,
-      program_id: payload.programId || undefined,
-      group_id: payload.groupId,
-      fee_plan: payload.feePlan,
-    });
-    window.localStorage.removeItem(draftKey);
-    navigate('/students');
+    try {
+      await createStudent.mutateAsync({
+        level_code: payload.level,
+        first_name: payload.firstName,
+        last_name: payload.lastName,
+        email: payload.email || undefined,
+        date_of_birth: payload.dateOfBirth,
+        guardian_name: payload.guardianName,
+        guardian_phone: payload.guardianPhone,
+        parent_link: payload.parentLink || undefined,
+        medical_notes: payload.medicalNotes || undefined,
+        dietary_restrictions: payload.dietaryRestrictions || undefined,
+        pickup_persons: payload.pickupPersons || undefined,
+        previous_school: payload.previousSchool || undefined,
+        previous_results: payload.previousResults || undefined,
+        qualification: payload.qualification || undefined,
+        faculty_id: payload.facultyId || undefined,
+        department_id: payload.departmentId || undefined,
+        program_id: payload.programId || undefined,
+        group_id: payload.groupId,
+        fee_plan: payload.feePlan,
+      });
+      window.localStorage.removeItem(draftKey);
+      navigate('/students');
+    } catch (_error) {
+      // The mutation already shows a toast; keep the form open for correction/retry.
+    }
   });
 
   if (structureLoading || tertiaryLoading) {
