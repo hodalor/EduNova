@@ -22,6 +22,23 @@ module.exports = {
     });
     res.status(201).json({ success: true, data });
   },
+  updateAcademicGroup: wrap((req) =>
+    academicsService.updateAcademicGroup({
+      institutionId: req.institutionId,
+      groupId: req.params.id,
+      userId: req.user.id,
+      payload: req.body,
+      ip: req.ip,
+    })
+  ),
+  deleteAcademicGroup: wrap((req) =>
+    academicsService.deleteAcademicGroup({
+      institutionId: req.institutionId,
+      groupId: req.params.id,
+      userId: req.user.id,
+      ip: req.ip,
+    })
+  ),
   createAcademicPeriod: async (req, res) => {
     const data = await academicsService.createAcademicPeriod({
       institutionId: req.institutionId,
@@ -31,6 +48,23 @@ module.exports = {
     });
     res.status(201).json({ success: true, data });
   },
+  updateAcademicPeriod: wrap((req) =>
+    academicsService.updateAcademicPeriod({
+      institutionId: req.institutionId,
+      periodId: req.params.id,
+      userId: req.user.id,
+      payload: req.body,
+      ip: req.ip,
+    })
+  ),
+  deleteAcademicPeriod: wrap((req) =>
+    academicsService.deleteAcademicPeriod({
+      institutionId: req.institutionId,
+      periodId: req.params.id,
+      userId: req.user.id,
+      ip: req.ip,
+    })
+  ),
   createAcademicOffering: async (req, res) => {
     const data = await academicsService.createAcademicOffering({
       institutionId: req.institutionId,
@@ -40,6 +74,23 @@ module.exports = {
     });
     res.status(201).json({ success: true, data });
   },
+  updateAcademicOffering: wrap((req) =>
+    academicsService.updateAcademicOffering({
+      institutionId: req.institutionId,
+      offeringId: req.params.id,
+      userId: req.user.id,
+      payload: req.body,
+      ip: req.ip,
+    })
+  ),
+  deleteAcademicOffering: wrap((req) =>
+    academicsService.deleteAcademicOffering({
+      institutionId: req.institutionId,
+      offeringId: req.params.id,
+      userId: req.user.id,
+      ip: req.ip,
+    })
+  ),
   saveScores: async (req, res) => {
     const data = await academicsService.saveScores({
       institutionId: req.institutionId,

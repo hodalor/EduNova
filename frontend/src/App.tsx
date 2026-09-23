@@ -3,6 +3,7 @@ import { Toaster } from 'react-hot-toast';
 
 import OfflineBanner from './components/shared/OfflineBanner';
 import { useNotifications } from './hooks/useNotifications';
+import useSessionInactivity from './hooks/useSessionInactivity';
 import AppRouter from './routes/AppRouter';
 
 const queryClient = new QueryClient({
@@ -17,6 +18,7 @@ const queryClient = new QueryClient({
 
 const AppContent = () => {
   useNotifications();
+  useSessionInactivity();
 
   return (
     <>

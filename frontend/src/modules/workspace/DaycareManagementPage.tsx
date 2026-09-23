@@ -12,7 +12,9 @@ import {
   GraduationCap,
   AlertTriangle,
   CheckCircle2,
+  Upload,
 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 
 import { eduovaApi } from '../../api/eduovaApi';
@@ -21,6 +23,7 @@ import Button from '../../components/ui/Button';
 import Card from '../../components/ui/Card';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
 import EmptyState from '../../components/ui/EmptyState';
+import FileUpload from '../../components/ui/FileUpload';
 import Input from '../../components/ui/Input';
 import PageLoader from '../../components/ui/PageLoader';
 import Select from '../../components/ui/Select';
@@ -393,6 +396,7 @@ const DaycareManagementPage = () => {
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="classes">Class / Room Setup</TabsTrigger>
             <TabsTrigger value="policies">Policies &amp; Milestones</TabsTrigger>
+            <TabsTrigger value="results">Results Upload</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview">
@@ -686,6 +690,33 @@ const DaycareManagementPage = () => {
                     ))}
                   </div>
                 )}
+              </Card>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="results">
+            <div className="grid gap-6 xl:grid-cols-[1.2fr_1fr]">
+              <Card
+                title="Upload Daycare Results"
+                description="Prepare observation files and upload result sheets for daycare learners."
+              >
+                <div className="space-y-4">
+                  <FileUpload multiple={false} />
+                  <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">
+                    Upload a CSV or supporting file, then continue into Results Entry to map scores and publish records.
+                  </div>
+                  <Link to="/academics/results-entry">
+                    <Button leftIcon={<Upload className="h-4 w-4" />}>Open Results Entry</Button>
+                  </Link>
+                </div>
+              </Card>
+
+              <Card title="How It Works">
+                <div className="space-y-3 text-sm text-slate-600">
+                  <p>1. Upload the daycare result file here.</p>
+                  <p>2. Open Results Entry to review the file and complete score mapping.</p>
+                  <p>3. Save scores so the student profile can reflect published records when available.</p>
+                </div>
               </Card>
             </div>
           </TabsContent>

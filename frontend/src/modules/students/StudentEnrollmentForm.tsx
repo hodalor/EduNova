@@ -223,7 +223,10 @@ const StudentEnrollmentForm = () => {
     activeLevelSet.includes(item.level_code as EducationLevelCode)
   );
   const availableGroups = groups.filter((item: AcademicGroup) => item.level_code === values.level);
-  const faculties: TertiaryOverview['faculties'] = tertiaryOverview?.faculties || [];
+  const faculties: TertiaryOverview['faculties'] = useMemo(
+    () => tertiaryOverview?.faculties || [],
+    [tertiaryOverview?.faculties]
+  );
   const departments: TertiaryOverview['departments'] = (tertiaryOverview?.departments || []).filter(
     (item: TertiaryOverview['departments'][number]) =>
       !values.facultyId || item.faculty_id === values.facultyId
@@ -270,6 +273,80 @@ const StudentEnrollmentForm = () => {
       setValue('programId', '');
     }
   }, [programs, setValue, values.departmentId, values.programId]);
+
+  useEffect(() => {
+    if (values.level !== 'TR') {
+      return;
+    }
+
+    if (!values.facultyId && faculties.length === 1) {
+      setValue('facultyId', faculties[0].id);
+    }
+  }, [faculties, setValue, values.facultyId, values.level]);
+
+  useEffect(() => {
+    if (values.level !== 'TR') {
+      return;
+    }
+
+    const selectedDepartment = (tertiaryOverview?.departments || []).find(
+      (item: TertiaryOverview['departments'][number]) => item.id === values.departmentId
+    );
+
+    if (selectedDepartment && values.facultyId !== selectedDepartment.faculty_id) {
+      setValue('facultyId', selectedDepartment.faculty_id);
+    }
+
+    if (!values.departmentId && departments.length === 1) {
+      setValue('departmentId', departments[0].id);
+    }
+  }, [
+    departments,
+    setValue,
+    tertiaryOverview?.departments,
+    values.departmentId,
+    values.facultyId,
+    values.level,
+  ]);
+
+  useEffect(() => {
+    if (values.level !== 'TR') {
+      return;
+    }
+
+    const selectedProgramEntry = (tertiaryOverview?.programs || []).find(
+      (item: TertiaryOverview['programs'][number]) => item.id === values.programId
+    );
+
+    if (selectedProgramEntry) {
+      if (values.facultyId !== selectedProgramEntry.faculty_id) {
+        setValue('facultyId', selectedProgramEntry.faculty_id);
+      }
+      if (values.departmentId !== selectedProgramEntry.department_id) {
+        setValue('departmentId', selectedProgramEntry.department_id);
+      }
+      if (!values.qualification) {
+        setValue('qualification', selectedProgramEntry.credential);
+      }
+      return;
+    }
+
+    if (!values.programId && programs.length === 1) {
+      setValue('programId', programs[0].id);
+      if (!values.qualification) {
+        setValue('qualification', programs[0].credential);
+      }
+    }
+  }, [
+    programs,
+    setValue,
+    tertiaryOverview?.programs,
+    values.departmentId,
+    values.facultyId,
+    values.level,
+    values.programId,
+    values.qualification,
+  ]);
 
   const handleParentSearchChange = (text: string) => {
     setParentSearch(text);
@@ -561,6 +638,15 @@ const StudentEnrollmentForm = () => {
                     ))}
                   </Select>
                   <Input label="Qualification" {...register('qualification')} />
+                  {selectedProgram ? (
+                    <div className="xl:col-span-2">
+                      <Alert
+                        title="Program-linked enrollment"
+                        message={`${selectedProgram.name} automatically keeps faculty, department, and qualification aligned. Duration: ${selectedProgram.duration}. Calendar: ${selectedProgram.calendar}.`}
+                        variant="info"
+                      />
+                    </div>
+                  ) : null}
                   <div className="xl:col-span-2">
                     <FileUpload multiple={false} />
                   </div>

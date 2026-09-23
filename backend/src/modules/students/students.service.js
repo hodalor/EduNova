@@ -52,6 +52,12 @@ const splitFullName = (payload) => {
   };
 };
 
+const parseCsvList = (value) =>
+  String(value || '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+
 const ensureLevelRecord = async ({ institutionId, levelCode, transaction }) => {
   let level = await models.EducationLevel.findOne({
     where: { institution_id: institutionId, level_code: levelCode },
@@ -182,6 +188,35 @@ const getStudentFromDatabase = async ({ institutionId, studentId }) => {
     `${student.guardian?.user?.first_name || ''} ${student.guardian?.user?.last_name || ''}`.trim() ||
     profile.guardian_name ||
     'No guardian linked';
+  const [reportCards, attendanceRows, invoiceRows, disciplineRows] = await Promise.all([
+    models.ReportCard
+      ? models.ReportCard.findAll({
+          where: { student_id: student.id },
+          include: [{ model: models.TermSemester, as: 'term', required: false }],
+          order: [['published_at', 'ASC'], ['created_at', 'ASC']],
+        }).catch(() => [])
+      : Promise.resolve([]),
+    models.AttendanceRecord
+      ? models.AttendanceRecord.findAll({
+          where: { student_id: student.id },
+          include: [{ model: models.AttendanceSession, as: 'session', required: false }],
+          order: [['created_at', 'DESC']],
+          limit: 24,
+        }).catch(() => [])
+      : Promise.resolve([]),
+    models.StudentInvoice
+      ? models.StudentInvoice.findAll({
+          where: { student_id: student.id, institution_id: institutionId },
+          order: [['created_at', 'DESC']],
+        }).catch(() => [])
+      : Promise.resolve([]),
+    models.DisciplineIncident
+      ? models.DisciplineIncident.findAll({
+          where: { student_id: student.id, institution_id: institutionId },
+          order: [['incident_date', 'DESC']],
+        }).catch(() => [])
+      : Promise.resolve([]),
+  ]);
 
   return {
     id: student.id,
@@ -205,10 +240,30 @@ const getStudentFromDatabase = async ({ institutionId, studentId }) => {
         student.medicalProfile?.dietary_restrictions ||
         '',
     },
-    academicTrend: [],
-    attendanceCalendar: [],
-    invoices: [],
-    discipline: [],
+    academicTrend: reportCards.map((item, index) => ({
+      term: item.term?.name || `Record ${index + 1}`,
+      gpa: Math.min(Number(item.overall_average || 0) > 4 ? Number(item.overall_average || 0) / 25 : Number(item.overall_average || 0), 4),
+    })),
+    attendanceCalendar: attendanceRows
+      .map((item) => ({
+        date: item.session?.date || String(item.created_at || item.createdAt || '').slice(0, 10),
+        value: item.status === 'present' || item.status === 'late' ? 1 : 0,
+      }))
+      .filter((item) => item.date),
+    invoices: invoiceRows.map((item) => ({
+      invoice_number: item.invoice_number,
+      total: Number(item.total_amount || 0),
+      paid: Number(item.paid_amount || 0),
+      balance: Number(item.balance || 0),
+      status: item.status,
+    })),
+    discipline: disciplineRows.map((item) => ({
+      id: item.id,
+      category: item.category,
+      points: item.severity === 'major' ? 3 : item.severity === 'moderate' ? 2 : 1,
+      date: item.incident_date,
+      status: item.status,
+    })),
     documents: [],
     tertiary: profile.tertiary || null,
   };
@@ -229,6 +284,162 @@ const getStudent = async (context) => {
     return getStudentFromDatabase(context);
   }
   return getStudentFromRuntime(context);
+};
+
+const updateStudentInDatabase = async ({ institutionId, studentId, payload, actorId, ip }) => {
+  const transaction = await sequelize.transaction();
+
+  try {
+    const student = await models.Student.findOne({
+      where: { id: studentId, institution_id: institutionId },
+      include: [
+        { model: models.User, as: 'user' },
+        {
+          model: models.Guardian,
+          as: 'guardian',
+          required: false,
+          include: [{ model: models.User, as: 'user', required: false }],
+        },
+        { model: models.StudentMedical, as: 'medicalProfile', required: false },
+      ],
+      transaction,
+    });
+
+    if (!student) {
+      throw Object.assign(new Error('Student not found.'), { statusCode: 404 });
+    }
+
+    const institution = await models.Institution.findByPk(institutionId, { transaction });
+    const settings = ensureAdmissionsSettings(institution?.settings);
+    const profileIndex = settings.admissions.student_profiles.findIndex((item) => item.student_id === student.id);
+    const currentProfile = profileIndex >= 0 ? settings.admissions.student_profiles[profileIndex] : { student_id: student.id };
+
+    if (payload.full_name) {
+      const names = splitFullName({ full_name: payload.full_name });
+      await student.user?.update(
+        {
+          first_name: names.first_name || student.user.first_name,
+          last_name: names.last_name || student.user.last_name,
+        },
+        { transaction }
+      );
+      currentProfile.full_name = payload.full_name;
+    }
+
+    if (payload.guardian_name && student.guardian?.user) {
+      const names = splitFullName({ full_name: payload.guardian_name });
+      await student.guardian.user.update(
+        {
+          first_name: names.first_name || student.guardian.user.first_name,
+          last_name: names.last_name || student.guardian.user.last_name,
+        },
+        { transaction }
+      );
+    }
+
+    if (payload.guardian_phone && student.guardian?.user) {
+      await student.guardian.user.update({ phone: payload.guardian_phone }, { transaction });
+    }
+
+    if (payload.guardian_relation && student.guardian) {
+      await student.guardian.update({ relation_to_student: payload.guardian_relation }, { transaction });
+    }
+
+    if (payload.blood_group) {
+      await student.update({ blood_group: payload.blood_group }, { transaction });
+    }
+
+    if (models.StudentMedical) {
+      const medicalPayload = {
+        blood_group: payload.blood_group || student.medicalProfile?.blood_group || student.blood_group || null,
+        allergies: payload.allergies !== undefined ? parseCsvList(payload.allergies) : student.medicalProfile?.allergies || [],
+        special_needs:
+          payload.medical_notes !== undefined
+            ? payload.medical_notes
+            : student.medicalProfile?.special_needs || null,
+      };
+
+      if (student.medicalProfile) {
+        await student.medicalProfile.update(medicalPayload, { transaction });
+      } else {
+        await models.StudentMedical.create(
+          {
+            student_id: student.id,
+            chronic_conditions: [],
+            medications: [],
+            dietary_restrictions: null,
+            ...medicalPayload,
+          },
+          { transaction }
+        );
+      }
+    }
+
+    currentProfile.guardian_name = payload.guardian_name ?? currentProfile.guardian_name ?? null;
+    currentProfile.guardian_phone = payload.guardian_phone ?? currentProfile.guardian_phone ?? null;
+    currentProfile.medical_notes = payload.medical_notes ?? currentProfile.medical_notes ?? null;
+
+    if (profileIndex >= 0) settings.admissions.student_profiles[profileIndex] = currentProfile;
+    else settings.admissions.student_profiles.push(currentProfile);
+
+    await institution?.update({ settings }, { transaction });
+    await transaction.commit();
+
+    await logAudit({
+      userId: actorId,
+      action: 'UPDATE',
+      resourceType: 'student_profile',
+      resourceId: student.id,
+      newValues: payload,
+      ip,
+    });
+
+    return getStudentFromDatabase({ institutionId, studentId });
+  } catch (error) {
+    await transaction.rollback();
+    throw error;
+  }
+};
+
+const updateStudentInRuntime = async ({ institutionId, studentId, payload }) => {
+  const student = store.students.profiles.find(
+    (item) => item.id === studentId && item.institution_id === institutionId
+  );
+  if (!student) {
+    throw Object.assign(new Error('Student not found.'), { statusCode: 404 });
+  }
+  if (payload.full_name) {
+    student.full_name = payload.full_name;
+  }
+  if (payload.guardian_name) {
+    student.guardian_name = payload.guardian_name;
+  }
+  if (payload.guardian_phone) {
+    student.guardian_phone = payload.guardian_phone;
+  }
+  return {
+    id: student.id,
+    name: student.full_name || `${student.first_name || ''} ${student.last_name || ''}`.trim(),
+    student_number: student.student_number,
+    className: student.class_name || 'Unassigned',
+    level: student.level_code || '',
+    status: student.status || 'active',
+    guardian: {
+      name: student.guardian_name || 'No guardian linked',
+      phone: student.guardian_phone || '',
+      relation: student.guardian_relation || 'Guardian',
+    },
+    medical: {
+      allergies: payload.allergies || '',
+      bloodGroup: payload.blood_group || student.blood_group || '',
+      notes: payload.medical_notes || student.medical_notes || '',
+    },
+    academicTrend: [],
+    attendanceCalendar: [],
+    invoices: [],
+    discipline: [],
+    documents: [],
+  };
 };
 
 const getRosterFromDatabase = async ({ classId }) => {
@@ -493,9 +704,17 @@ const createStudent = async ({ institutionId, payload, actorId, ip }) => {
   return createStudentInRuntime({ institutionId, payload });
 };
 
+const updateStudent = async (context) => {
+  if (databaseReady()) {
+    return updateStudentInDatabase(context);
+  }
+  return updateStudentInRuntime(context);
+};
+
 module.exports = {
   listStudents,
   getStudent,
   getRoster,
   createStudent,
+  updateStudent,
 };

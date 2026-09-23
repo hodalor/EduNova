@@ -315,25 +315,168 @@ const getOverview = async ({ institutionId, params = {} }) =>
     producer: () => computeRealtimeOverview({ institutionId }),
   });
 
+const buildRecentMonthWindows = (count = 6) => {
+  const now = new Date();
+  return Array.from({ length: count }, (_, index) => {
+    const d = new Date(now.getFullYear(), now.getMonth() - (count - 1 - index), 1);
+    return {
+      month: d.toLocaleString('en-US', { month: 'short' }),
+      start: new Date(d.getFullYear(), d.getMonth(), 1).toISOString(),
+      end: new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59).toISOString(),
+    };
+  });
+};
+
 const getRevenue = async ({ institutionId, params = {} }) =>
   getOrCache({
     institutionId,
     endpoint: 'finance-revenue',
     params,
     ttl: ttlMap.charts,
-    producer: async () => ({
-      revenueByMonth: [
-        { month: 'Jan', revenue: 120000, target: 132000 },
-        { month: 'Feb', revenue: 132000, target: 138000 },
-        { month: 'Mar', revenue: 141000, target: 145000 },
-      ],
-      collectionRate: 84,
-      expenseBreakdown: [
-        { name: 'Payroll', value: 54000 },
-        { name: 'Utilities', value: 12000 },
-      ],
-      defaulters: store.finance.invoices.filter((invoice) => invoice.balance > 0),
-    }),
+    producer: async () => {
+      const months = buildRecentMonthWindows(6);
+
+      if (models.StudentInvoice && models.Payment) {
+        const invoiceWhere = { institution_id: institutionId };
+        const paymentWhere = { institution_id: institutionId };
+        const [allInvoices, totalInvoicedAgg, totalPaidAgg] = await Promise.all([
+          models.StudentInvoice.findAll({
+            where: invoiceWhere,
+            include: [
+              {
+                model: models.Student,
+                as: 'student',
+                required: false,
+                include: [{ model: models.Class, as: 'class', required: false, attributes: ['name'] }],
+                attributes: ['id'],
+              },
+            ],
+            order: [['due_date', 'ASC']],
+          }),
+          models.StudentInvoice.sum('total_amount', { where: invoiceWhere }).catch(() => 0),
+          models.Payment.sum('amount', { where: paymentWhere }).catch(() => 0),
+        ]);
+
+        const revenueByMonth = [];
+        for (const month of months) {
+          const [revenueAgg, targetAgg] = await Promise.all([
+            models.Payment.sum('amount', {
+              where: {
+                ...paymentWhere,
+                paid_at: { [Op.between]: [month.start, month.end] },
+              },
+            }).catch(() => 0),
+            models.StudentInvoice.sum('total_amount', {
+              where: {
+                ...invoiceWhere,
+                createdAt: { [Op.between]: [month.start, month.end] },
+              },
+            }).catch(() => 0),
+          ]);
+          revenueByMonth.push({
+            month: month.month,
+            revenue: Number(revenueAgg) || 0,
+            target: Number(targetAgg) || 0,
+          });
+        }
+
+        let expenseBreakdown = [];
+        if (models.Expense && models.ExpenseCategory) {
+          const expenses = await models.Expense.findAll({
+            where: { institution_id: institutionId, status: { [Op.in]: ['approved', 'paid'] } },
+            include: [{ model: models.ExpenseCategory, as: 'category', required: false, attributes: ['name'] }],
+            raw: true,
+          }).catch(() => []);
+
+          const expenseMap = new Map();
+          expenses.forEach((row) => {
+            const key = row['category.name'] || 'Other';
+            expenseMap.set(key, (expenseMap.get(key) || 0) + (Number(row.amount) || 0));
+          });
+          expenseBreakdown = Array.from(expenseMap.entries()).map(([name, value]) => ({ name, value }));
+        }
+
+        const today = new Date().toISOString().slice(0, 10);
+        const defaulters = allInvoices
+          .filter((invoice) => Number(invoice.balance || 0) > 0)
+          .map((invoice) => ({
+            id: invoice.id,
+            student: invoice.student_name || `Student #${invoice.student_id}`,
+            className: invoice.class_name || invoice.student?.class?.name || 'Unassigned',
+            amount: Number(invoice.balance || 0),
+            daysOverdue:
+              invoice.due_date && String(invoice.due_date).slice(0, 10) < today
+                ? Math.max(
+                    Math.floor(
+                      (new Date(today).getTime() - new Date(String(invoice.due_date).slice(0, 10)).getTime()) /
+                        (1000 * 60 * 60 * 24)
+                    ),
+                    0
+                  )
+                : 0,
+          }))
+          .sort((a, b) => b.amount - a.amount);
+
+        return {
+          revenueByMonth,
+          collectionRate:
+            Number(totalInvoicedAgg || 0) > 0
+              ? Math.round((Number(totalPaidAgg || 0) / Number(totalInvoicedAgg || 0)) * 100)
+              : 0,
+          expenseBreakdown,
+          defaulters,
+        };
+      }
+
+      const invoices = store.finance.invoices.filter((invoice) => invoice.institution_id === institutionId);
+      const payments = store.finance.payments.filter((payment) => {
+        const invoice = invoices.find((item) => item.id === payment.invoice_id);
+        return !invoice || invoice.institution_id === institutionId;
+      });
+
+      return {
+        revenueByMonth: months.map((month) => ({
+          month: month.month,
+          revenue: payments.reduce((sum, payment) => {
+            const paidAt = new Date(payment.paid_at || 0).toISOString();
+            return paidAt >= month.start && paidAt <= month.end ? sum + (Number(payment.amount) || 0) : sum;
+          }, 0),
+          target: invoices.reduce((sum, invoice) => {
+            const createdAt = new Date(invoice.created_at || invoice.createdAt || 0).toISOString();
+            return createdAt >= month.start && createdAt <= month.end
+              ? sum + (Number(invoice.total_amount) || 0)
+              : sum;
+          }, 0),
+        })),
+        collectionRate:
+          invoices.reduce((sum, invoice) => sum + (Number(invoice.total_amount) || 0), 0) > 0
+            ? Math.round(
+                (payments.reduce((sum, payment) => sum + (Number(payment.amount) || 0), 0) /
+                  invoices.reduce((sum, invoice) => sum + (Number(invoice.total_amount) || 0), 0)) *
+                  100
+              )
+            : 0,
+        expenseBreakdown: [],
+        defaulters: invoices
+          .filter((invoice) => Number(invoice.balance || 0) > 0)
+          .map((invoice) => ({
+            id: invoice.id,
+            student: invoice.student_name || `Student #${invoice.student_id}`,
+            className: invoice.class_name || 'Unassigned',
+            amount: Number(invoice.balance || 0),
+            daysOverdue:
+              invoice.due_date && String(invoice.due_date).slice(0, 10) < new Date().toISOString().slice(0, 10)
+                ? Math.max(
+                    Math.floor(
+                      (new Date().setHours(0, 0, 0, 0) - new Date(String(invoice.due_date).slice(0, 10)).getTime()) /
+                        (1000 * 60 * 60 * 24)
+                    ),
+                    0
+                  )
+                : 0,
+          })),
+      };
+    },
   });
 
 const getAttendanceRate = async ({ institutionId, params = {} }) =>

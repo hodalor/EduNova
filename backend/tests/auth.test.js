@@ -43,13 +43,22 @@ jest.mock('../src/config/database', () => ({
       ),
     },
     User: {
-      findOne: jest.fn(async ({ where }) =>
-        mockUsers.find(
-          (user) =>
-            user.institution_id === where.institution_id &&
-            ((where.email && user.email === where.email) || (where.phone && user.phone === where.phone))
-        ) || null
-      ),
+      findOne: jest.fn(async ({ where }) => {
+        const { Op } = require('sequelize');
+        return (
+          mockUsers.find((user) => {
+            const candidates = Array.isArray(where[Op.or]) ? where[Op.or] : [];
+            return (
+              user.institution_id === where.institution_id &&
+              candidates.some(
+                (candidate) =>
+                  (candidate.email && user.email === candidate.email) ||
+                  (candidate.phone && user.phone === candidate.phone)
+              )
+            );
+          }) || null
+        );
+      }),
       findByPk: jest.fn(async (id) => mockUsers.find((user) => user.id === id) || null),
     },
   },
@@ -71,6 +80,7 @@ jest.mock('../src/config/redis', () => ({
 jest.mock('../src/shared/helpers/auth', () => ({
   comparePassword: jest.fn(async (plainText, hash) => plainText === hash),
   hashPassword: jest.fn(async (value) => `hashed:${value}`),
+  safeRedisGet: jest.fn(async (key) => mockRefreshSessions.get(key) || null),
   signAccessToken: jest.fn((user) => `access-${user.id}`),
   signRefreshToken: jest.fn(async (user) => `refresh-${user.id}`),
   verifyRefreshToken: jest.fn(() => ({ sub: 'usr-001', jti: 'sess-1' })),

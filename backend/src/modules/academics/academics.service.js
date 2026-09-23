@@ -86,6 +86,22 @@ const ensureCurrentAcademicYear = async ({ institutionId, transaction }) => {
   );
 };
 
+const normalizeCode = (value) =>
+  String(value || '')
+    .trim()
+    .toUpperCase();
+
+const destroyIfExists = async (model, id, options = {}) => {
+  if (!model || !id) {
+    return;
+  }
+
+  const record = await model.findByPk(id, options);
+  if (record) {
+    await record.destroy(options);
+  }
+};
+
 const listAcademicStructureFromDatabase = async ({ institutionId, levelCode }) => {
   const institution = await models.Institution.findByPk(institutionId);
   if (!institution) {
@@ -145,9 +161,7 @@ const createAcademicGroupFromDatabase = async ({ institutionId, userId, payload,
     const levelCode = String(payload.level_code || '').toUpperCase();
     requireLevelConfig(levelCode);
 
-    const normalizedCode = String(payload.code || '')
-      .trim()
-      .toUpperCase();
+    const normalizedCode = normalizeCode(payload.code);
 
     const duplicate = settings.academics.groups.find((item) => item.code === normalizedCode);
     if (duplicate) {
@@ -239,6 +253,226 @@ const createAcademicGroup = async (context) => {
     return createAcademicGroupFromDatabase(context);
   }
   return createAcademicGroupFromRuntime(context);
+};
+
+const updateAcademicGroupFromDatabase = async ({ institutionId, groupId, userId, payload, ip }) => {
+  const transaction = await sequelize.transaction();
+
+  try {
+    const institution = await models.Institution.findByPk(institutionId, { transaction });
+    if (!institution) {
+      throw Object.assign(new Error('Institution not found.'), { statusCode: 404 });
+    }
+
+    const settings = ensureAcademicSettings(institution.settings);
+    const groupIndex = settings.academics.groups.findIndex((item) => item.id === groupId);
+    if (groupIndex < 0) {
+      throw Object.assign(new Error('Academic group not found.'), { statusCode: 404 });
+    }
+
+    const current = settings.academics.groups[groupIndex];
+    const nextCode = normalizeCode(payload.code ?? current.code);
+    if (
+      settings.academics.groups.some(
+        (item, index) => index !== groupIndex && normalizeCode(item.code) === nextCode
+      )
+    ) {
+      throw Object.assign(new Error('A class or level with this code already exists.'), {
+        statusCode: 409,
+      });
+    }
+
+    const nextLevelCode = String(payload.level_code || current.level_code || '').toUpperCase();
+    requireLevelConfig(nextLevelCode);
+    const levelRecord = await ensureLevelRecord({ institutionId, levelCode: nextLevelCode, transaction });
+
+    const updated = {
+      ...current,
+      name: payload.name || current.name,
+      code: nextCode,
+      level_code: nextLevelCode,
+      calendar_type: payload.calendar_type || current.calendar_type,
+      level_record_id: levelRecord.id,
+    };
+
+    if (current.class_record_id && models.Class) {
+      const classRecord = await models.Class.findByPk(current.class_record_id, { transaction });
+      if (classRecord) {
+        await classRecord.update(
+          {
+            name: updated.name,
+            level_id: levelRecord.id,
+          },
+          { transaction }
+        );
+      }
+    }
+
+    settings.academics.groups[groupIndex] = updated;
+    settings.academics.periods = settings.academics.periods.map((period) =>
+      period.group_id === groupId ? { ...period, calendar_type: updated.calendar_type } : period
+    );
+
+    await institution.update({ settings }, { transaction });
+    await transaction.commit();
+
+    await logAudit({
+      userId,
+      action: 'UPDATE',
+      resourceType: 'academic_group',
+      resourceId: groupId,
+      newValues: updated,
+      ip,
+    });
+
+    return updated;
+  } catch (error) {
+    await transaction.rollback();
+    throw error;
+  }
+};
+
+const updateAcademicGroupFromRuntime = async ({ institutionId, groupId, userId, payload, ip }) => {
+  const groupIndex = store.academics.structure.groups.findIndex(
+    (item) => item.id === groupId && item.institution_id === institutionId
+  );
+  if (groupIndex < 0) {
+    throw Object.assign(new Error('Academic group not found.'), { statusCode: 404 });
+  }
+
+  const current = store.academics.structure.groups[groupIndex];
+  const updated = {
+    ...current,
+    name: payload.name || current.name,
+    code: normalizeCode(payload.code ?? current.code),
+    level_code: String(payload.level_code || current.level_code || '').toUpperCase(),
+    calendar_type: payload.calendar_type || current.calendar_type,
+  };
+  requireLevelConfig(updated.level_code);
+
+  store.academics.structure.groups[groupIndex] = updated;
+  store.academics.structure.periods = store.academics.structure.periods.map((period) =>
+    period.group_id === groupId ? { ...period, calendar_type: updated.calendar_type } : period
+  );
+
+  await logAudit({
+    userId,
+    action: 'UPDATE',
+    resourceType: 'academic_group',
+    resourceId: groupId,
+    newValues: updated,
+    ip,
+  });
+
+  return updated;
+};
+
+const updateAcademicGroup = async (context) => {
+  if (databaseReady()) {
+    return updateAcademicGroupFromDatabase(context);
+  }
+  return updateAcademicGroupFromRuntime(context);
+};
+
+const deleteAcademicGroupFromDatabase = async ({ institutionId, groupId, userId, ip }) => {
+  const transaction = await sequelize.transaction();
+
+  try {
+    const institution = await models.Institution.findByPk(institutionId, { transaction });
+    if (!institution) {
+      throw Object.assign(new Error('Institution not found.'), { statusCode: 404 });
+    }
+
+    const settings = ensureAcademicSettings(institution.settings);
+    const group = settings.academics.groups.find((item) => item.id === groupId);
+    if (!group) {
+      throw Object.assign(new Error('Academic group not found.'), { statusCode: 404 });
+    }
+
+    const linkedPeriods = settings.academics.periods.filter((item) => item.group_id === groupId);
+    const linkedOfferings = settings.academics.offerings.filter((item) => item.group_id === groupId);
+
+    settings.academics.groups = settings.academics.groups.filter((item) => item.id !== groupId);
+    settings.academics.periods = settings.academics.periods.filter((item) => item.group_id !== groupId);
+    settings.academics.offerings = settings.academics.offerings.filter((item) => item.group_id !== groupId);
+
+    for (const offering of linkedOfferings) {
+      await destroyIfExists(models.Subject, offering.subject_id, { transaction });
+    }
+    if (group.class_record_id) {
+      await destroyIfExists(models.Class, group.class_record_id, { transaction });
+    }
+    for (const period of linkedPeriods) {
+      await destroyIfExists(models.TermSemester, period.term_semester_id, { transaction });
+    }
+
+    await institution.update({ settings }, { transaction });
+    await transaction.commit();
+
+    await logAudit({
+      userId,
+      action: 'DELETE',
+      resourceType: 'academic_group',
+      resourceId: groupId,
+      previousValues: group,
+      ip,
+    });
+
+    return {
+      id: groupId,
+      deleted: true,
+      removed_periods: linkedPeriods.length,
+      removed_offerings: linkedOfferings.length,
+    };
+  } catch (error) {
+    await transaction.rollback();
+    throw error;
+  }
+};
+
+const deleteAcademicGroupFromRuntime = async ({ institutionId, groupId, userId, ip }) => {
+  const group = store.academics.structure.groups.find(
+    (item) => item.id === groupId && item.institution_id === institutionId
+  );
+  if (!group) {
+    throw Object.assign(new Error('Academic group not found.'), { statusCode: 404 });
+  }
+
+  const linkedPeriods = store.academics.structure.periods.filter((item) => item.group_id === groupId);
+  const linkedOfferings = store.academics.structure.offerings.filter((item) => item.group_id === groupId);
+
+  store.academics.structure.groups = store.academics.structure.groups.filter(
+    (item) => !(item.id === groupId && item.institution_id === institutionId)
+  );
+  store.academics.structure.periods = store.academics.structure.periods.filter(
+    (item) => !(item.group_id === groupId && item.institution_id === institutionId)
+  );
+  store.academics.structure.offerings = store.academics.structure.offerings.filter(
+    (item) => !(item.group_id === groupId && item.institution_id === institutionId)
+  );
+
+  await logAudit({
+    userId,
+    action: 'DELETE',
+    resourceType: 'academic_group',
+    resourceId: groupId,
+    previousValues: group,
+    ip,
+  });
+
+  return {
+    id: groupId,
+    deleted: true,
+    removed_periods: linkedPeriods.length,
+    removed_offerings: linkedOfferings.length,
+  };
+};
+
+const deleteAcademicGroup = async (context) => {
+  if (databaseReady()) {
+    return deleteAcademicGroupFromDatabase(context);
+  }
+  return deleteAcademicGroupFromRuntime(context);
 };
 
 const createAcademicPeriodFromDatabase = async ({ institutionId, userId, payload, ip }) => {
@@ -357,6 +591,209 @@ const createAcademicPeriod = async (context) => {
   return createAcademicPeriodFromRuntime(context);
 };
 
+const updateAcademicPeriodFromDatabase = async ({
+  institutionId,
+  periodId,
+  userId,
+  payload,
+  ip,
+}) => {
+  const transaction = await sequelize.transaction();
+
+  try {
+    const institution = await models.Institution.findByPk(institutionId, { transaction });
+    if (!institution) {
+      throw Object.assign(new Error('Institution not found.'), { statusCode: 404 });
+    }
+
+    const settings = ensureAcademicSettings(institution.settings);
+    const periodIndex = settings.academics.periods.findIndex((item) => item.id === periodId);
+    if (periodIndex < 0) {
+      throw Object.assign(new Error('Academic period not found.'), { statusCode: 404 });
+    }
+
+    const current = settings.academics.periods[periodIndex];
+    const updated = {
+      ...current,
+      name: payload.name || current.name,
+      sequence:
+        payload.sequence === '' || payload.sequence === undefined
+          ? current.sequence
+          : Number(payload.sequence),
+      status: payload.status || current.status,
+      registration_open:
+        payload.registration_open === undefined
+          ? current.registration_open
+          : Boolean(payload.registration_open),
+      start_date: payload.start_date ?? current.start_date ?? null,
+      end_date: payload.end_date ?? current.end_date ?? null,
+    };
+
+    if (models.TermSemester && current.term_semester_id) {
+      const record = await models.TermSemester.findByPk(current.term_semester_id, { transaction });
+      if (record) {
+        if (updated.status === 'active') {
+          await models.TermSemester.update(
+            { is_current: false },
+            { where: { academic_year_id: record.academic_year_id }, transaction }
+          );
+        }
+        await record.update(
+          {
+            name: updated.name,
+            start_date: updated.start_date || record.start_date,
+            end_date: updated.end_date || record.end_date,
+            is_current: updated.status === 'active',
+          },
+          { transaction }
+        );
+      }
+    }
+
+    settings.academics.periods[periodIndex] = updated;
+    await institution.update({ settings }, { transaction });
+    await transaction.commit();
+
+    await logAudit({
+      userId,
+      action: 'UPDATE',
+      resourceType: 'academic_period',
+      resourceId: periodId,
+      newValues: updated,
+      ip,
+    });
+
+    return updated;
+  } catch (error) {
+    await transaction.rollback();
+    throw error;
+  }
+};
+
+const updateAcademicPeriodFromRuntime = async ({ institutionId, periodId, userId, payload, ip }) => {
+  const periodIndex = store.academics.structure.periods.findIndex(
+    (item) => item.id === periodId && item.institution_id === institutionId
+  );
+  if (periodIndex < 0) {
+    throw Object.assign(new Error('Academic period not found.'), { statusCode: 404 });
+  }
+
+  const current = store.academics.structure.periods[periodIndex];
+  const updated = {
+    ...current,
+    name: payload.name || current.name,
+    sequence:
+      payload.sequence === '' || payload.sequence === undefined
+        ? current.sequence
+        : Number(payload.sequence),
+    status: payload.status || current.status,
+    registration_open:
+      payload.registration_open === undefined
+        ? current.registration_open
+        : Boolean(payload.registration_open),
+    start_date: payload.start_date ?? current.start_date ?? null,
+    end_date: payload.end_date ?? current.end_date ?? null,
+  };
+
+  store.academics.structure.periods[periodIndex] = updated;
+
+  await logAudit({
+    userId,
+    action: 'UPDATE',
+    resourceType: 'academic_period',
+    resourceId: periodId,
+    newValues: updated,
+    ip,
+  });
+
+  return updated;
+};
+
+const updateAcademicPeriod = async (context) => {
+  if (databaseReady()) {
+    return updateAcademicPeriodFromDatabase(context);
+  }
+  return updateAcademicPeriodFromRuntime(context);
+};
+
+const deleteAcademicPeriodFromDatabase = async ({ institutionId, periodId, userId, ip }) => {
+  const transaction = await sequelize.transaction();
+
+  try {
+    const institution = await models.Institution.findByPk(institutionId, { transaction });
+    if (!institution) {
+      throw Object.assign(new Error('Institution not found.'), { statusCode: 404 });
+    }
+
+    const settings = ensureAcademicSettings(institution.settings);
+    const period = settings.academics.periods.find((item) => item.id === periodId);
+    if (!period) {
+      throw Object.assign(new Error('Academic period not found.'), { statusCode: 404 });
+    }
+
+    const removedOfferings = settings.academics.offerings.filter((item) => item.period_id === periodId);
+    settings.academics.periods = settings.academics.periods.filter((item) => item.id !== periodId);
+    settings.academics.offerings = settings.academics.offerings.filter((item) => item.period_id !== periodId);
+
+    for (const offering of removedOfferings) {
+      await destroyIfExists(models.Subject, offering.subject_id, { transaction });
+    }
+    await destroyIfExists(models.TermSemester, period.term_semester_id, { transaction });
+
+    await institution.update({ settings }, { transaction });
+    await transaction.commit();
+
+    await logAudit({
+      userId,
+      action: 'DELETE',
+      resourceType: 'academic_period',
+      resourceId: periodId,
+      previousValues: period,
+      ip,
+    });
+
+    return { id: periodId, deleted: true, removed_offerings: removedOfferings.length };
+  } catch (error) {
+    await transaction.rollback();
+    throw error;
+  }
+};
+
+const deleteAcademicPeriodFromRuntime = async ({ institutionId, periodId, userId, ip }) => {
+  const period = store.academics.structure.periods.find(
+    (item) => item.id === periodId && item.institution_id === institutionId
+  );
+  if (!period) {
+    throw Object.assign(new Error('Academic period not found.'), { statusCode: 404 });
+  }
+
+  const removedOfferings = store.academics.structure.offerings.filter((item) => item.period_id === periodId);
+  store.academics.structure.periods = store.academics.structure.periods.filter(
+    (item) => !(item.id === periodId && item.institution_id === institutionId)
+  );
+  store.academics.structure.offerings = store.academics.structure.offerings.filter(
+    (item) => !(item.period_id === periodId && item.institution_id === institutionId)
+  );
+
+  await logAudit({
+    userId,
+    action: 'DELETE',
+    resourceType: 'academic_period',
+    resourceId: periodId,
+    previousValues: period,
+    ip,
+  });
+
+  return { id: periodId, deleted: true, removed_offerings: removedOfferings.length };
+};
+
+const deleteAcademicPeriod = async (context) => {
+  if (databaseReady()) {
+    return deleteAcademicPeriodFromDatabase(context);
+  }
+  return deleteAcademicPeriodFromRuntime(context);
+};
+
 const createAcademicOfferingFromDatabase = async ({ institutionId, userId, payload, ip }) => {
   const transaction = await sequelize.transaction();
 
@@ -381,9 +818,7 @@ const createAcademicOfferingFromDatabase = async ({ institutionId, userId, paylo
       });
     }
 
-    const normalizedCode = String(payload.code || '')
-      .trim()
-      .toUpperCase();
+    const normalizedCode = normalizeCode(payload.code);
     const duplicate = settings.academics.offerings.find(
       (item) =>
         item.group_id === payload.group_id &&
@@ -532,6 +967,213 @@ const createAcademicOffering = async (context) => {
   return createAcademicOfferingFromRuntime(context);
 };
 
+const updateAcademicOfferingFromDatabase = async ({
+  institutionId,
+  offeringId,
+  userId,
+  payload,
+  ip,
+}) => {
+  const transaction = await sequelize.transaction();
+
+  try {
+    const institution = await models.Institution.findByPk(institutionId, { transaction });
+    if (!institution) {
+      throw Object.assign(new Error('Institution not found.'), { statusCode: 404 });
+    }
+
+    const settings = ensureAcademicSettings(institution.settings);
+    const offeringIndex = settings.academics.offerings.findIndex((item) => item.id === offeringId);
+    if (offeringIndex < 0) {
+      throw Object.assign(new Error('Academic offering not found.'), { statusCode: 404 });
+    }
+
+    const current = settings.academics.offerings[offeringIndex];
+    const nextCode = normalizeCode(payload.code ?? current.code);
+    if (
+      settings.academics.offerings.some(
+        (item, index) =>
+          index !== offeringIndex &&
+          item.group_id === current.group_id &&
+          item.period_id === current.period_id &&
+          normalizeCode(item.code) === nextCode
+      )
+    ) {
+      throw Object.assign(
+        new Error('A subject or course with this code already exists in the selected period.'),
+        { statusCode: 409 }
+      );
+    }
+
+    const updated = {
+      ...current,
+      code: nextCode,
+      name: payload.name || current.name,
+      credit_hours:
+        payload.credit_hours === '' || payload.credit_hours === undefined
+          ? current.credit_hours
+          : payload.credit_hours === null
+            ? null
+            : Number(payload.credit_hours),
+      is_core: payload.is_core === undefined ? current.is_core : payload.is_core !== false,
+      prerequisite_codes: payload.prerequisite_codes || current.prerequisite_codes || [],
+      next_offering_codes: payload.next_offering_codes || current.next_offering_codes || [],
+    };
+
+    if (models.Subject && current.subject_id) {
+      const subject = await models.Subject.findByPk(current.subject_id, { transaction });
+      if (subject) {
+        await subject.update(
+          {
+            code: updated.code,
+            name: updated.name,
+            subject_type: updated.is_core ? 'core' : 'elective',
+            credit_hours: updated.credit_hours,
+          },
+          { transaction }
+        );
+      }
+    }
+
+    settings.academics.offerings[offeringIndex] = updated;
+    await institution.update({ settings }, { transaction });
+    await transaction.commit();
+
+    await logAudit({
+      userId,
+      action: 'UPDATE',
+      resourceType: 'academic_offering',
+      resourceId: offeringId,
+      newValues: updated,
+      ip,
+    });
+
+    return updated;
+  } catch (error) {
+    await transaction.rollback();
+    throw error;
+  }
+};
+
+const updateAcademicOfferingFromRuntime = async ({
+  institutionId,
+  offeringId,
+  userId,
+  payload,
+  ip,
+}) => {
+  const offeringIndex = store.academics.structure.offerings.findIndex(
+    (item) => item.id === offeringId && item.institution_id === institutionId
+  );
+  if (offeringIndex < 0) {
+    throw Object.assign(new Error('Academic offering not found.'), { statusCode: 404 });
+  }
+
+  const current = store.academics.structure.offerings[offeringIndex];
+  const updated = {
+    ...current,
+    code: normalizeCode(payload.code ?? current.code),
+    name: payload.name || current.name,
+    credit_hours:
+      payload.credit_hours === '' || payload.credit_hours === undefined
+        ? current.credit_hours
+        : payload.credit_hours === null
+          ? null
+          : Number(payload.credit_hours),
+    is_core: payload.is_core === undefined ? current.is_core : payload.is_core !== false,
+    prerequisite_codes: payload.prerequisite_codes || current.prerequisite_codes || [],
+    next_offering_codes: payload.next_offering_codes || current.next_offering_codes || [],
+  };
+
+  store.academics.structure.offerings[offeringIndex] = updated;
+
+  await logAudit({
+    userId,
+    action: 'UPDATE',
+    resourceType: 'academic_offering',
+    resourceId: offeringId,
+    newValues: updated,
+    ip,
+  });
+
+  return updated;
+};
+
+const updateAcademicOffering = async (context) => {
+  if (databaseReady()) {
+    return updateAcademicOfferingFromDatabase(context);
+  }
+  return updateAcademicOfferingFromRuntime(context);
+};
+
+const deleteAcademicOfferingFromDatabase = async ({ institutionId, offeringId, userId, ip }) => {
+  const transaction = await sequelize.transaction();
+
+  try {
+    const institution = await models.Institution.findByPk(institutionId, { transaction });
+    if (!institution) {
+      throw Object.assign(new Error('Institution not found.'), { statusCode: 404 });
+    }
+
+    const settings = ensureAcademicSettings(institution.settings);
+    const offering = settings.academics.offerings.find((item) => item.id === offeringId);
+    if (!offering) {
+      throw Object.assign(new Error('Academic offering not found.'), { statusCode: 404 });
+    }
+
+    settings.academics.offerings = settings.academics.offerings.filter((item) => item.id !== offeringId);
+    await destroyIfExists(models.Subject, offering.subject_id, { transaction });
+
+    await institution.update({ settings }, { transaction });
+    await transaction.commit();
+
+    await logAudit({
+      userId,
+      action: 'DELETE',
+      resourceType: 'academic_offering',
+      resourceId: offeringId,
+      previousValues: offering,
+      ip,
+    });
+
+    return { id: offeringId, deleted: true };
+  } catch (error) {
+    await transaction.rollback();
+    throw error;
+  }
+};
+
+const deleteAcademicOfferingFromRuntime = async ({ institutionId, offeringId, userId, ip }) => {
+  const offering = store.academics.structure.offerings.find(
+    (item) => item.id === offeringId && item.institution_id === institutionId
+  );
+  if (!offering) {
+    throw Object.assign(new Error('Academic offering not found.'), { statusCode: 404 });
+  }
+
+  store.academics.structure.offerings = store.academics.structure.offerings.filter(
+    (item) => !(item.id === offeringId && item.institution_id === institutionId)
+  );
+
+  await logAudit({
+    userId,
+    action: 'DELETE',
+    resourceType: 'academic_offering',
+    resourceId: offeringId,
+    previousValues: offering,
+    ip,
+  });
+
+  return { id: offeringId, deleted: true };
+};
+
+const deleteAcademicOffering = async (context) => {
+  if (databaseReady()) {
+    return deleteAcademicOfferingFromDatabase(context);
+  }
+  return deleteAcademicOfferingFromRuntime(context);
+};
+
 const calculateGrade = ({ levelCode, score }) => {
   const config = requireLevelConfig(levelCode);
   if (!config.hasGrades) {
@@ -619,8 +1261,14 @@ const getRanking = async ({ className }) =>
 module.exports = {
   listAcademicStructure,
   createAcademicGroup,
+  updateAcademicGroup,
+  deleteAcademicGroup,
   createAcademicPeriod,
+  updateAcademicPeriod,
+  deleteAcademicPeriod,
   createAcademicOffering,
+  updateAcademicOffering,
+  deleteAcademicOffering,
   calculateGrade,
   saveScores,
   publishReportCard,

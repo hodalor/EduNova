@@ -44,6 +44,7 @@ const statusStyles: Record<string, string> = {
 
 const invoiceSchema = z.object({
   studentName: z.string().min(2, 'Student name is required'),
+  studentNumber: z.string().optional(),
   className: z.string().min(1, 'Class or level is required'),
   totalAmount: z.coerce.number().min(1, 'Total amount must be greater than zero'),
   dueDate: z.string().min(1, 'Due date is required'),
@@ -124,6 +125,14 @@ interface PaymentTermRow {
   is_active: boolean;
 }
 
+interface StudentLookupRow {
+  id: string;
+  name: string;
+  student_number: string;
+  className?: string;
+  level?: string;
+}
+
 const currency = (value: number | string | null | undefined) => {
   const num = Number(value || 0);
   return num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -142,6 +151,10 @@ const FinanceDashboardPage = () => {
   const [searchPayment, setSearchPayment] = useState('');
   const [searchDebtor, setSearchDebtor] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [studentLookupOpen, setStudentLookupOpen] = useState(false);
+  const [studentLookupField, setStudentLookupField] = useState<'studentName' | 'studentNumber'>(
+    'studentName'
+  );
 
   const invalidateFinance = () => {
     queryClient.invalidateQueries({ queryKey: ['finance-invoices'] });
@@ -184,10 +197,27 @@ const FinanceDashboardPage = () => {
   );
   const termsLoading = termsQuery.isLoading;
 
+  const studentsQuery = useQuery<StudentLookupRow[]>({
+    queryKey: ['finance-student-lookup'],
+    queryFn: eduovaApi.students.list,
+  });
+  const students = useMemo<StudentLookupRow[]>(
+    () =>
+      (studentsQuery.data ?? []).map((student: StudentLookupRow) => ({
+        id: student.id,
+        name: student.name,
+        student_number: student.student_number,
+        className: student.className,
+        level: student.level,
+      })),
+    [studentsQuery.data]
+  );
+
   const invoiceForm = useForm<InvoiceValues>({
     resolver: zodResolver(invoiceSchema),
     defaultValues: {
       studentName: '',
+      studentNumber: '',
       className: '',
       totalAmount: 0,
       dueDate: new Date(Date.now() + 1000 * 60 * 60 * 24 * 14).toISOString().slice(0, 10),
@@ -234,6 +264,7 @@ const FinanceDashboardPage = () => {
       toast.success('Invoice created successfully.');
       setInvoiceOpen(false);
       invoiceForm.reset();
+      setStudentLookupOpen(false);
       invalidateFinance();
     },
     onError: () => toast.error('Unable to create invoice. Please try again.'),
@@ -360,6 +391,75 @@ const FinanceDashboardPage = () => {
         .includes(q)
     );
   }, [debtors, searchDebtor]);
+
+  const invoiceStudentName = invoiceForm.watch('studentName') || '';
+  const invoiceStudentNumber = invoiceForm.watch('studentNumber') || '';
+  const invoiceStudentId = invoiceForm.watch('studentId');
+  const selectedStudent = useMemo(
+    () => students.find((student) => student.id === invoiceStudentId) || null,
+    [invoiceStudentId, students]
+  );
+  const activeLookupValue =
+    studentLookupField === 'studentNumber' ? invoiceStudentNumber : invoiceStudentName;
+  const matchedStudents = useMemo(() => {
+    const query = activeLookupValue.trim().toLowerCase();
+    if (!studentLookupOpen || !query) {
+      return [];
+    }
+
+    return students
+      .filter((student) => {
+        const studentName = String(student.name || '').toLowerCase();
+        const studentNumber = String(student.student_number || '').toLowerCase();
+        return studentName.includes(query) || studentNumber.includes(query);
+      })
+      .slice(0, 8);
+  }, [activeLookupValue, studentLookupOpen, students]);
+
+  const applyStudentSelection = (student: StudentLookupRow) => {
+    invoiceForm.setValue('studentId', student.id, { shouldDirty: true });
+    invoiceForm.setValue('studentName', student.name, {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+    invoiceForm.setValue('studentNumber', student.student_number, { shouldDirty: true });
+    invoiceForm.setValue('className', student.className || student.level || '', {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+    setStudentLookupOpen(false);
+  };
+
+  const handleInvoiceStudentInput = (
+    field: 'studentName' | 'studentNumber',
+    value: string
+  ) => {
+    const currentSelectedStudent =
+      students.find((student) => student.id === invoiceForm.getValues('studentId')) || null;
+
+    if (currentSelectedStudent) {
+      const selectedFieldValue =
+        field === 'studentName'
+          ? currentSelectedStudent.name
+          : currentSelectedStudent.student_number;
+      const pairedField = field === 'studentName' ? 'studentNumber' : 'studentName';
+      const pairedFieldValue =
+        field === 'studentName'
+          ? currentSelectedStudent.student_number
+          : currentSelectedStudent.name;
+
+      if (value !== selectedFieldValue) {
+        invoiceForm.setValue('studentId', '', { shouldDirty: true });
+        if (invoiceForm.getValues(pairedField) === pairedFieldValue) {
+          invoiceForm.setValue(pairedField, '', { shouldDirty: true });
+        }
+      }
+    }
+
+    invoiceForm.setValue(field, value, { shouldDirty: true, shouldValidate: field === 'studentName' });
+    setStudentLookupField(field);
+    setStudentLookupOpen(Boolean(value.trim()));
+  };
 
   const openNewTerm = () => {
     setEditingTerm(null);
@@ -871,6 +971,7 @@ const FinanceDashboardPage = () => {
         onOpenChange={(open) => {
           setInvoiceOpen(open);
           if (!open) invoiceForm.reset();
+          if (!open) setStudentLookupOpen(false);
         }}
         title="Create Invoice"
         description="Raise a new fee invoice against a learner or class assignment."
@@ -884,9 +985,61 @@ const FinanceDashboardPage = () => {
         >
           <Input
             label="Student Name"
+            value={invoiceStudentName}
+            helperText={
+              selectedStudent
+                ? `Linked to ${selectedStudent.className || selectedStudent.level || 'active enrollment'}`
+                : 'Type a student name or use the student ID field to search.'
+            }
             error={invoiceForm.formState.errors.studentName?.message}
-            {...invoiceForm.register('studentName')}
+            onFocus={() => {
+              setStudentLookupField('studentName');
+              setStudentLookupOpen(Boolean(invoiceStudentName.trim()));
+            }}
+            onBlur={() => window.setTimeout(() => setStudentLookupOpen(false), 120)}
+            onChange={(event) => handleInvoiceStudentInput('studentName', event.target.value)}
           />
+          <Input
+            label="Student ID"
+            value={invoiceStudentNumber}
+            helperText="Live search works with the student number as well."
+            onFocus={() => {
+              setStudentLookupField('studentNumber');
+              setStudentLookupOpen(Boolean(invoiceStudentNumber.trim()));
+            }}
+            onBlur={() => window.setTimeout(() => setStudentLookupOpen(false), 120)}
+            onChange={(event) => handleInvoiceStudentInput('studentNumber', event.target.value)}
+          />
+          {studentLookupOpen ? (
+            <div className="md:col-span-2 rounded-2xl border border-slate-200 bg-slate-50 p-2">
+              {studentsQuery.isLoading ? (
+                <p className="px-3 py-2 text-sm text-slate-500">Loading students…</p>
+              ) : matchedStudents.length ? (
+                <div className="space-y-1">
+                  {matchedStudents.map((student) => (
+                    <button
+                      key={student.id}
+                      type="button"
+                      className="w-full rounded-2xl px-3 py-3 text-left transition hover:bg-white"
+                      onMouseDown={() => applyStudentSelection(student)}
+                    >
+                      <p className="font-semibold text-brand-navy">{student.name}</p>
+                      <p className="text-sm text-slate-500">
+                        {student.student_number}
+                        {student.className || student.level
+                          ? ` · ${student.className || student.level}`
+                          : ''}
+                      </p>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <p className="px-3 py-2 text-sm text-slate-500">
+                  No students match that search yet.
+                </p>
+              )}
+            </div>
+          ) : null}
           <Input
             label="Class or Level"
             error={invoiceForm.formState.errors.className?.message}
@@ -911,24 +1064,49 @@ const FinanceDashboardPage = () => {
             error={invoiceForm.formState.errors.dueDate?.message}
             {...invoiceForm.register('dueDate')}
           />
-          <Input
-            label="Student ID (optional)"
-            {...invoiceForm.register('studentId')}
-          />
-          <div className="flex items-center justify-end gap-2 md:col-span-2 pt-4">
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => {
-                setInvoiceOpen(false);
-                invoiceForm.reset();
-              }}
-            >
-              Cancel
-            </Button>
-            <Button type="submit" loading={createInvoice.isPending}>
-              Create Invoice
-            </Button>
+          <input type="hidden" {...invoiceForm.register('studentName')} />
+          <input type="hidden" {...invoiceForm.register('studentId')} />
+          <input type="hidden" {...invoiceForm.register('studentNumber')} />
+          <div className="flex items-center justify-between gap-2 md:col-span-2 pt-4">
+            {selectedStudent ? (
+              <span className="text-sm text-slate-500">
+                Selected learner: {selectedStudent.name} ({selectedStudent.student_number})
+              </span>
+            ) : (
+              <span className="text-sm text-slate-400">
+                You can still create an ad-hoc invoice without linking a saved student.
+              </span>
+            )}
+            <div className="flex items-center gap-2">
+              {selectedStudent ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => {
+                    invoiceForm.setValue('studentId', '', { shouldDirty: true });
+                    invoiceForm.setValue('studentName', '', { shouldDirty: true });
+                    invoiceForm.setValue('studentNumber', '', { shouldDirty: true });
+                    invoiceForm.setValue('className', '', { shouldDirty: true });
+                  }}
+                >
+                  Clear Student
+                </Button>
+              ) : null}
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => {
+                  setInvoiceOpen(false);
+                  setStudentLookupOpen(false);
+                  invoiceForm.reset();
+                }}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" loading={createInvoice.isPending}>
+                Create Invoice
+              </Button>
+            </div>
           </div>
         </form>
       </Modal>

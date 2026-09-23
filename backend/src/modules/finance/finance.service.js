@@ -4,17 +4,60 @@ const { store } = require('../../shared/store/runtime-store');
 const { models, sequelize } = require('../../config/database');
 const analyticsService = require('../analytics/analytics.service');
 
+const ensureAdmissionsSettings = (settings) => {
+  const next = JSON.parse(JSON.stringify(settings || {}));
+  next.admissions = next.admissions || {};
+  next.admissions.student_profiles = next.admissions.student_profiles || [];
+  return next;
+};
+
 const listInvoices = async ({ institutionId, query }) => {
   if (models.StudentInvoice) {
     try {
+      const institution = models.Institution
+        ? await models.Institution.findByPk(institutionId).catch(() => null)
+        : null;
+      const settings = ensureAdmissionsSettings(institution?.settings);
+      const profileMap = new Map(
+        settings.admissions.student_profiles.map((item) => [item.student_id, item])
+      );
       const where = { institution_id: institutionId };
       if (query.status) where.status = query.status;
       const rows = await models.StudentInvoice.findAll({
         where,
-        include: [{ model: models.Student, as: 'student', required: false, attributes: ['id', 'student_number'] }],
+        include: [
+          {
+            model: models.Student,
+            as: 'student',
+            required: false,
+            attributes: ['id', 'student_number'],
+            include: [
+              { model: models.User, as: 'user', required: false, attributes: ['first_name', 'last_name'] },
+              { model: models.Class, as: 'class', required: false, attributes: ['name'] },
+              { model: models.EducationLevel, as: 'level', required: false, attributes: ['level_code'] },
+            ],
+          },
+        ],
         order: [['created_at', 'DESC']],
       });
-      return rows.map((r) => r.toJSON());
+      return rows.map((row) => {
+        const invoice = row.toJSON();
+        const profile = profileMap.get(invoice.student_id) || {};
+        const fullName = `${invoice.student?.user?.first_name || ''} ${invoice.student?.user?.last_name || ''}`.trim();
+
+        return {
+          ...invoice,
+          student_name: invoice.student_name || fullName || profile.full_name || null,
+          class_name:
+            invoice.class_name ||
+            invoice.student?.class?.name ||
+            profile.group_name ||
+            profile.class_name ||
+            null,
+          student_number: invoice.student?.student_number || profile.student_number || null,
+          level_code: invoice.student?.level?.level_code || profile.level_code || null,
+        };
+      });
     } catch (_error) {
       // fall through to runtime
     }

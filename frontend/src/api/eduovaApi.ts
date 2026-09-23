@@ -1,10 +1,7 @@
 import axios from 'axios';
 import axiosInstance, { authApi } from './axiosInstance';
 import {
-  academicsData,
   analyticsData,
-  dashboardOverview,
-  financeData,
   attendanceData,
   superAdminData,
   timetableData,
@@ -30,6 +27,69 @@ const asNumber = (value: unknown): number => Number(value) || 0;
 const asString = (value: unknown, fallback = ''): string =>
   typeof value === 'string' && value.trim() ? value : fallback;
 
+const fallbackDashboardOverview = {
+  stats: [
+    {
+      id: 'students',
+      label: 'Total Students',
+      value: '492',
+      icon: 'Users',
+      trend: { value: 0, direction: 'up', label: 'Current total' },
+    },
+    {
+      id: 'collection',
+      label: 'Fee Collection Rate',
+      value: '84%',
+      icon: 'Wallet',
+      trend: { value: 0, direction: 'up', label: 'Current total' },
+    },
+    {
+      id: 'attendance',
+      label: "Today's Attendance",
+      value: '91%',
+      icon: 'ClipboardCheck',
+      trend: { value: 0, direction: 'up', label: 'Current total' },
+    },
+    {
+      id: 'staff',
+      label: 'Active Staff',
+      value: '38',
+      icon: 'Briefcase',
+      trend: { value: 0, direction: 'up', label: 'Current total' },
+    },
+  ],
+  revenueTrend: analyticsData.finance.revenueByMonth.map((entry) => ({
+    name: entry.month,
+    revenue: entry.revenue,
+    billed: entry.target,
+  })),
+  enrollmentByLevel: analyticsData.enrollment.levelDistribution.map((entry) => ({
+    level: entry.name,
+    count: entry.value,
+  })),
+  recentPayments: [
+    {
+      id: 'fallback-payment-1',
+      student: 'Elikem Mensah',
+      className: 'Level 100',
+      amount: 1800,
+      method: 'Mobile Money',
+      receivedAt: '2026-06-18',
+      status: 'verified',
+    },
+    {
+      id: 'fallback-payment-2',
+      student: 'Ama Tetteh',
+      className: 'PR 5 Gold',
+      amount: 950,
+      method: 'Bank',
+      receivedAt: '2026-06-14',
+      status: 'verified',
+    },
+  ],
+  alerts: analyticsData.alerts,
+};
+
 const normalizeDashboardOverview = (payload: unknown) => {
   const raw = asRecord(payload);
 
@@ -52,7 +112,7 @@ const normalizeDashboardOverview = (payload: unknown) => {
           },
         };
       })
-    : dashboardOverview.stats;
+    : [];
 
   const revenueTrend = Array.isArray(raw.revenueTrend)
     ? raw.revenueTrend.map((entry) => {
@@ -64,7 +124,7 @@ const normalizeDashboardOverview = (payload: unknown) => {
           billed: asNumber(item.billed) || revenue,
         };
       })
-    : dashboardOverview.revenueTrend;
+    : [];
 
   const enrollmentByLevel = Array.isArray(raw.enrollmentByLevel)
     ? raw.enrollmentByLevel.map((entry) => {
@@ -74,7 +134,7 @@ const normalizeDashboardOverview = (payload: unknown) => {
           count: asNumber(item.count) || asNumber(item.value),
         };
       })
-    : dashboardOverview.enrollmentByLevel;
+    : [];
 
   const recentPayments = Array.isArray(raw.recentPayments)
     ? raw.recentPayments.map((entry, index) => {
@@ -89,7 +149,7 @@ const normalizeDashboardOverview = (payload: unknown) => {
           status: asString(item.status, 'verified'),
         };
       })
-    : dashboardOverview.recentPayments;
+    : [];
 
   const alerts = Array.isArray(raw.alerts)
     ? raw.alerts.map((entry, index) => {
@@ -109,7 +169,7 @@ const normalizeDashboardOverview = (payload: unknown) => {
                   : 'info',
         };
       })
-    : dashboardOverview.alerts;
+    : [];
 
   return {
     stats,
@@ -143,10 +203,16 @@ export const eduovaApi = {
     getOverview: () =>
       safeRequest(
         async () => normalizeDashboardOverview((await axiosInstance.get('/analytics/overview')).data.data),
-        dashboardOverview
+        normalizeDashboardOverview(fallbackDashboardOverview)
       ),
-    getFinance: () =>
-      safeRequest(async () => (await axiosInstance.get('/analytics/finance/revenue')).data.data, analyticsData.finance),
+    getFinance: async () => {
+      try {
+        const response = await axiosInstance.get('/analytics/finance/revenue');
+        return response.data.data || {};
+      } catch (error) {
+        throw error;
+      }
+    },
     getAcademics: () =>
       safeRequest(async () => (await axiosInstance.get('/analytics/academics/performance')).data.data, analyticsData.academics),
     getAttendance: () =>
@@ -187,30 +253,30 @@ export const eduovaApi = {
         throw error;
       }
     },
-    update: async (payload: unknown) => {
-      await wait(300);
-      return payload;
+    update: async (payload: Record<string, unknown>) => {
+      const { studentId, ...body } = payload;
+      try {
+        return (await axiosInstance.patch(`/students/${studentId}`, body)).data.data;
+      } catch (error) {
+        if (axios.isAxiosError(error) && error.response?.status === 404) {
+          return (await axiosInstance.patch(`/v1/students/${studentId}`, body)).data.data;
+        }
+        throw error;
+      }
     },
   },
   finance: {
-    dashboard: () =>
-      safeRequest(async () => (await axiosInstance.get('/finance/dashboard')).data.data, financeData.dashboard),
+    dashboard: async () => (await axiosInstance.get('/finance/dashboard')).data.data,
     invoices: async () => (await axiosInstance.get('/finance/invoices')).data.data,
     createInvoice: async (payload: Record<string, unknown>) =>
       (await axiosInstance.post('/finance/invoices', payload)).data.data,
     payments: async () => (await axiosInstance.get('/finance/payments')).data.data,
     recordPayment: async (payload: Record<string, unknown>) =>
       (await axiosInstance.post('/finance/payments', payload)).data.data,
-    defaulters: () =>
-      safeRequest(
-        async () => (await axiosInstance.get('/finance/reports/defaulters')).data.data,
-        analyticsData.finance.defaulters
-      ),
+    defaulters: async () => (await axiosInstance.get('/finance/reports/defaulters')).data.data,
     debtors: async () => (await axiosInstance.get('/finance/debtors')).data.data,
-    expenses: () =>
-      safeRequest(async () => (await axiosInstance.get('/finance/expenses')).data.data, financeData.expenses),
-    feeStructures: () =>
-      safeRequest(async () => (await axiosInstance.get('/finance/fee-structures')).data.data, financeData.feeStructures),
+    expenses: async () => (await axiosInstance.get('/finance/expenses')).data.data,
+    feeStructures: async () => (await axiosInstance.get('/finance/fee-structures')).data.data,
     paymentTerms: async () => (await axiosInstance.get('/finance/payment-terms')).data.data,
     createPaymentTerm: async (payload: Record<string, unknown>) =>
       (await axiosInstance.post('/finance/payment-terms', payload)).data.data,
@@ -227,12 +293,9 @@ export const eduovaApi = {
       (await axiosInstance.post('/v1/academics/periods', payload)).data.data,
     createOffering: async (payload: Record<string, unknown>) =>
       (await axiosInstance.post('/v1/academics/offerings', payload)).data.data,
-    assessments: () =>
-      safeRequest(async () => (await axiosInstance.get('/v1/academics/assessments')).data.data, academicsData.assessments),
-    reportCards: () =>
-      safeRequest(async () => (await axiosInstance.get('/v1/academics/report-cards')).data.data, academicsData.reportCards),
-    gradebook: () =>
-      safeRequest(async () => (await axiosInstance.get('/v1/academics/gradebook')).data.data, academicsData.gradebook),
+    assessments: async () => (await axiosInstance.get('/v1/academics/assessments')).data.data,
+    reportCards: async () => (await axiosInstance.get('/v1/academics/report-cards')).data.data,
+    gradebook: async () => (await axiosInstance.get('/v1/academics/gradebook')).data.data,
   },
   attendance: {
     taking: () =>

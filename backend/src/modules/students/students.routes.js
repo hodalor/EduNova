@@ -23,6 +23,7 @@ router.use(
 router.get('/roster', controller.getRoster);
 router.post('/', enforceStudentPlanLimit, controller.createStudent);
 router.get('/', controller.listStudents);
+router.patch('/:studentId', controller.updateStudent);
 router.get('/:studentId', controller.getStudent);
 
 module.exports = router;

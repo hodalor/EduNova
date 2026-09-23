@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   Area,
@@ -49,6 +49,32 @@ const FinanceAnalyticsPage = () => {
     queryKey: ['analytics-finance', from, to],
     queryFn: eduovaApi.analytics.getFinance,
   });
+  const revenueByMonth = useMemo<RevenuePoint[]>(
+    () => ((data?.revenueByMonth || []) as Array<Record<string, unknown>>).map((item) => ({
+      month: String(item.month || ''),
+      revenue: Number(item.revenue || 0),
+      target: Number(item.target || item.billed || 0),
+    })),
+    [data?.revenueByMonth]
+  );
+  const expenseBreakdown = useMemo<ExpenseSlice[]>(
+    () => ((data?.expenseBreakdown || []) as Array<Record<string, unknown>>).map((item) => ({
+      name: String(item.name || 'Other'),
+      value: Number(item.value || 0),
+    })),
+    [data?.expenseBreakdown]
+  );
+  const defaulters = useMemo<DefaulterRow[]>(
+    () =>
+      ((data?.defaulters || []) as Array<Record<string, unknown>>).map((item) => ({
+        id: String(item.id || ''),
+        student: String(item.student || item.student_name || 'Student'),
+        className: String(item.className || item.class_name || 'Unassigned'),
+        amount: Number(item.amount ?? item.balance ?? 0),
+        daysOverdue: Number(item.daysOverdue ?? item.days_overdue ?? 0),
+      })),
+    [data?.defaulters]
+  );
 
   if (isLoading) {
     return <PageLoader />;
@@ -79,7 +105,7 @@ const FinanceAnalyticsPage = () => {
         <Card title="Revenue by Month" description="Collected revenue against monthly targets.">
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={data.revenueByMonth as RevenuePoint[]}>
+              <AreaChart data={revenueByMonth}>
                 <defs>
                   <linearGradient id="financeRevenue" x1="0" x2="0" y1="0" y2="1">
                     <stop offset="5%" stopColor="#0F1B3C" stopOpacity={0.25} />
@@ -146,14 +172,14 @@ const FinanceAnalyticsPage = () => {
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
-                  data={data.expenseBreakdown}
+                  data={expenseBreakdown}
                   dataKey="value"
                   nameKey="name"
                   innerRadius={70}
                   outerRadius={110}
                   paddingAngle={3}
                 >
-                  {(data.expenseBreakdown as ExpenseSlice[]).map((entry, index) => (
+                  {expenseBreakdown.map((entry, index) => (
                     <Cell key={entry.name} fill={colors[index % colors.length]} />
                   ))}
                 </Pie>
@@ -162,7 +188,7 @@ const FinanceAnalyticsPage = () => {
             </ResponsiveContainer>
           </div>
           <div className="mt-4 grid gap-3">
-            {(data.expenseBreakdown as ExpenseSlice[]).map((item, index) => (
+            {expenseBreakdown.map((item, index) => (
               <div key={item.name} className="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3">
                 <div className="flex items-center gap-3">
                   <span
@@ -181,7 +207,7 @@ const FinanceAnalyticsPage = () => {
 
         <Table<DefaulterRow>
           title="Defaulters"
-          data={data.defaulters as DefaulterRow[]}
+          data={defaulters}
           columns={[
             { header: 'Student', accessorKey: 'student' },
             { header: 'Class', accessorKey: 'className' },

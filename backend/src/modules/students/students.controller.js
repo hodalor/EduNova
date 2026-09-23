@@ -19,6 +19,15 @@ module.exports = {
       studentId: req.params.studentId,
     })
   ),
+  updateStudent: wrap((req) =>
+    studentsService.updateStudent({
+      institutionId: req.institutionId,
+      studentId: req.params.studentId,
+      payload: req.body,
+      actorId: req.user.id,
+      ip: req.ip,
+    })
+  ),
   getRoster: wrap((req) =>
     studentsService.getRoster({
       classId: req.query.class_id,

@@ -11,6 +11,7 @@ const { getPermissionsForRole } = require('../../shared/constants/permissions');
 const {
   comparePassword,
   hashPassword,
+  safeRedisGet,
   signAccessToken,
   signRefreshToken,
   verifyRefreshToken,
@@ -234,12 +235,7 @@ const refresh = async ({ refresh_token }) => {
       }).catch(() => {});
     })();
     // #endregion
-    let session = null;
-    try {
-      session = await redisClient.get(`auth:refresh:${payload.jti}`);
-    } catch (_redisErr) {
-      session = null;
-    }
+    const session = await safeRedisGet(`auth:refresh:${payload.jti}`);
     // #region debug-point B:refresh-session
     (() => {
       const fs = require('fs');

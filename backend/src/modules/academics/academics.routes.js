@@ -20,8 +20,14 @@ router.use(
 
 router.get('/structure', controller.listAcademicStructure);
 router.post('/groups', controller.createAcademicGroup);
+router.put('/groups/:id', controller.updateAcademicGroup);
+router.delete('/groups/:id', controller.deleteAcademicGroup);
 router.post('/periods', controller.createAcademicPeriod);
+router.put('/periods/:id', controller.updateAcademicPeriod);
+router.delete('/periods/:id', controller.deleteAcademicPeriod);
 router.post('/offerings', controller.createAcademicOffering);
+router.put('/offerings/:id', controller.updateAcademicOffering);
+router.delete('/offerings/:id', controller.deleteAcademicOffering);
 router.post('/scores', controller.saveScores);
 router.get('/report-cards', withCacheHeaders({ maxAge: 86400, immutable: true }), controller.getReportCards);
 router.put('/report-cards/:id/publish', reportGenerationRateLimiter, controller.publishReportCard);

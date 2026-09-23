@@ -301,6 +301,7 @@ module.exports = {
   REFRESH_TTL_SECONDS,
   LOGIN_MAX_ATTEMPTS,
   LOGIN_LOCK_WINDOW_SECONDS,
+  safeRedisGet,
   hashPassword,
   comparePassword,
   signAccessToken,
