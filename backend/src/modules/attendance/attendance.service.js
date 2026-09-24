@@ -1,8 +1,12 @@
 const communicationService = require('../communication/communication.service');
 const socketService = require('../notifications/socket.service');
 const analyticsService = require('../analytics/analytics.service');
+const { models } = require('../../config/database');
 const { logAudit } = require('../../shared/services/audit-log.service');
 const { store } = require('../../shared/store/runtime-store');
+
+const databaseReady = () =>
+  Boolean(models.Student && models.User && models.AttendanceRecord && models.AttendanceSession);
 
 const markAttendance = async ({ institutionId, sessionId, payload, userId, ip }) => {
   const session = store.attendance.sessions.find(
@@ -79,6 +83,58 @@ const closeSession = async ({ institutionId, sessionId, userId, ip }) => {
   return session;
 };
 
+const getToday = async ({ institutionId }) => {
+  const today = new Date().toISOString().slice(0, 10);
+
+  if (databaseReady()) {
+    const [students, records] = await Promise.all([
+      models.Student.findAll({
+        where: { institution_id: institutionId, status: 'active' },
+        include: [{ model: models.User, as: 'user', required: false }],
+        order: [['created_at', 'DESC']],
+      }).catch(() => []),
+      models.AttendanceRecord.findAll({
+        include: [
+          {
+            model: models.Student,
+            as: 'student',
+            required: true,
+            where: { institution_id: institutionId },
+          },
+          {
+            model: models.AttendanceSession,
+            as: 'session',
+            required: true,
+            where: { date: today },
+          },
+        ],
+        order: [['created_at', 'DESC']],
+      }).catch(() => []),
+    ]);
+
+    const statusMap = new Map(records.map((item) => [item.student_id, item.status]));
+    return students.map((student) => ({
+      id: student.id,
+      student: `${student.user?.first_name || ''} ${student.user?.last_name || ''}`.trim() || student.student_number,
+      status: statusMap.get(student.id) || 'present',
+    }));
+  }
+
+  const statusMap = new Map(
+    store.attendance.records
+      .filter((item) => item.institution_id === institutionId)
+      .map((item) => [item.student_id, item.status])
+  );
+
+  return store.students.profiles
+    .filter((item) => item.institution_id === institutionId)
+    .map((student) => ({
+      id: student.id,
+      student: student.full_name || `${student.first_name || ''} ${student.last_name || ''}`.trim(),
+      status: statusMap.get(student.id) || 'present',
+    }));
+};
+
 const getReport = async ({ institutionId }) => {
   const records = store.attendance.records.filter((item) => item.institution_id === institutionId);
   const grouped = records.reduce((acc, record) => {
@@ -106,5 +162,6 @@ const getReport = async ({ institutionId }) => {
 module.exports = {
   markAttendance,
   closeSession,
+  getToday,
   getReport,
 };

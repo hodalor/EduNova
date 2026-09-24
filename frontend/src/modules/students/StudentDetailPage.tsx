@@ -69,6 +69,7 @@ const StudentDetailPage = () => {
     (sum: number, invoice: StudentDetail['invoices'][number]) => sum + invoice.balance,
     0
   );
+  const tertiaryRoadmap = data.tertiary?.roadmap || null;
   const presentDays = data.attendanceCalendar.filter((item: StudentDetail['attendanceCalendar'][number]) => item.value > 0).length;
   const absentDays = data.attendanceCalendar.filter((item: StudentDetail['attendanceCalendar'][number]) => item.value <= 0).length;
   const attendanceRate = presentDays + absentDays > 0 ? Math.round((presentDays / (presentDays + absentDays)) * 100) : 0;
@@ -216,46 +217,152 @@ const StudentDetailPage = () => {
         </TabsContent>
 
         <TabsContent value="academic">
-          <div className="grid gap-6 xl:grid-cols-[1.45fr_1fr]">
-            <Card title="GPA Trend" description="Trend across recent academic terms.">
-              {data.academicTrend.length === 0 ? (
-                <EmptyState
-                  title="No academic records yet"
-                  message="This student does not have published results yet, so no academic trend is available."
-                />
-              ) : (
-                <div className="h-80">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={data.academicTrend}>
-                      <XAxis dataKey="term" stroke="#64748B" />
-                      <YAxis stroke="#64748B" domain={[0, 4]} />
-                      <Tooltip />
-                      <Line type="monotone" dataKey="gpa" stroke="#0F1B3C" strokeWidth={3} />
-                    </LineChart>
-                  </ResponsiveContainer>
+          <div className="space-y-6">
+            <div className="grid gap-6 xl:grid-cols-[1.45fr_1fr]">
+              <Card title="GPA Trend" description="Trend across recent academic terms.">
+                {data.academicTrend.length === 0 ? (
+                  <EmptyState
+                    title="No academic records yet"
+                    message="This student does not have published results yet, so no academic trend is available."
+                  />
+                ) : (
+                  <div className="h-80">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={data.academicTrend}>
+                        <XAxis dataKey="term" stroke="#64748B" />
+                        <YAxis stroke="#64748B" domain={[0, 4]} />
+                        <Tooltip />
+                        <Line type="monotone" dataKey="gpa" stroke="#0F1B3C" strokeWidth={3} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+              </Card>
+              <Card title="Current Academic Snapshot" description="Overview of the student's current study context.">
+                <div className="space-y-3 text-sm text-slate-600">
+                  <div className="rounded-2xl bg-slate-50 p-4">
+                    <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Class</p>
+                    <p className="mt-2 font-semibold text-brand-navy">{data.className}</p>
+                  </div>
+                  <div className="rounded-2xl bg-slate-50 p-4">
+                    <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Academic Status</p>
+                    <p className="mt-2">
+                      {data.academicTrend.length > 0 ? 'Published records available' : 'Awaiting first published result'}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl bg-slate-50 p-4">
+                    <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Current GPA</p>
+                    <p className="mt-2 font-semibold text-brand-navy">
+                      {data.academicTrend[data.academicTrend.length - 1]?.gpa ?? 0}
+                    </p>
+                  </div>
+                  {data.tertiary?.program_name ? (
+                    <div className="rounded-2xl bg-slate-50 p-4">
+                      <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Program</p>
+                      <p className="mt-2 font-semibold text-brand-navy">{data.tertiary.program_name}</p>
+                      <p className="mt-1 text-sm text-slate-500">
+                        {[data.tertiary.faculty_name, data.tertiary.department_name].filter(Boolean).join(' · ')}
+                      </p>
+                    </div>
+                  ) : null}
                 </div>
-              )}
-            </Card>
-            <Card title="Current Academic Snapshot" description="Overview of the student's current study context.">
-              <div className="space-y-3 text-sm text-slate-600">
-                <div className="rounded-2xl bg-slate-50 p-4">
-                  <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Class</p>
-                  <p className="mt-2 font-semibold text-brand-navy">{data.className}</p>
+              </Card>
+            </div>
+
+            {tertiaryRoadmap ? (
+              <Card
+                title="Graduation Roadmap"
+                description="Program levels, semesters, and courses linked to this student's current program."
+              >
+                <div className="grid gap-4 md:grid-cols-4">
+                  <div className="rounded-2xl bg-slate-50 p-4">
+                    <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Program</p>
+                    <p className="mt-2 font-semibold text-brand-navy">{data.tertiary?.program_name || 'Not assigned'}</p>
+                  </div>
+                  <div className="rounded-2xl bg-slate-50 p-4">
+                    <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Credential</p>
+                    <p className="mt-2 font-semibold text-brand-navy">{data.tertiary?.credential || 'Not set'}</p>
+                  </div>
+                  <div className="rounded-2xl bg-slate-50 p-4">
+                    <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Current Level</p>
+                    <p className="mt-2 font-semibold text-brand-navy">{data.tertiary?.current_level?.name || 'Not set'}</p>
+                  </div>
+                  <div className="rounded-2xl bg-slate-50 p-4">
+                    <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Current Semester</p>
+                    <p className="mt-2 font-semibold text-brand-navy">{data.tertiary?.current_period?.name || 'Not set'}</p>
+                  </div>
                 </div>
-                <div className="rounded-2xl bg-slate-50 p-4">
-                  <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Academic Status</p>
-                  <p className="mt-2">
-                    {data.academicTrend.length > 0 ? 'Published records available' : 'Awaiting first published result'}
-                  </p>
+
+                <div className="mt-6 space-y-4">
+                  {tertiaryRoadmap.levels.map(
+                    (
+                      level: NonNullable<
+                        NonNullable<NonNullable<StudentDetail['tertiary']>['roadmap']>['levels']
+                      >[number]
+                    ) => (
+                    <div key={level.id} className="rounded-3xl border border-slate-200 p-4">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <p className="font-semibold text-brand-navy">{level.name}</p>
+                          <p className="text-sm text-slate-500">{level.code}</p>
+                        </div>
+                        <Badge variant="info">
+                          {level.periods.reduce((sum, period) => sum + period.courses.length, 0)} courses
+                        </Badge>
+                      </div>
+                      <div className="mt-4 grid gap-4 xl:grid-cols-2">
+                        {level.periods.map(
+                          (
+                            period: NonNullable<
+                              NonNullable<
+                                NonNullable<NonNullable<StudentDetail['tertiary']>['roadmap']>['levels']
+                              >[number]['periods']
+                            >[number]
+                          ) => (
+                          <div key={period.id} className="rounded-2xl bg-slate-50 p-4">
+                            <div className="flex items-center justify-between gap-3">
+                              <p className="font-semibold text-brand-navy">{period.name}</p>
+                              <span className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
+                                {period.status}
+                              </span>
+                            </div>
+                            <div className="mt-3 space-y-2">
+                              {period.courses.length ? (
+                                period.courses.map(
+                                  (
+                                    course: NonNullable<
+                                      NonNullable<
+                                        NonNullable<
+                                          NonNullable<
+                                            NonNullable<StudentDetail['tertiary']>['roadmap']
+                                          >['levels']
+                                        >[number]['periods']
+                                      >[number]['courses']
+                                    >[number]
+                                  ) => (
+                                  <div key={course.id} className="rounded-2xl border border-slate-200 bg-white px-3 py-2">
+                                    <p className="text-sm font-semibold text-brand-navy">{course.name}</p>
+                                    <p className="text-xs text-slate-500">
+                                      {course.code}
+                                      {course.credit_hours ? ` · ${course.credit_hours} credits` : ''}
+                                    </p>
+                                  </div>
+                                  )
+                                )
+                              ) : (
+                                <p className="text-sm text-slate-500">No courses mapped yet for this semester.</p>
+                              )}
+                            </div>
+                          </div>
+                          )
+                        )}
+                      </div>
+                    </div>
+                    )
+                  )}
                 </div>
-                <div className="rounded-2xl bg-slate-50 p-4">
-                  <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Current GPA</p>
-                  <p className="mt-2 font-semibold text-brand-navy">
-                    {data.academicTrend[data.academicTrend.length - 1]?.gpa ?? 0}
-                  </p>
-                </div>
-              </div>
-            </Card>
+              </Card>
+            ) : null}
           </div>
         </TabsContent>
 

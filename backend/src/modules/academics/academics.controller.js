@@ -91,6 +91,16 @@ module.exports = {
       ip: req.ip,
     })
   ),
+  listAssessments: wrap((req) =>
+    academicsService.listAssessments({
+      institutionId: req.institutionId,
+    })
+  ),
+  getGradebook: wrap((req) =>
+    academicsService.getGradebook({
+      institutionId: req.institutionId,
+    })
+  ),
   saveScores: async (req, res) => {
     const data = await academicsService.saveScores({
       institutionId: req.institutionId,

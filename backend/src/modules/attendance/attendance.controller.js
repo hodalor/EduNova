@@ -25,6 +25,11 @@ module.exports = {
       ip: req.ip,
     })
   ),
+  getToday: wrap((req) =>
+    attendanceService.getToday({
+      institutionId: req.institutionId,
+    })
+  ),
   getReport: wrap((req) =>
     attendanceService.getReport({
       institutionId: req.institutionId,

@@ -65,6 +65,68 @@ describe('Academic structure and tertiary registration', () => {
     expect(response.body.data.level_code).toBe('TR');
   });
 
+  it('updates and deletes academic structure records', async () => {
+    const app = createApp();
+
+    const updateGroupResponse = await request(app)
+      .put('/api/academics/groups/grp-l100-cs')
+      .set('x-institution-id', 'test-inst')
+      .send({
+        name: 'Level 100 Revised',
+        code: 'L100R',
+        level_code: 'TR',
+        calendar_type: 'semester',
+      });
+
+    expect(updateGroupResponse.statusCode).toBe(200);
+    expect(updateGroupResponse.body.data.name).toBe('Level 100 Revised');
+    expect(updateGroupResponse.body.data.code).toBe('L100R');
+
+    const updatePeriodResponse = await request(app)
+      .put('/api/academics/periods/prd-l100-sem1')
+      .set('x-institution-id', 'test-inst')
+      .send({
+        name: 'Semester 1 Updated',
+        sequence: 1,
+        status: 'active',
+        registration_open: true,
+      });
+
+    expect(updatePeriodResponse.statusCode).toBe(200);
+    expect(updatePeriodResponse.body.data.name).toBe('Semester 1 Updated');
+    expect(updatePeriodResponse.body.data.registration_open).toBe(true);
+
+    const updateOfferingResponse = await request(app)
+      .put('/api/academics/offerings/off-csc101')
+      .set('x-institution-id', 'test-inst')
+      .send({
+        name: 'Communication Skills I',
+        code: 'CSC111',
+        credit_hours: 4,
+        is_core: false,
+        prerequisite_codes: ['GST100'],
+        next_offering_codes: ['CSC112'],
+      });
+
+    expect(updateOfferingResponse.statusCode).toBe(200);
+    expect(updateOfferingResponse.body.data.code).toBe('CSC111');
+    expect(updateOfferingResponse.body.data.is_core).toBe(false);
+
+    const deleteOfferingResponse = await request(app)
+      .delete('/api/academics/offerings/off-gst102')
+      .set('x-institution-id', 'test-inst');
+
+    expect(deleteOfferingResponse.statusCode).toBe(200);
+    expect(deleteOfferingResponse.body.data.deleted).toBe(true);
+
+    const deletePeriodResponse = await request(app)
+      .delete('/api/academics/periods/prd-l100-sem2')
+      .set('x-institution-id', 'test-inst');
+
+    expect(deletePeriodResponse.statusCode).toBe(200);
+    expect(deletePeriodResponse.body.data.deleted).toBe(true);
+  });
+
   it('returns student registration state and allows valid current-semester courses', async () => {
     const app = createApp();
 

@@ -34,6 +34,101 @@ const ensureAdmissionsSettings = (settings) => {
   return next;
 };
 
+const sortBySequence = (items = []) =>
+  items.slice().sort((a, b) => {
+    const sequenceDiff = Number(a.sequence || 0) - Number(b.sequence || 0);
+    if (sequenceDiff !== 0) {
+      return sequenceDiff;
+    }
+    return String(a.name || '').localeCompare(String(b.name || ''));
+  });
+
+const buildProgramRoadmap = ({ program, settings }) => {
+  if (!program) {
+    return null;
+  }
+
+  const groups = (settings.academics?.groups || []).filter((item) => item.level_code === 'TR');
+  const periods = settings.academics?.periods || [];
+  const offerings = settings.academics?.offerings || [];
+  const roadmapGroupIds = program.roadmap_group_ids || [];
+  const scopedGroups = sortBySequence(groups.filter((item) => roadmapGroupIds.includes(item.id)));
+
+  return {
+    level_count: scopedGroups.length,
+    total_courses: offerings.filter((item) => roadmapGroupIds.includes(item.group_id)).length,
+    levels: scopedGroups.map((group) => ({
+      id: group.id,
+      name: group.name,
+      code: group.code,
+      periods: sortBySequence(periods.filter((item) => item.group_id === group.id)).map((period) => ({
+        id: period.id,
+        name: period.name,
+        sequence: Number(period.sequence || 0),
+        status: period.status || 'planned',
+        courses: offerings
+          .filter((item) => item.group_id === group.id && item.period_id === period.id)
+          .map((offering) => ({
+            id: offering.id,
+            code: offering.code,
+            name: offering.name,
+            credit_hours: offering.credit_hours ?? null,
+            is_core: offering.is_core !== false,
+            prerequisite_codes: offering.prerequisite_codes || [],
+          })),
+      })),
+    })),
+  };
+};
+
+const buildStudentTertiaryProfile = ({ settings, profile, studentId }) => {
+  const tertiaryProfile = profile?.tertiary || {};
+  const progress = (settings.tertiary?.student_progress || []).find((item) => item.student_id === studentId);
+  const facultyId = progress?.faculty_id || tertiaryProfile.faculty_id || null;
+  const departmentId = progress?.department_id || tertiaryProfile.department_id || null;
+  const programId = progress?.program_id || tertiaryProfile.program_id || null;
+  const faculty = (settings.tertiary?.faculties || []).find((item) => item.id === facultyId) || null;
+  const department = (settings.tertiary?.departments || []).find((item) => item.id === departmentId) || null;
+  const program = (settings.tertiary?.programs || []).find((item) => item.id === programId) || null;
+  const roadmap = buildProgramRoadmap({ program, settings });
+  const currentLevel = roadmap?.levels?.find((item) => item.id === progress?.current_group_id) || null;
+  const currentPeriod =
+    currentLevel?.periods?.find((item) => item.id === progress?.current_period_id) || null;
+
+  if (!faculty && !department && !program && !roadmap && !progress) {
+    return null;
+  }
+
+  return {
+    faculty_id: facultyId,
+    faculty_name: faculty?.name || null,
+    department_id: departmentId,
+    department_name: department?.name || null,
+    program_id: programId,
+    program_name: program?.name || null,
+    credential: program?.credential || tertiaryProfile.qualification || null,
+    duration: program?.duration || null,
+    can_progress: progress?.can_progress ?? null,
+    fee_clearance: progress?.fee_clearance ?? null,
+    outstanding_resit_codes: progress?.outstanding_resit_codes || [],
+    current_level: currentLevel
+      ? {
+          id: currentLevel.id,
+          name: currentLevel.name,
+          code: currentLevel.code,
+        }
+      : null,
+    current_period: currentPeriod
+      ? {
+          id: currentPeriod.id,
+          name: currentPeriod.name,
+          status: currentPeriod.status,
+        }
+      : null,
+    roadmap,
+  };
+};
+
 const splitFullName = (payload) => {
   if (payload.first_name || payload.last_name) {
     return {
@@ -265,7 +360,11 @@ const getStudentFromDatabase = async ({ institutionId, studentId }) => {
       status: item.status,
     })),
     documents: [],
-    tertiary: profile.tertiary || null,
+    tertiary: buildStudentTertiaryProfile({
+      settings,
+      profile,
+      studentId: student.id,
+    }),
   };
 };
 

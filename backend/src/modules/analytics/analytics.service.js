@@ -485,13 +485,193 @@ const getAttendanceRate = async ({ institutionId, params = {} }) =>
     endpoint: 'attendance-rate',
     params,
     ttl: ttlMap.charts,
-    producer: async () => ({
-      rate: [
-        { day: 'Mon', rate: 94 },
-        { day: 'Tue', rate: 92 },
-      ],
-      chronicAbsentees: store.attendance.records.filter((record) => record.status === 'absent'),
-    }),
+    producer: async () => {
+      const today = new Date();
+      const recentDays = Array.from({ length: 7 }, (_, index) => {
+        const date = new Date(today);
+        date.setDate(today.getDate() - (6 - index));
+        return {
+          key: date.toISOString().slice(0, 10),
+          label: date.toLocaleDateString('en-US', { weekday: 'short' }),
+        };
+      });
+
+      if (databaseReady() && models.AttendanceSession) {
+        const records = await models.AttendanceRecord.findAll({
+          include: [
+            {
+              model: models.Student,
+              as: 'student',
+              required: true,
+              where: { institution_id: institutionId },
+              include: [{ model: models.Class, as: 'class', required: false, attributes: ['name'] }],
+              attributes: ['id'],
+            },
+            {
+              model: models.AttendanceSession,
+              as: 'session',
+              required: true,
+              attributes: ['date'],
+            },
+          ],
+          raw: false,
+        }).catch(() => []);
+
+        const dailyMap = new Map(
+          recentDays.map((item) => [item.key, { present: 0, total: 0 }])
+        );
+        const studentSummary = new Map();
+
+        records.forEach((record) => {
+          const dateKey = String(record.session?.date || '').slice(0, 10);
+          if (dailyMap.has(dateKey)) {
+            const entry = dailyMap.get(dateKey);
+            entry.total += 1;
+            if (record.status === 'present' || record.status === 'late') {
+              entry.present += 1;
+            }
+          }
+
+          const studentId = record.student_id;
+          const current = studentSummary.get(studentId) || {
+            id: studentId,
+            student:
+              `${record.student?.user?.first_name || ''} ${record.student?.user?.last_name || ''}`.trim() ||
+              `Student ${studentId}`,
+            className: record.student?.class?.name || 'Unassigned',
+            total: 0,
+            present: 0,
+            absent: 0,
+            consecutive: 0,
+          };
+          current.total += 1;
+          if (record.status === 'present' || record.status === 'late') {
+            current.present += 1;
+            current.consecutive = 0;
+          } else if (record.status === 'absent') {
+            current.absent += 1;
+            current.consecutive += 1;
+          }
+          studentSummary.set(studentId, current);
+        });
+
+        return {
+          rate: recentDays.map((item) => {
+            const entry = dailyMap.get(item.key);
+            return {
+              day: item.label,
+              rate: entry && entry.total ? Math.round((entry.present / entry.total) * 100) : 0,
+            };
+          }),
+          heatmap: recentDays.slice(-5).map((item) => ({
+            day: item.label,
+            slots: Array.from({ length: 6 }, (_, index) => {
+              const rateEntry = dailyMap.get(item.key);
+              if (!rateEntry || !rateEntry.total) {
+                return 0;
+              }
+              const ratio = rateEntry.present / rateEntry.total;
+              if (ratio >= 0.9) {
+                return index < 2 ? 0 : 1;
+              }
+              if (ratio >= 0.75) {
+                return index < 3 ? 1 : 2;
+              }
+              return index < 2 ? 2 : 3;
+            }),
+          })),
+          chronicAbsentees: Array.from(studentSummary.values())
+            .filter((item) => item.absent > 0)
+            .map((item) => ({
+              id: item.id,
+              student: item.student,
+              className: item.className,
+              attendance: item.total ? Math.round((item.present / item.total) * 100) : 0,
+              consecutive: item.consecutive,
+            }))
+            .sort((a, b) => a.attendance - b.attendance)
+            .slice(0, 10),
+        };
+      }
+
+      const records = store.attendance.records.filter((record) => record.institution_id === institutionId);
+      const studentMap = new Map(
+        store.students.profiles
+          .filter((item) => item.institution_id === institutionId)
+          .map((item) => [item.id, item])
+      );
+      const dailyMap = new Map(recentDays.map((item) => [item.key, { present: 0, total: 0 }]));
+      const summaryMap = new Map();
+
+      records.forEach((record) => {
+        const dateKey = String(record.date || record.marked_at || '').slice(0, 10);
+        if (dailyMap.has(dateKey)) {
+          const day = dailyMap.get(dateKey);
+          day.total += 1;
+          if (record.status === 'present' || record.status === 'late') {
+            day.present += 1;
+          }
+        }
+
+        const profile = studentMap.get(record.student_id) || {};
+        const current = summaryMap.get(record.student_id) || {
+          id: record.student_id,
+          student: record.student_name || profile.full_name || 'Student',
+          className: profile.class_name || 'Unassigned',
+          total: 0,
+          present: 0,
+          absent: 0,
+          consecutive: 0,
+        };
+        current.total += 1;
+        if (record.status === 'present' || record.status === 'late') {
+          current.present += 1;
+          current.consecutive = 0;
+        } else if (record.status === 'absent') {
+          current.absent += 1;
+          current.consecutive += 1;
+        }
+        summaryMap.set(record.student_id, current);
+      });
+
+      return {
+        rate: recentDays.map((item) => {
+          const entry = dailyMap.get(item.key);
+          return {
+            day: item.label,
+            rate: entry && entry.total ? Math.round((entry.present / entry.total) * 100) : 0,
+          };
+        }),
+        heatmap: recentDays.slice(-5).map((item) => ({
+          day: item.label,
+          slots: Array.from({ length: 6 }, (_, index) => {
+            const rateEntry = dailyMap.get(item.key);
+            if (!rateEntry || !rateEntry.total) {
+              return 0;
+            }
+            const ratio = rateEntry.present / rateEntry.total;
+            if (ratio >= 0.9) {
+              return index < 2 ? 0 : 1;
+            }
+            if (ratio >= 0.75) {
+              return index < 3 ? 1 : 2;
+            }
+            return index < 2 ? 2 : 3;
+          }),
+        })),
+        chronicAbsentees: Array.from(summaryMap.values())
+          .filter((item) => item.absent > 0)
+          .map((item) => ({
+            id: item.id,
+            student: item.student,
+            className: item.className,
+            attendance: item.total ? Math.round((item.present / item.total) * 100) : 0,
+            consecutive: item.consecutive,
+          }))
+          .sort((a, b) => a.attendance - b.attendance)
+          .slice(0, 10),
+      };
+    },
   });
 
 const getPerformance = async ({ institutionId, params = {} }) =>
@@ -500,13 +680,86 @@ const getPerformance = async ({ institutionId, params = {} }) =>
     endpoint: 'academics-performance',
     params,
     ttl: ttlMap.reports,
-    producer: async () => ({
-      averageGrades: [
-        { className: 'SH 2 Science', average: 78, benchmark: 74 },
-        { className: 'PR 5 Gold', average: 82, benchmark: 76 },
-      ],
-      publishedReports: store.academics.reportCards.filter((item) => item.is_published).length,
-    }),
+    producer: async () => {
+      if (databaseReady() && models.ReportCard) {
+        const reportCards = await models.ReportCard.findAll({
+          include: [
+            { model: models.Class, as: 'class', required: false, attributes: ['name'] },
+            {
+              model: models.Student,
+              as: 'student',
+              required: false,
+              where: { institution_id: institutionId },
+              include: [{ model: models.Class, as: 'class', required: false, attributes: ['name'] }],
+            },
+          ],
+        }).catch(() => []);
+
+        const classMap = new Map();
+        reportCards.forEach((item) => {
+          if (!item.student) {
+            return;
+          }
+          const className = item.class?.name || item.student?.class?.name || 'Unassigned';
+          const current = classMap.get(className) || { total: 0, sum: 0 };
+          current.total += 1;
+          current.sum += Number(item.overall_average || 0);
+          classMap.set(className, current);
+        });
+
+        return {
+          averageGrades: Array.from(classMap.entries()).map(([className, entry]) => ({
+            className,
+            average: entry.total ? Math.round(entry.sum / entry.total) : 0,
+            benchmark: 70,
+          })),
+          passRates: [],
+          atRisk: reportCards
+            .filter((item) => Number(item.overall_average || 0) > 0 && Number(item.overall_average || 0) < 50)
+            .map((item) => ({
+              id: item.student_id,
+              student:
+                `${item.student?.user?.first_name || ''} ${item.student?.user?.last_name || ''}`.trim() ||
+                item.student_id,
+              className: item.class?.name || item.student?.class?.name || 'Unassigned',
+              average: Math.round(Number(item.overall_average || 0)),
+              attendance: 0,
+              risk: 'high',
+            })),
+          publishedReports: reportCards.filter((item) => item.is_published).length,
+        };
+      }
+
+      const reportCards = store.academics.reportCards.filter((item) => item.institution_id === institutionId);
+      const classMap = new Map();
+      reportCards.forEach((item) => {
+        const className = item.class_name || 'Unassigned';
+        const current = classMap.get(className) || { total: 0, sum: 0 };
+        current.total += 1;
+        current.sum += Number(item.overall_average || 0);
+        classMap.set(className, current);
+      });
+
+      return {
+        averageGrades: Array.from(classMap.entries()).map(([className, entry]) => ({
+          className,
+          average: entry.total ? Math.round(entry.sum / entry.total) : 0,
+          benchmark: 70,
+        })),
+        passRates: [],
+        atRisk: reportCards
+          .filter((item) => Number(item.overall_average || 0) > 0 && Number(item.overall_average || 0) < 50)
+          .map((item) => ({
+            id: item.student_id,
+            student: item.student_name || item.student_id,
+            className: item.class_name || 'Unassigned',
+            average: Math.round(Number(item.overall_average || 0)),
+            attendance: 0,
+            risk: 'high',
+          })),
+        publishedReports: reportCards.filter((item) => item.is_published).length,
+      };
+    },
   });
 
 const getEnrollmentTrend = async ({ institutionId, params = {} }) =>
@@ -515,16 +768,77 @@ const getEnrollmentTrend = async ({ institutionId, params = {} }) =>
     endpoint: 'enrollment-trend',
     params,
     ttl: ttlMap.reports,
-    producer: async () => ({
-      trend: [
-        { month: 'Jan', enrolled: 110 },
-        { month: 'Feb', enrolled: 92 },
-      ],
-      levelDistribution: [
-        { name: 'PR', value: 1140 },
-        { name: 'SH', value: 840 },
-      ],
-    }),
+    producer: async () => {
+      const months = buildRecentMonthWindows(6);
+
+      if (databaseReady()) {
+        const students = await models.Student.findAll({
+          where: { institution_id: institutionId },
+          include: [
+            { model: models.EducationLevel, as: 'level', required: false, attributes: ['level_code'] },
+            { model: models.Class, as: 'class', required: false, attributes: ['name', 'capacity'] },
+          ],
+        }).catch(() => []);
+
+        return {
+          trend: months.map((month) => ({
+            month: month.month,
+            enrolled: students.filter((item) => {
+              const joinedAt = String(item.enrollment_date || item.createdAt || '');
+              return joinedAt >= month.start && joinedAt <= month.end;
+            }).length,
+          })),
+          levelDistribution: Array.from(
+            students.reduce((acc, item) => {
+              const level = item.level?.level_code || 'Other';
+              acc.set(level, (acc.get(level) || 0) + 1);
+              return acc;
+            }, new Map())
+          ).map(([name, value]) => ({ name, value })),
+          capacity: Array.from(
+            students.reduce((acc, item) => {
+              const key = item.class?.name || 'Unassigned';
+              const current = acc.get(key) || {
+                className: key,
+                capacity: Number(item.class?.capacity || 0),
+                enrolled: 0,
+              };
+              current.enrolled += 1;
+              current.capacity = Number(item.class?.capacity || current.capacity || 0);
+              acc.set(key, current);
+              return acc;
+            }, new Map())
+          ).map(([, value]) => value),
+        };
+      }
+
+      const students = store.students.profiles.filter((item) => item.institution_id === institutionId);
+      return {
+        trend: months.map((month) => ({
+          month: month.month,
+          enrolled: students.filter((item) => {
+            const joinedAt = String(item.created_at || item.enrollment_date || '');
+            return joinedAt >= month.start && joinedAt <= month.end;
+          }).length,
+        })),
+        levelDistribution: Array.from(
+          students.reduce((acc, item) => {
+            const level = item.level_code || 'Other';
+            acc.set(level, (acc.get(level) || 0) + 1);
+            return acc;
+          }, new Map())
+        ).map(([name, value]) => ({ name, value })),
+        capacity: Array.from(
+          students.reduce((acc, item) => {
+            const key = item.class_name || 'Unassigned';
+            const current = acc.get(key) || { className: key, capacity: 0, enrolled: 0 };
+            current.enrolled += 1;
+            acc.set(key, current);
+            return acc;
+          }, new Map())
+        ).map(([, value]) => value),
+      };
+    },
   });
 
 const getActiveAlerts = async ({ institutionId, params = {} }) =>
@@ -533,16 +847,48 @@ const getActiveAlerts = async ({ institutionId, params = {} }) =>
     endpoint: 'alerts-active',
     params,
     ttl: ttlMap.charts,
-    producer: async () => [
-      {
-        id: 'al-1',
-        type: 'Financial',
-        student: 'Elikem Mensah',
-        severity: 'warning',
-        date: '2026-06-20',
-        message: 'Outstanding balance remains unpaid.',
-      },
-    ],
+    producer: async () => {
+      const alerts = [];
+      const today = new Date().toISOString().slice(0, 10);
+
+      if (databaseReady() && models.StudentInvoice) {
+        const invoices = await models.StudentInvoice.findAll({
+          where: { institution_id: institutionId },
+          order: [['created_at', 'DESC']],
+          limit: 10,
+        }).catch(() => []);
+
+        invoices
+          .filter((item) => Number(item.balance || 0) > 0)
+          .forEach((item) => {
+            alerts.push({
+              id: `finance-${item.id}`,
+              type: 'Financial',
+              student: item.student_name || `Student ${item.student_id}`,
+              severity: 'warning',
+              date: String(item.due_date || item.created_at || today).slice(0, 10),
+              message: `Outstanding balance of ${formatNumber(item.balance)} remains unpaid.`,
+            });
+          });
+      } else {
+        store.finance.invoices
+          .filter(
+            (item) => item.institution_id === institutionId && Number(item.balance || 0) > 0
+          )
+          .forEach((item) => {
+            alerts.push({
+              id: `finance-${item.id}`,
+              type: 'Financial',
+              student: item.student_name || `Student ${item.student_id}`,
+              severity: 'warning',
+              date: String(item.due_date || today).slice(0, 10),
+              message: `Outstanding balance of ${formatNumber(item.balance)} remains unpaid.`,
+            });
+          });
+      }
+
+      return alerts.slice(0, 12);
+    },
   });
 
 const invalidateAnalyticsCache = async (institutionId) => {

@@ -97,6 +97,11 @@ interface TertiaryOverview {
     faculty_id: string;
     duration: string;
     calendar: string;
+    roadmap_group_ids?: string[];
+    roadmap?: {
+      level_count: number;
+      total_courses: number;
+    };
   }>;
 }
 
@@ -222,7 +227,6 @@ const StudentEnrollmentForm = () => {
   const groups: AcademicGroup[] = (structure?.groups || []).filter((item: AcademicGroup) =>
     activeLevelSet.includes(item.level_code as EducationLevelCode)
   );
-  const availableGroups = groups.filter((item: AcademicGroup) => item.level_code === values.level);
   const faculties: TertiaryOverview['faculties'] = useMemo(
     () => tertiaryOverview?.faculties || [],
     [tertiaryOverview?.faculties]
@@ -236,10 +240,19 @@ const StudentEnrollmentForm = () => {
       (!values.facultyId || item.faculty_id === values.facultyId) &&
       (!values.departmentId || item.department_id === values.departmentId)
   );
-  const selectedGroup = availableGroups.find((item: AcademicGroup) => item.id === values.groupId);
   const selectedProgram = programs.find(
     (item: TertiaryOverview['programs'][number]) => item.id === values.programId
   );
+  const availableGroups = groups.filter((item: AcademicGroup) => {
+    if (item.level_code !== values.level) {
+      return false;
+    }
+    if (values.level !== 'TR' || !selectedProgram?.roadmap_group_ids?.length) {
+      return true;
+    }
+    return selectedProgram.roadmap_group_ids.includes(item.id);
+  });
+  const selectedGroup = availableGroups.find((item: AcademicGroup) => item.id === values.groupId);
 
   useEffect(() => {
     window.localStorage.setItem(draftKey, JSON.stringify(values));
@@ -328,6 +341,12 @@ const StudentEnrollmentForm = () => {
       if (!values.qualification) {
         setValue('qualification', selectedProgramEntry.credential);
       }
+      if (
+        selectedProgramEntry.roadmap_group_ids?.length === 1 &&
+        values.groupId !== selectedProgramEntry.roadmap_group_ids[0]
+      ) {
+        setValue('groupId', selectedProgramEntry.roadmap_group_ids[0]);
+      }
       return;
     }
 
@@ -343,6 +362,7 @@ const StudentEnrollmentForm = () => {
     tertiaryOverview?.programs,
     values.departmentId,
     values.facultyId,
+      values.groupId,
     values.level,
     values.programId,
     values.qualification,
@@ -642,7 +662,7 @@ const StudentEnrollmentForm = () => {
                     <div className="xl:col-span-2">
                       <Alert
                         title="Program-linked enrollment"
-                        message={`${selectedProgram.name} automatically keeps faculty, department, and qualification aligned. Duration: ${selectedProgram.duration}. Calendar: ${selectedProgram.calendar}.`}
+                          message={`${selectedProgram.name} automatically keeps faculty, department, and qualification aligned. Duration: ${selectedProgram.duration}. Calendar: ${selectedProgram.calendar}. Roadmap: ${selectedProgram.roadmap?.level_count || selectedProgram.roadmap_group_ids?.length || 0} levels and ${selectedProgram.roadmap?.total_courses || 0} courses.`}
                         variant="info"
                       />
                     </div>

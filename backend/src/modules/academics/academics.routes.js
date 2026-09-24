@@ -28,6 +28,8 @@ router.delete('/periods/:id', controller.deleteAcademicPeriod);
 router.post('/offerings', controller.createAcademicOffering);
 router.put('/offerings/:id', controller.updateAcademicOffering);
 router.delete('/offerings/:id', controller.deleteAcademicOffering);
+router.get('/assessments', controller.listAssessments);
+router.get('/gradebook', controller.getGradebook);
 router.post('/scores', controller.saveScores);
 router.get('/report-cards', withCacheHeaders({ maxAge: 86400, immutable: true }), controller.getReportCards);
 router.put('/report-cards/:id/publish', reportGenerationRateLimiter, controller.publishReportCard);

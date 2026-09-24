@@ -22,15 +22,48 @@ interface TertiaryOverview {
   programs: Array<{
     id: string;
     name: string;
+    code?: string;
     credential: string;
     duration: string;
     calendar: string;
     faculty_id: string;
     department_id: string;
+    faculty?: string;
+    department?: string;
+    roadmap_group_ids?: string[];
+    roadmap?: {
+      level_count: number;
+      total_courses: number;
+      levels: Array<{
+        id: string;
+        name: string;
+        code: string;
+        periods: Array<{
+          id: string;
+          name: string;
+          status: string;
+          courses: Array<{
+            id: string;
+            code: string;
+            name: string;
+            credit_hours: number | null;
+          }>;
+        }>;
+      }>;
+    };
   }>;
   progression: string[];
   credentials: string[];
   id_format: string;
+}
+
+interface AcademicStructureResponse {
+  groups: Array<{
+    id: string;
+    name: string;
+    code: string;
+    level_code: string;
+  }>;
 }
 
 type TertiaryTab = 'faculties' | 'departments' | 'programs';
@@ -55,6 +88,7 @@ const TertiaryManagementPage = () => {
   const [activeTab, setActiveTab] = useState<TertiaryTab>('faculties');
   const [selectedFacultyId, setSelectedFacultyId] = useState('');
   const [selectedDepartmentId, setSelectedDepartmentId] = useState('');
+  const [selectedProgramId, setSelectedProgramId] = useState('');
   const [facultyModalOpen, setFacultyModalOpen] = useState(false);
   const [departmentModalOpen, setDepartmentModalOpen] = useState(false);
   const [programModalOpen, setProgramModalOpen] = useState(false);
@@ -67,17 +101,28 @@ const TertiaryManagementPage = () => {
     credential: 'Degree',
     duration: '4 years',
     calendar: 'semester',
+    roadmap_group_ids: [] as string[],
   });
   const { data, isLoading } = useQuery<TertiaryOverview>({
     queryKey: ['tertiary-overview', activeInstitutionId],
     queryFn: eduovaApi.tertiary.overview,
     enabled: Boolean(activeInstitutionId && isTertiaryInstitution(activeInstitution)),
   });
+  const { data: structure } = useQuery<AcademicStructureResponse>({
+    queryKey: ['academic-structure', 'tertiary-roadmap', activeInstitutionId],
+    queryFn: eduovaApi.academics.structure,
+    enabled: Boolean(activeInstitutionId && isTertiaryInstitution(activeInstitution)),
+  });
   const faculties = useMemo(() => data?.faculties || [], [data?.faculties]);
   const departments = useMemo(() => data?.departments || [], [data?.departments]);
   const programs = useMemo(() => data?.programs || [], [data?.programs]);
+  const roadmapGroups = useMemo(
+    () => ((structure?.groups || []) as AcademicStructureResponse['groups']).filter((item) => item.level_code === 'TR'),
+    [structure?.groups]
+  );
   const selectedFaculty = faculties.find((faculty: TertiaryOverview['faculties'][number]) => faculty.id === selectedFacultyId) || null;
   const selectedDepartment = departments.find((department: TertiaryOverview['departments'][number]) => department.id === selectedDepartmentId) || null;
+  const selectedProgram = programs.find((program: TertiaryOverview['programs'][number]) => program.id === selectedProgramId) || null;
   const facultyDepartments = useMemo(
     () => departments.filter((department: TertiaryOverview['departments'][number]) => department.faculty_id === selectedFacultyId),
     [departments, selectedFacultyId]
@@ -122,8 +167,10 @@ const TertiaryManagementPage = () => {
         credential: 'Degree',
         duration: '4 years',
         calendar: 'semester',
+        roadmap_group_ids: [],
       });
       setProgramModalOpen(false);
+      void refreshOverview();
       void refreshOverview();
     },
     onError: (error: unknown) => toast.error(resolveApiErrorMessage(error, 'Unable to create program.')),
@@ -331,11 +378,18 @@ const TertiaryManagementPage = () => {
                 </thead>
                 <tbody className="divide-y divide-slate-100 bg-white">
                   {programs.map((program: TertiaryOverview['programs'][number]) => (
-                    <tr key={program.id} className="hover:bg-slate-50">
+                    <tr
+                      key={program.id}
+                      className={`cursor-pointer hover:bg-slate-50 ${selectedProgramId === program.id ? 'bg-brand-navy/5' : ''}`}
+                      onClick={() => setSelectedProgramId(program.id)}
+                    >
                       <td className="px-4 py-3 font-semibold text-brand-navy">{program.name}</td>
                       <td className="px-4 py-3">{program.credential}</td>
                       <td className="px-4 py-3">{program.duration}</td>
-                      <td className="px-4 py-3 capitalize">{program.calendar}</td>
+                      <td className="px-4 py-3 capitalize">
+                        {program.calendar}
+                        {program.roadmap ? ` · ${program.roadmap.level_count} levels` : ''}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -398,28 +452,101 @@ const TertiaryManagementPage = () => {
             ) : null}
 
             {activeTab === 'programs' ? (
-              <div className="space-y-4">
-                <div>
-                  <p className="text-sm font-semibold text-brand-navy">Supported credentials</p>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {credentials.map((credential: string) => (
-                      <Badge key={credential} variant="info">
-                        {credential}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-                <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50 p-4">
-                  <p className="text-sm font-semibold text-brand-navy">Progression rules</p>
-                  <div className="mt-3 space-y-2">
-                    {(data?.progression || []).map((rule: string) => (
-                      <p key={rule} className="text-sm text-slate-500">
-                        {rule}
+              selectedProgram ? (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="font-semibold text-brand-navy">{selectedProgram.name}</p>
+                      <p className="text-sm text-slate-500">
+                        {[selectedProgram.faculty, selectedProgram.department].filter(Boolean).join(' · ')}
                       </p>
-                    ))}
+                    </div>
+                    <Badge variant="info">{selectedProgram.credential}</Badge>
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                      <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Duration</p>
+                      <p className="mt-2 font-semibold text-brand-navy">{selectedProgram.duration}</p>
+                    </div>
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                      <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Roadmap Coverage</p>
+                      <p className="mt-2 font-semibold text-brand-navy">
+                        {selectedProgram.roadmap?.level_count || 0} levels · {selectedProgram.roadmap?.total_courses || 0} courses
+                      </p>
+                    </div>
+                  </div>
+                  <div className="space-y-3">
+                    {selectedProgram.roadmap?.levels?.length ? (
+                      selectedProgram.roadmap.levels.map(
+                        (level: NonNullable<NonNullable<TertiaryOverview['programs'][number]['roadmap']>['levels']>[number]) => (
+                        <div key={level.id} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                          <div className="flex items-center justify-between gap-3">
+                            <div>
+                              <p className="font-medium text-brand-navy">{level.name}</p>
+                              <p className="text-sm text-slate-500">{level.code}</p>
+                            </div>
+                            <Badge variant="inactive">
+                              {level.periods.reduce((sum, period) => sum + period.courses.length, 0)} courses
+                            </Badge>
+                          </div>
+                          <div className="mt-3 space-y-2">
+                            {level.periods.map(
+                              (period: NonNullable<NonNullable<TertiaryOverview['programs'][number]['roadmap']>['levels']>[number]['periods'][number]) => (
+                              <div key={period.id} className="rounded-2xl bg-white px-3 py-2">
+                                <p className="text-sm font-semibold text-brand-navy">{period.name}</p>
+                                <p className="text-xs text-slate-500">
+                                  {period.courses
+                                    .map(
+                                      (
+                                        course: NonNullable<
+                                          NonNullable<
+                                            TertiaryOverview['programs'][number]['roadmap']
+                                          >['levels']
+                                        >[number]['periods'][number]['courses'][number]
+                                      ) => course.code
+                                    )
+                                    .join(', ') || 'No courses mapped'}
+                                </p>
+                              </div>
+                              )
+                            )}
+                          </div>
+                        </div>
+                        )
+                      )
+                    ) : (
+                      <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50 p-4">
+                        <p className="text-sm text-slate-600">
+                          Link tertiary levels from Academic Setup when creating the program so the roadmap continues from level to semester to course.
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </div>
-              </div>
+              ) : (
+                <div className="space-y-4">
+                  <div>
+                    <p className="text-sm font-semibold text-brand-navy">Supported credentials</p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {credentials.map((credential: string) => (
+                        <Badge key={credential} variant="info">
+                          {credential}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50 p-4">
+                    <p className="text-sm font-semibold text-brand-navy">Progression rules</p>
+                    <div className="mt-3 space-y-2">
+                      {(data?.progression || []).map((rule: string) => (
+                        <p key={rule} className="text-sm text-slate-500">
+                          {rule}
+                        </p>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )
             ) : null}
           </Card>
         </div>
@@ -501,6 +628,41 @@ const TertiaryManagementPage = () => {
             <option value="trimester">Trimester</option>
             <option value="block">Block</option>
           </Select>
+          <div className="space-y-2">
+            <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Roadmap Levels
+            </label>
+            <div className="max-h-48 space-y-2 overflow-y-auto rounded-2xl border border-slate-200 bg-slate-50 p-3">
+              {roadmapGroups.length ? (
+                roadmapGroups.map((group) => {
+                  const checked = programForm.roadmap_group_ids.includes(group.id);
+                  return (
+                    <label key={group.id} className="flex items-center gap-3 rounded-2xl bg-white px-3 py-2 text-sm text-slate-700">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(event) =>
+                          setProgramForm((current) => ({
+                            ...current,
+                            roadmap_group_ids: event.target.checked
+                              ? [...current.roadmap_group_ids, group.id]
+                              : current.roadmap_group_ids.filter((item) => item !== group.id),
+                          }))
+                        }
+                      />
+                      <span>
+                        {group.name} ({group.code})
+                      </span>
+                    </label>
+                  );
+                })
+              ) : (
+                <p className="text-sm text-slate-500">
+                  No tertiary levels exist yet. Create them in Academic Setup first.
+                </p>
+              )}
+            </div>
+          </div>
           <div className="flex justify-end gap-3">
             <Button type="button" variant="secondary" onClick={() => setProgramModalOpen(false)}>
               Cancel

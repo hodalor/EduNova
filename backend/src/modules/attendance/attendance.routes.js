@@ -19,6 +19,7 @@ router.use(
 
 router.post('/sessions/:sessionId/mark', controller.markAttendance);
 router.put('/sessions/:sessionId/close', controller.closeSession);
+router.get('/today', controller.getToday);
 router.get('/report', controller.getReport);
 
 module.exports = router;

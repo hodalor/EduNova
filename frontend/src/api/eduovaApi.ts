@@ -1,21 +1,15 @@
 import axios from 'axios';
 import axiosInstance, { authApi } from './axiosInstance';
-import {
-  analyticsData,
-  attendanceData,
-  superAdminData,
-  timetableData,
-} from '../utils/mockData';
 import type { LoginResponse } from '../types/auth';
 
-const wait = (ms = 250) => new Promise((resolve) => window.setTimeout(resolve, ms));
-
-async function safeRequest<T>(request: () => Promise<T>, fallback: T): Promise<T> {
+async function requestOrDefault<T>(request: () => Promise<T>, fallback: T): Promise<T> {
   try {
     return await request();
-  } catch (_error) {
-    await wait();
-    return fallback;
+  } catch (error) {
+    if (axios.isAxiosError(error) && [404, 501].includes(error.response?.status || 0)) {
+      return fallback;
+    }
+    throw error;
   }
 }
 
@@ -26,69 +20,6 @@ const asNumber = (value: unknown): number => Number(value) || 0;
 
 const asString = (value: unknown, fallback = ''): string =>
   typeof value === 'string' && value.trim() ? value : fallback;
-
-const fallbackDashboardOverview = {
-  stats: [
-    {
-      id: 'students',
-      label: 'Total Students',
-      value: '492',
-      icon: 'Users',
-      trend: { value: 0, direction: 'up', label: 'Current total' },
-    },
-    {
-      id: 'collection',
-      label: 'Fee Collection Rate',
-      value: '84%',
-      icon: 'Wallet',
-      trend: { value: 0, direction: 'up', label: 'Current total' },
-    },
-    {
-      id: 'attendance',
-      label: "Today's Attendance",
-      value: '91%',
-      icon: 'ClipboardCheck',
-      trend: { value: 0, direction: 'up', label: 'Current total' },
-    },
-    {
-      id: 'staff',
-      label: 'Active Staff',
-      value: '38',
-      icon: 'Briefcase',
-      trend: { value: 0, direction: 'up', label: 'Current total' },
-    },
-  ],
-  revenueTrend: analyticsData.finance.revenueByMonth.map((entry) => ({
-    name: entry.month,
-    revenue: entry.revenue,
-    billed: entry.target,
-  })),
-  enrollmentByLevel: analyticsData.enrollment.levelDistribution.map((entry) => ({
-    level: entry.name,
-    count: entry.value,
-  })),
-  recentPayments: [
-    {
-      id: 'fallback-payment-1',
-      student: 'Elikem Mensah',
-      className: 'Level 100',
-      amount: 1800,
-      method: 'Mobile Money',
-      receivedAt: '2026-06-18',
-      status: 'verified',
-    },
-    {
-      id: 'fallback-payment-2',
-      student: 'Ama Tetteh',
-      className: 'PR 5 Gold',
-      amount: 950,
-      method: 'Bank',
-      receivedAt: '2026-06-14',
-      status: 'verified',
-    },
-  ],
-  alerts: analyticsData.alerts,
-};
 
 const normalizeDashboardOverview = (payload: unknown) => {
   const raw = asRecord(payload);
@@ -200,11 +131,8 @@ export const eduovaApi = {
     },
   },
   analytics: {
-    getOverview: () =>
-      safeRequest(
-        async () => normalizeDashboardOverview((await axiosInstance.get('/analytics/overview')).data.data),
-        normalizeDashboardOverview(fallbackDashboardOverview)
-      ),
+    getOverview: async () =>
+      normalizeDashboardOverview((await axiosInstance.get('/analytics/overview')).data.data),
     getFinance: async () => {
       try {
         const response = await axiosInstance.get('/analytics/finance/revenue');
@@ -213,14 +141,10 @@ export const eduovaApi = {
         throw error;
       }
     },
-    getAcademics: () =>
-      safeRequest(async () => (await axiosInstance.get('/analytics/academics/performance')).data.data, analyticsData.academics),
-    getAttendance: () =>
-      safeRequest(async () => (await axiosInstance.get('/analytics/attendance/rate')).data.data, analyticsData.attendance),
-    getEnrollment: () =>
-      safeRequest(async () => (await axiosInstance.get('/analytics/enrollment-trend')).data.data, analyticsData.enrollment),
-    getAlerts: () =>
-      safeRequest(async () => (await axiosInstance.get('/analytics/alerts/active')).data.data, analyticsData.alerts),
+    getAcademics: async () => (await axiosInstance.get('/analytics/academics/performance')).data.data,
+    getAttendance: async () => (await axiosInstance.get('/analytics/attendance/rate')).data.data,
+    getEnrollment: async () => (await axiosInstance.get('/analytics/enrollment-trend')).data.data,
+    getAlerts: async () => (await axiosInstance.get('/analytics/alerts/active')).data.data,
   },
   students: {
     list: async () => {
@@ -289,24 +213,36 @@ export const eduovaApi = {
     structure: async () => (await axiosInstance.get('/v1/academics/structure')).data.data,
     createGroup: async (payload: Record<string, unknown>) =>
       (await axiosInstance.post('/v1/academics/groups', payload)).data.data,
+    updateGroup: async (id: string, payload: Record<string, unknown>) =>
+      (await axiosInstance.put(`/v1/academics/groups/${id}`, payload)).data.data,
+    deleteGroup: async (id: string) =>
+      (await axiosInstance.delete(`/v1/academics/groups/${id}`)).data.data,
     createPeriod: async (payload: Record<string, unknown>) =>
       (await axiosInstance.post('/v1/academics/periods', payload)).data.data,
+    updatePeriod: async (id: string, payload: Record<string, unknown>) =>
+      (await axiosInstance.put(`/v1/academics/periods/${id}`, payload)).data.data,
+    deletePeriod: async (id: string) =>
+      (await axiosInstance.delete(`/v1/academics/periods/${id}`)).data.data,
     createOffering: async (payload: Record<string, unknown>) =>
       (await axiosInstance.post('/v1/academics/offerings', payload)).data.data,
+    updateOffering: async (id: string, payload: Record<string, unknown>) =>
+      (await axiosInstance.put(`/v1/academics/offerings/${id}`, payload)).data.data,
+    deleteOffering: async (id: string) =>
+      (await axiosInstance.delete(`/v1/academics/offerings/${id}`)).data.data,
+    saveScores: async (payload: Record<string, unknown>) =>
+      (await axiosInstance.post('/v1/academics/scores', payload)).data.data,
     assessments: async () => (await axiosInstance.get('/v1/academics/assessments')).data.data,
     reportCards: async () => (await axiosInstance.get('/v1/academics/report-cards')).data.data,
     gradebook: async () => (await axiosInstance.get('/v1/academics/gradebook')).data.data,
   },
   attendance: {
-    taking: () =>
-      safeRequest(async () => (await axiosInstance.get('/attendance/today')).data.data, attendanceData.taking),
-    report: () =>
-      safeRequest(async () => (await axiosInstance.get('/attendance/report')).data.data, attendanceData.report),
+    taking: () => requestOrDefault(async () => (await axiosInstance.get('/attendance/today')).data.data, []),
+    report: async () => (await axiosInstance.get('/attendance/report')).data.data,
   },
   timetable: {
-    grid: () => safeRequest(async () => (await axiosInstance.get('/timetable')).data.data, timetableData.grid),
+    grid: async () => (await axiosInstance.get('/timetable')).data.data,
     subjects: () =>
-      safeRequest(async () => (await axiosInstance.get('/timetable/config')).data.data, timetableData.subjects),
+      requestOrDefault(async () => (await axiosInstance.get('/timetable/config')).data.data, []),
   },
   daycare: {
     overview: async () => (await axiosInstance.get('/v1/daycare/present-now')).data.data,
@@ -364,20 +300,16 @@ export const eduovaApi = {
       (await axiosInstance.put(`/super-admin/institutions/${id}/suspend`)).data.data,
     extendTrial: async (id: string, days = 14) =>
       (await axiosInstance.post(`/super-admin/institutions/${id}/trial`, { days })).data.data,
-    analytics: () =>
-      safeRequest(
-        async () => (await axiosInstance.get('/super-admin/analytics')).data.data,
-        superAdminData.analytics
-      ),
+    analytics: async () => (await axiosInstance.get('/super-admin/analytics')).data.data,
     auditLogs: (filters?: { action?: string; resource_type?: string }) =>
-      safeRequest(
+      requestOrDefault(
         async () =>
           (
             await axiosInstance.get('/super-admin/audit-logs', {
               params: filters,
             })
           ).data.data,
-        superAdminData.auditLogs
+        []
       ),
   },
 };

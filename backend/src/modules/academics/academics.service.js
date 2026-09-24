@@ -148,6 +148,76 @@ const listAcademicStructure = async (context) => {
   return listAcademicStructureFromRuntime(context);
 };
 
+const buildAssessmentRows = ({ groups, periods, offerings }) => {
+  const groupMap = new Map(groups.map((item) => [item.id, item]));
+  const periodMap = new Map(periods.map((item) => [item.id, item]));
+
+  return offerings
+    .map((offering) => {
+      const group = groupMap.get(offering.group_id);
+      const period = periodMap.get(offering.period_id);
+      if (!group || !period) {
+        return null;
+      }
+
+      return {
+        id: `${offering.id}-default`,
+        className: group.name,
+        subject: offering.name,
+        term: period.name,
+        assessment: group.level_code === 'TR' ? 'Coursework' : 'Midterm',
+        max_score: 100,
+        class_id: group.id,
+        subject_id: offering.subject_id || offering.id,
+        level_code: group.level_code,
+      };
+    })
+    .filter(Boolean);
+};
+
+const listAssessments = async ({ institutionId }) => {
+  const structure = await listAcademicStructure({ institutionId });
+  const activePeriods = structure.periods.filter(
+    (item) => item.status === 'active' || item.registration_open
+  );
+  const activePeriodIds = new Set(activePeriods.map((item) => item.id));
+  const scopedOfferings = structure.offerings.filter(
+    (item) => activePeriodIds.size === 0 || activePeriodIds.has(item.period_id)
+  );
+
+  return buildAssessmentRows({
+    groups: structure.groups,
+    periods: activePeriods.length ? activePeriods : structure.periods,
+    offerings: scopedOfferings,
+  });
+};
+
+const getGradebook = async ({ institutionId }) => {
+  const students = store.students.profiles.filter((item) => item.institution_id === institutionId);
+  const scoreRows = store.academics.scores.filter((item) => item.institution_id === institutionId);
+
+  return students.map((student) => {
+    const studentScores = scoreRows.filter((item) => item.student_id === student.id);
+    const orderedScores = studentScores
+      .slice()
+      .sort((a, b) => String(a.assessment_name).localeCompare(String(b.assessment_name)));
+    const quiz = Number(orderedScores[0]?.score || 0);
+    const assignment = Number(orderedScores[1]?.score || 0);
+    const exam = Number(orderedScores[2]?.score || 0);
+    const populated = [quiz, assignment, exam].filter((item) => item > 0);
+
+    return {
+      student: student.full_name || `${student.first_name || ''} ${student.last_name || ''}`.trim(),
+      quiz,
+      assignment,
+      exam,
+      final: populated.length
+        ? Math.round(populated.reduce((sum, item) => sum + item, 0) / populated.length)
+        : 0,
+    };
+  });
+};
+
 const createAcademicGroupFromDatabase = async ({ institutionId, userId, payload, ip }) => {
   const transaction = await sequelize.transaction();
 
@@ -1269,6 +1339,8 @@ module.exports = {
   createAcademicOffering,
   updateAcademicOffering,
   deleteAcademicOffering,
+  listAssessments,
+  getGradebook,
   calculateGrade,
   saveScores,
   publishReportCard,

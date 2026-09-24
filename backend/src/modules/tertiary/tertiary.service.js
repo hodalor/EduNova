@@ -38,6 +38,53 @@ const getAcademicStructureFromSettings = (settings) => {
   return { groups, periods, offerings };
 };
 
+const sortBySequence = (items = []) =>
+  items.slice().sort((a, b) => {
+    const sequenceDiff = Number(a.sequence || 0) - Number(b.sequence || 0);
+    if (sequenceDiff !== 0) {
+      return sequenceDiff;
+    }
+    return String(a.name || '').localeCompare(String(b.name || ''));
+  });
+
+const buildProgramRoadmap = ({ program, settings }) => {
+  const { groups, periods, offerings } = getAcademicStructureFromSettings(settings);
+  const roadmapGroupIds = program.roadmap_group_ids || [];
+  const scopedGroups = sortBySequence(
+    groups.filter((item) => roadmapGroupIds.includes(item.id))
+  );
+  const scopedGroupIds = new Set(scopedGroups.map((item) => item.id));
+
+  return {
+    level_count: scopedGroups.length,
+    total_courses: offerings.filter((item) => scopedGroupIds.has(item.group_id)).length,
+    levels: scopedGroups.map((group) => {
+      const levelPeriods = sortBySequence(periods.filter((item) => item.group_id === group.id));
+      return {
+        id: group.id,
+        name: group.name,
+        code: group.code,
+        periods: levelPeriods.map((period) => ({
+          id: period.id,
+          name: period.name,
+          sequence: Number(period.sequence || 0),
+          status: period.status || 'planned',
+          courses: offerings
+            .filter((item) => item.group_id === group.id && item.period_id === period.id)
+            .map((offering) => ({
+              id: offering.id,
+              code: offering.code,
+              name: offering.name,
+              credit_hours: offering.credit_hours ?? null,
+              is_core: offering.is_core !== false,
+              prerequisite_codes: offering.prerequisite_codes || [],
+            })),
+        })),
+      };
+    }),
+  };
+};
+
 const getOverviewFromDatabase = async ({ institutionId }) => {
   const institution = await models.Institution.findByPk(institutionId);
   if (!institution) {
@@ -48,7 +95,11 @@ const getOverviewFromDatabase = async ({ institutionId }) => {
   return {
     faculties: settings.tertiary.faculties,
     departments: settings.tertiary.departments,
-    programs: settings.tertiary.programs,
+    programs: settings.tertiary.programs.map((program) => ({
+      ...program,
+      roadmap_group_ids: program.roadmap_group_ids || [],
+      roadmap: buildProgramRoadmap({ program, settings }),
+    })),
     progression: settings.tertiary.progression,
     credentials: settings.tertiary.credentials,
     id_format: settings.tertiary.id_format,
@@ -56,9 +107,19 @@ const getOverviewFromDatabase = async ({ institutionId }) => {
 };
 
 const getOverviewFromRuntime = async ({ institutionId }) => ({
-  faculties: [],
+  faculties: (store.tertiary.faculties || []).filter((item) => item.institution_id === institutionId),
   departments: store.tertiary.departments.filter((item) => item.institution_id === institutionId),
-  programs: store.tertiary.programs.filter((item) => item.institution_id === institutionId),
+  programs: store.tertiary.programs
+    .filter((item) => item.institution_id === institutionId)
+    .map((program) => ({
+      ...program,
+      roadmap_group_ids: program.roadmap_group_ids || [],
+      roadmap: {
+        level_count: 0,
+        total_courses: 0,
+        levels: [],
+      },
+    })),
   progression: [
     'Students register only for their current semester roadmap.',
     'Outstanding resits block forward registration until cleared.',
@@ -119,11 +180,17 @@ const updateTertiaryCollection = async ({
 const createFaculty = async ({ institutionId, payload, userId, ip }) => {
   if (!databaseReady()) {
     const faculty = {
-      id: `fac-${store.tertiary.departments.length + 1}`,
+      id: `fac-${(store.tertiary.faculties || []).length + 1}`,
       institution_id: institutionId,
       name: payload.name,
+      code: String(payload.code || payload.name || '')
+        .trim()
+        .toUpperCase()
+        .replace(/\s+/g, '-'),
       dean: payload.dean || null,
     };
+    store.tertiary.faculties = store.tertiary.faculties || [];
+    store.tertiary.faculties.push(faculty);
     return faculty;
   }
 
@@ -161,7 +228,14 @@ const createDepartment = async ({ institutionId, payload, userId, ip }) => {
     const department = {
       id: `dep-${store.tertiary.departments.length + 1}`,
       institution_id: institutionId,
+      faculty_id: payload.faculty_id || null,
+      faculty:
+        (store.tertiary.faculties || []).find((item) => item.id === payload.faculty_id)?.name || '',
       name: payload.name,
+      code: String(payload.code || payload.name || '')
+        .trim()
+        .toUpperCase()
+        .replace(/\s+/g, '-'),
     };
     store.tertiary.departments.push(department);
 
@@ -208,11 +282,20 @@ const createDepartment = async ({ institutionId, payload, userId, ip }) => {
 
 const createProgram = async ({ institutionId, payload, userId, ip }) => {
   if (!databaseReady()) {
+    const department = store.tertiary.departments.find((item) => item.id === payload.department_id);
     const program = {
       id: `prog-${store.tertiary.programs.length + 1}`,
       institution_id: institutionId,
       name: payload.name,
+      faculty_id: department?.faculty_id || null,
+      department_id: payload.department_id || null,
+      faculty: department?.faculty || '',
+      department: department?.name || '',
+      credential: payload.credential || payload.type || 'Degree',
+      duration: payload.duration || '4 years',
+      calendar: payload.calendar || 'semester',
       type: payload.type || 'degree',
+      roadmap_group_ids: payload.roadmap_group_ids || payload.group_ids || [],
     };
     store.tertiary.programs.push(program);
     return program;
@@ -231,6 +314,11 @@ const createProgram = async ({ institutionId, payload, userId, ip }) => {
       if (!department) {
         throw Object.assign(new Error('Department not found for this program.'), { statusCode: 404 });
       }
+      const availableGroups = (settings.academics?.groups || []).filter((item) => item.level_code === 'TR');
+      const availableGroupIds = new Set(availableGroups.map((item) => item.id));
+      const roadmapGroupIds = (payload.roadmap_group_ids || payload.group_ids || []).filter((item) =>
+        availableGroupIds.has(item)
+      );
 
       return {
         id: payload.id || crypto.randomUUID(),
@@ -248,6 +336,7 @@ const createProgram = async ({ institutionId, payload, userId, ip }) => {
         duration: payload.duration || '4 years',
         calendar: payload.calendar || 'semester',
         type: payload.type || 'degree',
+        roadmap_group_ids: roadmapGroupIds,
       };
     },
   });
