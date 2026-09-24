@@ -43,20 +43,16 @@ const sortBySequence = (items = []) =>
     return String(a.name || '').localeCompare(String(b.name || ''));
   });
 
-const buildProgramRoadmap = ({ program, settings }) => {
-  if (!program) {
-    return null;
-  }
-
+const buildRoadmapFromGroupIds = ({ settings, groupIds = [] }) => {
   const groups = (settings.academics?.groups || []).filter((item) => item.level_code === 'TR');
   const periods = settings.academics?.periods || [];
   const offerings = settings.academics?.offerings || [];
-  const roadmapGroupIds = program.roadmap_group_ids || [];
-  const scopedGroups = sortBySequence(groups.filter((item) => roadmapGroupIds.includes(item.id)));
+  const scopedGroupIds = groupIds.filter(Boolean);
+  const scopedGroups = sortBySequence(groups.filter((item) => scopedGroupIds.includes(item.id)));
 
   return {
     level_count: scopedGroups.length,
-    total_courses: offerings.filter((item) => roadmapGroupIds.includes(item.group_id)).length,
+    total_courses: offerings.filter((item) => scopedGroupIds.includes(item.group_id)).length,
     levels: scopedGroups.map((group) => ({
       id: group.id,
       name: group.name,
@@ -90,10 +86,25 @@ const buildStudentTertiaryProfile = ({ settings, profile, studentId }) => {
   const faculty = (settings.tertiary?.faculties || []).find((item) => item.id === facultyId) || null;
   const department = (settings.tertiary?.departments || []).find((item) => item.id === departmentId) || null;
   const program = (settings.tertiary?.programs || []).find((item) => item.id === programId) || null;
-  const roadmap = buildProgramRoadmap({ program, settings });
-  const currentLevel = roadmap?.levels?.find((item) => item.id === progress?.current_group_id) || null;
+  const currentGroupId = progress?.current_group_id || profile?.group_id || null;
+  const currentPeriodId = progress?.current_period_id || null;
+  const currentGroup =
+    (settings.academics?.groups || []).find((item) => item.id === currentGroupId) || null;
   const currentPeriod =
-    currentLevel?.periods?.find((item) => item.id === progress?.current_period_id) || null;
+    (settings.academics?.periods || []).find((item) => item.id === currentPeriodId) || null;
+  const roadmapGroupIds = Array.from(
+    new Set([...(program?.roadmap_group_ids || []), ...(currentGroupId ? [currentGroupId] : [])])
+  );
+  const roadmap = buildRoadmapFromGroupIds({ settings, groupIds: roadmapGroupIds });
+  const currentLevel =
+    roadmap?.levels?.find((item) => item.id === currentGroupId) ||
+    (currentGroup
+      ? {
+          id: currentGroup.id,
+          name: currentGroup.name,
+          code: currentGroup.code,
+        }
+      : null);
 
   if (!faculty && !department && !program && !roadmap && !progress) {
     return null;
@@ -122,7 +133,7 @@ const buildStudentTertiaryProfile = ({ settings, profile, studentId }) => {
       ? {
           id: currentPeriod.id,
           name: currentPeriod.name,
-          status: currentPeriod.status,
+          status: currentPeriod.status || 'planned',
         }
       : null,
     roadmap,

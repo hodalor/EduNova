@@ -70,6 +70,8 @@ const StudentDetailPage = () => {
     0
   );
   const tertiaryRoadmap = data.tertiary?.roadmap || null;
+  const currentLevelId = data.tertiary?.current_level?.id || null;
+  const currentPeriodId = data.tertiary?.current_period?.id || null;
   const presentDays = data.attendanceCalendar.filter((item: StudentDetail['attendanceCalendar'][number]) => item.value > 0).length;
   const absentDays = data.attendanceCalendar.filter((item: StudentDetail['attendanceCalendar'][number]) => item.value <= 0).length;
   const attendanceRate = presentDays + absentDays > 0 ? Math.round((presentDays / (presentDays + absentDays)) * 100) : 0;
@@ -149,6 +151,7 @@ const StudentDetailPage = () => {
         <TabsList>
           <TabsTrigger value="profile">Profile</TabsTrigger>
           <TabsTrigger value="academic">Academic</TabsTrigger>
+          <TabsTrigger value="roadmap">Road Map</TabsTrigger>
           <TabsTrigger value="attendance">Attendance</TabsTrigger>
           <TabsTrigger value="finance">Finance</TabsTrigger>
           <TabsTrigger value="discipline">Discipline</TabsTrigger>
@@ -269,19 +272,28 @@ const StudentDetailPage = () => {
               </Card>
             </div>
 
-            {tertiaryRoadmap ? (
+          </div>
+        </TabsContent>
+
+        <TabsContent value="roadmap">
+          {tertiaryRoadmap ? (
+            <div className="space-y-6">
               <Card
-                title="Graduation Roadmap"
-                description="Program levels, semesters, and courses linked to this student's current program."
+                title="Program Road Map"
+                description="Follow the student's faculty, department, program, levels, semesters, and courses to graduation."
               >
-                <div className="grid gap-4 md:grid-cols-4">
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+                  <div className="rounded-2xl bg-slate-50 p-4">
+                    <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Faculty</p>
+                    <p className="mt-2 font-semibold text-brand-navy">{data.tertiary?.faculty_name || 'Not set'}</p>
+                  </div>
+                  <div className="rounded-2xl bg-slate-50 p-4">
+                    <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Department</p>
+                    <p className="mt-2 font-semibold text-brand-navy">{data.tertiary?.department_name || 'Not set'}</p>
+                  </div>
                   <div className="rounded-2xl bg-slate-50 p-4">
                     <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Program</p>
                     <p className="mt-2 font-semibold text-brand-navy">{data.tertiary?.program_name || 'Not assigned'}</p>
-                  </div>
-                  <div className="rounded-2xl bg-slate-50 p-4">
-                    <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Credential</p>
-                    <p className="mt-2 font-semibold text-brand-navy">{data.tertiary?.credential || 'Not set'}</p>
                   </div>
                   <div className="rounded-2xl bg-slate-50 p-4">
                     <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Current Level</p>
@@ -292,78 +304,125 @@ const StudentDetailPage = () => {
                     <p className="mt-2 font-semibold text-brand-navy">{data.tertiary?.current_period?.name || 'Not set'}</p>
                   </div>
                 </div>
+              </Card>
 
-                <div className="mt-6 space-y-4">
+              <Card
+                title="Levels And Courses"
+                description="Each level shows its semesters and the courses the student is expected to complete."
+              >
+                <div className="space-y-4">
                   {tertiaryRoadmap.levels.map(
                     (
                       level: NonNullable<
                         NonNullable<NonNullable<StudentDetail['tertiary']>['roadmap']>['levels']
                       >[number]
-                    ) => (
-                    <div key={level.id} className="rounded-3xl border border-slate-200 p-4">
-                      <div className="flex flex-wrap items-center justify-between gap-3">
-                        <div>
-                          <p className="font-semibold text-brand-navy">{level.name}</p>
-                          <p className="text-sm text-slate-500">{level.code}</p>
-                        </div>
-                        <Badge variant="info">
-                          {level.periods.reduce((sum, period) => sum + period.courses.length, 0)} courses
-                        </Badge>
-                      </div>
-                      <div className="mt-4 grid gap-4 xl:grid-cols-2">
-                        {level.periods.map(
-                          (
-                            period: NonNullable<
-                              NonNullable<
-                                NonNullable<NonNullable<StudentDetail['tertiary']>['roadmap']>['levels']
-                              >[number]['periods']
-                            >[number]
-                          ) => (
-                          <div key={period.id} className="rounded-2xl bg-slate-50 p-4">
-                            <div className="flex items-center justify-between gap-3">
-                              <p className="font-semibold text-brand-navy">{period.name}</p>
-                              <span className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
-                                {period.status}
-                              </span>
+                    ) => {
+                      const isCurrentLevel = currentLevelId === level.id;
+
+                      return (
+                      <div
+                        key={level.id}
+                        className={`rounded-3xl border p-4 ${
+                          isCurrentLevel
+                            ? 'border-brand-navy bg-brand-navy/[0.03]'
+                            : 'border-slate-200'
+                        }`}
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="font-semibold text-brand-navy">{level.name}</p>
+                              {isCurrentLevel ? <Badge variant="active">Current level</Badge> : null}
                             </div>
-                            <div className="mt-3 space-y-2">
-                              {period.courses.length ? (
-                                period.courses.map(
-                                  (
-                                    course: NonNullable<
-                                      NonNullable<
-                                        NonNullable<
-                                          NonNullable<
-                                            NonNullable<StudentDetail['tertiary']>['roadmap']
-                                          >['levels']
-                                        >[number]['periods']
-                                      >[number]['courses']
-                                    >[number]
-                                  ) => (
-                                  <div key={course.id} className="rounded-2xl border border-slate-200 bg-white px-3 py-2">
-                                    <p className="text-sm font-semibold text-brand-navy">{course.name}</p>
-                                    <p className="text-xs text-slate-500">
-                                      {course.code}
-                                      {course.credit_hours ? ` · ${course.credit_hours} credits` : ''}
-                                    </p>
-                                  </div>
-                                  )
-                                )
-                              ) : (
-                                <p className="text-sm text-slate-500">No courses mapped yet for this semester.</p>
-                              )}
-                            </div>
+                            <p className="text-sm text-slate-500">{level.code}</p>
                           </div>
-                          )
-                        )}
+                          <Badge variant="info">
+                            {level.periods.reduce((sum, period) => sum + period.courses.length, 0)} courses
+                          </Badge>
+                        </div>
+
+                        <div className="mt-4 grid gap-4 xl:grid-cols-2">
+                          {level.periods.map(
+                            (
+                              period: NonNullable<
+                                NonNullable<
+                                  NonNullable<NonNullable<StudentDetail['tertiary']>['roadmap']>['levels']
+                                >[number]['periods']
+                              >[number]
+                            ) => {
+                              const isCurrentPeriod = currentPeriodId === period.id;
+
+                              return (
+                              <div
+                                key={period.id}
+                                className={`rounded-2xl p-4 ${
+                                  isCurrentPeriod
+                                    ? 'border border-brand-navy bg-white shadow-sm'
+                                    : 'bg-slate-50'
+                                }`}
+                              >
+                                <div className="flex items-center justify-between gap-3">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <p className="font-semibold text-brand-navy">{period.name}</p>
+                                    {isCurrentPeriod ? (
+                                      <Badge variant="active">Current semester</Badge>
+                                    ) : null}
+                                  </div>
+                                  <span className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
+                                    {period.status}
+                                  </span>
+                                </div>
+
+                                <div className="mt-3 space-y-2">
+                                  {period.courses.length ? (
+                                    period.courses.map(
+                                      (
+                                        course: NonNullable<
+                                          NonNullable<
+                                            NonNullable<
+                                              NonNullable<
+                                                NonNullable<StudentDetail['tertiary']>['roadmap']
+                                              >['levels']
+                                            >[number]['periods']
+                                          >[number]['courses']
+                                        >[number]
+                                      ) => (
+                                        <div
+                                          key={course.id}
+                                          className="rounded-2xl border border-slate-200 bg-white px-3 py-2"
+                                        >
+                                          <p className="text-sm font-semibold text-brand-navy">{course.name}</p>
+                                          <p className="text-xs text-slate-500">
+                                            {course.code}
+                                            {course.credit_hours ? ` · ${course.credit_hours} credits` : ''}
+                                          </p>
+                                        </div>
+                                      )
+                                    )
+                                  ) : (
+                                    <p className="text-sm text-slate-500">
+                                      No courses mapped yet for this semester.
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                              );
+                            }
+                          )}
+                        </div>
                       </div>
-                    </div>
-                    )
+                      );
+                    }
                   )}
                 </div>
               </Card>
-            ) : null}
-          </div>
+            </div>
+          ) : (
+            <EmptyState
+              title="No road map available yet"
+              message="This student does not have a tertiary program roadmap linked yet."
+            />
+          )}
         </TabsContent>
 
         <TabsContent value="attendance">

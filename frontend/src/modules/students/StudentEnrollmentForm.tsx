@@ -88,6 +88,7 @@ interface AcademicStructureResponse {
 interface TertiaryOverview {
   faculties: Array<{ id: string; name: string; code: string }>;
   departments: Array<{ id: string; name: string; code: string; faculty_id: string }>;
+  credentials: string[];
   programs: Array<{
     id: string;
     name: string;
@@ -235,6 +236,7 @@ const StudentEnrollmentForm = () => {
     (item: TertiaryOverview['departments'][number]) =>
       !values.facultyId || item.faculty_id === values.facultyId
   );
+  const qualifications = tertiaryOverview?.credentials || [];
   const programs: TertiaryOverview['programs'] = (tertiaryOverview?.programs || []).filter(
     (item: TertiaryOverview['programs'][number]) =>
       (!values.facultyId || item.faculty_id === values.facultyId) &&
@@ -403,7 +405,9 @@ const StudentEnrollmentForm = () => {
       ['level'],
       ['firstName', 'lastName', 'email', 'dateOfBirth'],
       ['guardianName', 'guardianPhone'],
-      [],
+      values.level === 'TR'
+        ? ['facultyId', 'departmentId', 'programId', 'qualification']
+        : [],
       ['groupId', 'feePlan'],
       [],
     ];
@@ -416,35 +420,60 @@ const StudentEnrollmentForm = () => {
 
   const previousStep = () => setStep((current) => Math.max(current - 1, 0));
 
-  const onSubmit = handleSubmit(async (payload) => {
-    try {
-      await createStudent.mutateAsync({
-        level_code: payload.level,
-        first_name: payload.firstName,
-        last_name: payload.lastName,
-        email: payload.email || undefined,
-        date_of_birth: payload.dateOfBirth,
-        guardian_name: payload.guardianName,
-        guardian_phone: payload.guardianPhone,
-        parent_link: payload.parentLink || undefined,
-        medical_notes: payload.medicalNotes || undefined,
-        dietary_restrictions: payload.dietaryRestrictions || undefined,
-        pickup_persons: payload.pickupPersons || undefined,
-        previous_school: payload.previousSchool || undefined,
-        previous_results: payload.previousResults || undefined,
-        qualification: payload.qualification || undefined,
-        faculty_id: payload.facultyId || undefined,
-        department_id: payload.departmentId || undefined,
-        program_id: payload.programId || undefined,
-        group_id: payload.groupId,
-        fee_plan: payload.feePlan,
-      });
-      window.localStorage.removeItem(draftKey);
-      navigate('/students');
-    } catch (_error) {
-      // The mutation already shows a toast; keep the form open for correction/retry.
+  const onSubmit = handleSubmit(
+    async (payload) => {
+      try {
+        await createStudent.mutateAsync({
+          level_code: payload.level,
+          first_name: payload.firstName,
+          last_name: payload.lastName,
+          email: payload.email || undefined,
+          date_of_birth: payload.dateOfBirth,
+          guardian_name: payload.guardianName,
+          guardian_phone: payload.guardianPhone,
+          parent_link: payload.parentLink || undefined,
+          medical_notes: payload.medicalNotes || undefined,
+          dietary_restrictions: payload.dietaryRestrictions || undefined,
+          pickup_persons: payload.pickupPersons || undefined,
+          previous_school: payload.previousSchool || undefined,
+          previous_results: payload.previousResults || undefined,
+          qualification: payload.qualification || undefined,
+          faculty_id: payload.facultyId || undefined,
+          department_id: payload.departmentId || undefined,
+          program_id: payload.programId || undefined,
+          group_id: payload.groupId,
+          fee_plan: payload.feePlan,
+        });
+        window.localStorage.removeItem(draftKey);
+        navigate('/students');
+      } catch (_error) {
+        // The mutation already shows a toast; keep the form open for correction/retry.
+      }
+    },
+    (formErrors) => {
+      const errorFields = Object.keys(formErrors);
+      if (
+        errorFields.some((field) =>
+          ['facultyId', 'departmentId', 'programId', 'qualification'].includes(field)
+        )
+      ) {
+        setStep(3);
+      } else if (errorFields.some((field) => ['groupId', 'feePlan'].includes(field))) {
+        setStep(4);
+      } else if (errorFields.some((field) => ['guardianName', 'guardianPhone'].includes(field))) {
+        setStep(2);
+      } else if (
+        errorFields.some((field) =>
+          ['firstName', 'lastName', 'email', 'dateOfBirth'].includes(field)
+        )
+      ) {
+        setStep(1);
+      } else {
+        setStep(0);
+      }
+      toast.error('Please complete the required enrollment fields before submitting.');
     }
-  });
+  );
 
   if (structureLoading || tertiaryLoading) {
     return <PageLoader />;
@@ -657,7 +686,14 @@ const StudentEnrollmentForm = () => {
                       </option>
                     ))}
                   </Select>
-                  <Input label="Qualification" {...register('qualification')} />
+                  <Select label="Qualification" error={errors.qualification?.message} {...register('qualification')}>
+                    <option value="">Select qualification</option>
+                    {qualifications.map((qualification: string) => (
+                      <option key={qualification} value={qualification}>
+                        {qualification}
+                      </option>
+                    ))}
+                  </Select>
                   {selectedProgram ? (
                     <div className="xl:col-span-2">
                       <Alert

@@ -91,15 +91,29 @@ const computeRealtimeOverview = async ({ institutionId }) => {
 
   let attendanceRate = 0;
   if (databaseReady()) {
-    const [presentCount, totalCount] = await Promise.all([
-      models.AttendanceRecord.count({
-        where: { institution_id: institutionId, date: todayIso, status: 'present' },
-      }),
-      models.AttendanceRecord.count({
-        where: { institution_id: institutionId, date: todayIso },
-      }),
-    ]);
-    attendanceRate = totalCount > 0 ? (presentCount / totalCount) * 100 : 0;
+    const todayRecords = await models.AttendanceRecord.findAll({
+      where: { status: { [Op.in]: ['present', 'absent', 'late', 'excused'] } },
+      include: [
+        {
+          model: models.Student,
+          as: 'student',
+          required: true,
+          where: { institution_id: institutionId },
+          attributes: ['id'],
+        },
+        {
+          model: models.AttendanceSession,
+          as: 'session',
+          required: true,
+          where: { date: todayIso },
+          attributes: ['id', 'date'],
+        },
+      ],
+    }).catch(() => []);
+    const presentCount = todayRecords.filter(
+      (record) => record.status === 'present' || record.status === 'late'
+    ).length;
+    attendanceRate = todayRecords.length > 0 ? (presentCount / todayRecords.length) * 100 : 0;
   } else {
     const todays = store.attendance.records.filter(
       (r) => r.institution_id === institutionId && String(r.date).slice(0, 10) === todayIso
@@ -114,23 +128,57 @@ const computeRealtimeOverview = async ({ institutionId }) => {
   const recentPayments = [];
   if (databaseReady() && models.StudentInvoice && models.Payment) {
     try {
-      const [invoiceAgg, paymentAgg, paymentsRows] = await Promise.all([
-        models.StudentInvoice.sum('total_amount', { where: baseWhere }),
-        models.Payment.sum('amount', { where: baseWhere }),
-        models.Payment.findAll({
+      const [invoiceRows, paymentsRows] = await Promise.all([
+        models.StudentInvoice.findAll({
           where: baseWhere,
-          order: [['createdAt', 'DESC']],
+          include: [
+            {
+              model: models.Student,
+              as: 'student',
+              required: false,
+              include: [{ model: models.Class, as: 'class', required: false, attributes: ['name'] }],
+            },
+          ],
+          order: [['created_at', 'DESC']],
+        }),
+        models.Payment.findAll({
+          include: [
+            {
+              model: models.StudentInvoice,
+              as: 'invoice',
+              required: true,
+              where: { institution_id: institutionId },
+              include: [
+                {
+                  model: models.Student,
+                  as: 'student',
+                  required: false,
+                  include: [{ model: models.Class, as: 'class', required: false, attributes: ['name'] }],
+                },
+              ],
+            },
+            {
+              model: models.Student,
+              as: 'student',
+              required: false,
+              include: [{ model: models.Class, as: 'class', required: false, attributes: ['name'] }],
+            },
+          ],
+          order: [['paid_at', 'DESC']],
           limit: 5,
-          raw: true,
         }),
       ]);
-      totalInvoiced = Number(invoiceAgg) || 0;
-      totalPaid = Number(paymentAgg) || 0;
+      totalInvoiced = invoiceRows.reduce((sum, row) => sum + (Number(row.total_amount) || 0), 0);
+      totalPaid = paymentsRows.reduce((sum, row) => sum + (Number(row.amount) || 0), 0);
       collectionRate = totalInvoiced > 0 ? (totalPaid / totalInvoiced) * 100 : 0;
       paymentsRows.forEach((row) => {
         recentPayments.push({
           id: row.id,
-          studentName: row.student_name || `Student #${row.student_id || row.id}`,
+          studentName:
+            `${row.student?.user?.first_name || ''} ${row.student?.user?.last_name || ''}`.trim() ||
+            row.invoice?.student_name ||
+            `Student #${row.student_id || row.id}`,
+          className: row.student?.class?.name || row.invoice?.student?.class?.name || 'Unassigned',
           amount: Number(row.amount) || 0,
           method: row.payment_method || 'Bank',
           date: row.paid_at ? String(row.paid_at).slice(0, 10) : todayIso,
@@ -143,7 +191,10 @@ const computeRealtimeOverview = async ({ institutionId }) => {
     }
   } else {
     const invoices = store.finance.invoices.filter((i) => i.institution_id === institutionId);
-    const payments = store.finance.payments;
+    const payments = store.finance.payments.filter((payment) => {
+      const invoice = invoices.find((item) => item.id === payment.invoice_id);
+      return invoice?.institution_id === institutionId;
+    });
     totalInvoiced = invoices.reduce((sum, i) => sum + (Number(i.total_amount) || 0), 0);
     totalPaid = payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
     collectionRate = totalInvoiced > 0 ? (totalPaid / totalInvoiced) * 100 : 0;
@@ -202,18 +253,15 @@ const computeRealtimeOverview = async ({ institutionId }) => {
   let enrollmentByLevel = [];
   if (databaseReady()) {
     const rows = await models.Student.findAll({
-      attributes: [
-        'level_code',
-        [sequelize.fn('COUNT', sequelize.col('id')), 'count'],
-      ],
       where: baseWhere,
-      group: ['level_code'],
-      raw: true,
+      include: [{ model: models.EducationLevel, as: 'level', required: false, attributes: ['level_code'] }],
     }).catch(() => []);
-    enrollmentByLevel = rows.map((row) => ({
-      name: row.level_code || 'Other',
-      value: Number(row.count) || 0,
-    }));
+    const levelMap = new Map();
+    rows.forEach((row) => {
+      const key = row.level?.level_code || 'Other';
+      levelMap.set(key, (levelMap.get(key) || 0) + 1);
+    });
+    enrollmentByLevel = Array.from(levelMap.entries()).map(([name, value]) => ({ name, value }));
   } else {
     const agg = new Map();
     store.students.list
@@ -257,7 +305,7 @@ const computeRealtimeOverview = async ({ institutionId }) => {
     alerts.push({
       id: 'all-good',
       type: 'Operations',
-      severity: 'success',
+      severity: 'info',
       date: todayIso,
       message: 'Everything is running smoothly. Keep up the great work!',
     });

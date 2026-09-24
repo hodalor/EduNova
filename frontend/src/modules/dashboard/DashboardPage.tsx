@@ -62,8 +62,9 @@ const DashboardPage = () => {
   const role = useAuthStore((state) => state.role);
   const institution = useAuthStore((state) => state.tenantContext || state.institution);
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ['dashboard-overview'],
+    queryKey: ['dashboard-overview', institution?.id],
     queryFn: eduovaApi.analytics.getOverview,
+    enabled: Boolean(institution?.id),
   });
 
   if (role === 'teacher') {

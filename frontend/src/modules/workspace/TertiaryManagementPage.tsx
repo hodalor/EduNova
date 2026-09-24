@@ -171,7 +171,6 @@ const TertiaryManagementPage = () => {
       });
       setProgramModalOpen(false);
       void refreshOverview();
-      void refreshOverview();
     },
     onError: (error: unknown) => toast.error(resolveApiErrorMessage(error, 'Unable to create program.')),
   });
@@ -440,7 +439,7 @@ const TertiaryManagementPage = () => {
                             <p className="font-medium text-brand-navy">{program.name}</p>
                             <p className="text-sm text-slate-500">{program.duration} · {program.calendar}</p>
                           </div>
-                          <Badge variant="pending">{program.credential}</Badge>
+                            <Badge variant="info">{program.credential}</Badge>
                         </div>
                       </div>
                     ))}
