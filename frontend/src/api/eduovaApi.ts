@@ -197,6 +197,20 @@ export const eduovaApi = {
     payments: async () => (await axiosInstance.get('/finance/payments')).data.data,
     recordPayment: async (payload: Record<string, unknown>) =>
       (await axiosInstance.post('/finance/payments', payload)).data.data,
+    paymentApprovals: async () => (await axiosInstance.get('/finance/payment-approvals')).data.data,
+    initiatePaymentApproval: async (payload: Record<string, unknown>) =>
+      (await axiosInstance.post('/finance/payment-approvals', payload)).data.data,
+    approvePaymentApproval: async (id: string, payload: Record<string, unknown>) =>
+      (await axiosInstance.post(`/finance/payment-approvals/${id}/action`, payload)).data.data,
+    paymentGatewayRequests: async () =>
+      (await axiosInstance.get('/finance/payment-channels/requests')).data.data,
+    lookupPaymentAccount: async (identifier: string) =>
+      (await axiosInstance.get('/finance/payment-channels/account', { params: { identifier } })).data
+        .data,
+    initiateGatewayPayment: async (payload: Record<string, unknown>) =>
+      (await axiosInstance.post('/finance/payment-channels/initiate', payload)).data.data,
+    handleGatewayCallback: async (payload: Record<string, unknown>) =>
+      (await axiosInstance.post('/finance/payment-channels/callback', payload)).data.data,
     defaulters: async () => (await axiosInstance.get('/finance/reports/defaulters')).data.data,
     debtors: async () => (await axiosInstance.get('/finance/debtors')).data.data,
     expenses: async () => (await axiosInstance.get('/finance/expenses')).data.data,
@@ -273,6 +287,8 @@ export const eduovaApi = {
       (await axiosInstance.post('/v1/tertiary/programs', payload)).data.data,
     updateProgressionPolicy: async (payload: Record<string, unknown>) =>
       (await axiosInstance.patch('/v1/tertiary/progression-policy', payload)).data.data,
+    updateFinancePolicy: async (payload: Record<string, unknown>) =>
+      (await axiosInstance.patch('/v1/tertiary/finance-policy', payload)).data.data,
     updateStudentProgress: async (studentId: string, payload: Record<string, unknown>) =>
       (await axiosInstance.patch(`/v1/tertiary/student-progress/${studentId}`, payload)).data.data,
     studentRegistration: async (studentId: string) =>
@@ -284,6 +300,8 @@ export const eduovaApi = {
     list: async () => (await axiosInstance.get('/v1/users')).data.data,
     create: async (payload: Record<string, unknown>) =>
       (await axiosInstance.post('/v1/users', payload)).data.data,
+    updateAccess: async (id: string, payload: Record<string, unknown>) =>
+      (await axiosInstance.patch(`/v1/users/${id}/access`, payload)).data.data,
     searchParents: async (search: string, limit = 20) =>
       (
         await axiosInstance.get('/v1/users/parents', {

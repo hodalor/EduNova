@@ -128,7 +128,7 @@ const institutionNavGroups: NavGroup[] = [
         name: 'Finance',
         to: '/finance',
         icon: CreditCard,
-        roles: ['institution_admin', 'accountant'],
+        roles: ['institution_admin', 'accountant', 'teacher'],
         visible: supportsFinance,
       },
     ],
@@ -171,7 +171,7 @@ const institutionNavGroups: NavGroup[] = [
         name: 'Analytics',
         to: '/analytics/finance',
         icon: FileBarChart2,
-        roles: ['institution_admin', 'accountant'],
+        roles: ['institution_admin', 'accountant', 'teacher'],
         visible: supportsAnalytics,
       },
       {

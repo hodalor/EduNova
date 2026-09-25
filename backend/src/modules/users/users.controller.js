@@ -26,6 +26,20 @@ module.exports = {
       data,
     });
   },
+  updateUserAccess: async (req, res) => {
+    const data = await usersService.updateUserAccess({
+      institutionId: req.institutionId,
+      userId: req.params.id,
+      payload: req.body,
+      actorId: req.user.id,
+      ip: req.ip,
+    });
+
+    res.status(200).json({
+      success: true,
+      data,
+    });
+  },
   searchParents: wrap((req) =>
     usersService.searchParents({
       institutionId: req.institutionId,

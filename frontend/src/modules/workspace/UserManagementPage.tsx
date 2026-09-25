@@ -22,7 +22,7 @@ import { useCreateStaffUser } from './hooks/useCreateStaffUser';
 const userSchema = z.object({
   role: z
     .string()
-    .refine((value) => ['institution_admin', 'teacher'].includes(value), 'User role is required'),
+    .refine((value) => ['institution_admin', 'teacher', 'accountant'].includes(value), 'User role is required'),
   first_name: z.string().min(2, 'First name is required'),
   last_name: z.string().min(2, 'Last name is required'),
   email: z.string().email('Valid email is required'),
@@ -37,6 +37,7 @@ const userSchema = z.object({
     .refine((value) => ['full_time', 'part_time', 'contract'].includes(value), 'Employment type is required'),
   date_joined: z.string().min(1, 'Joining date is required'),
   temporary_password: z.string().min(8, 'Temporary password must be at least 8 characters'),
+  custom_permissions: z.array(z.string()).optional(),
 });
 
 type UserFormValues = z.infer<typeof userSchema>;
@@ -47,13 +48,14 @@ interface ManagedUserRow {
   last_name: string;
   email: string;
   phone: string;
-  role: 'institution_admin' | 'teacher';
+  role: 'institution_admin' | 'teacher' | 'accountant';
   staff_number: string;
   department: string;
   designation: string;
   employment_type: 'full_time' | 'part_time' | 'contract';
   date_joined: string;
   status: string;
+  custom_permissions?: string[];
 }
 
 const defaultValues: UserFormValues = {
@@ -70,6 +72,7 @@ const defaultValues: UserFormValues = {
   employment_type: 'full_time',
   date_joined: '',
   temporary_password: '',
+  custom_permissions: [],
 };
 
 const UserManagementPage = () => {
@@ -110,6 +113,7 @@ const UserManagementPage = () => {
 
   const adminCount = users.filter((item) => item.role === 'institution_admin').length;
   const teacherCount = users.filter((item) => item.role === 'teacher').length;
+  const accountantCount = users.filter((item) => item.role === 'accountant').length;
   const pendingCount = users.filter((item) => item.status !== 'active').length;
 
   return (
@@ -133,8 +137,9 @@ const UserManagementPage = () => {
           { label: 'Total Staff Users', value: `${users.length}`, icon: Users2 },
           { label: 'Institution Admins', value: `${adminCount}`, icon: ShieldCheck },
           { label: 'Teachers', value: `${teacherCount}`, icon: UserCog },
+          { label: 'Accountants', value: `${accountantCount}`, icon: ShieldCheck },
           { label: 'Pending Activation', value: `${pendingCount}`, icon: ShieldCheck },
-        ].map((item) => {
+        ].slice(0, 4).map((item) => {
           const Icon = item.icon;
           return (
             <Card key={item.label} className="h-full">
@@ -164,6 +169,13 @@ const UserManagementPage = () => {
           { header: 'Staff No.', accessorKey: 'staff_number' },
           { header: 'Department', accessorKey: 'department' },
           { header: 'Designation', accessorKey: 'designation' },
+          {
+            header: 'Finance Grants',
+            cell: ({ row }) =>
+              row.original.custom_permissions?.length
+                ? row.original.custom_permissions.join(', ').replaceAll('_', ' ')
+                : '—',
+          },
           { header: 'Email', accessorKey: 'email' },
           {
             header: 'Status',
@@ -192,6 +204,7 @@ const UserManagementPage = () => {
             <Select label="User Role" error={errors.role?.message} {...register('role')}>
               <option value="teacher">Teacher</option>
               <option value="institution_admin">Institution Admin</option>
+              <option value="accountant">Accountant</option>
             </Select>
             <Input
               label="Staff Number"
@@ -217,10 +230,30 @@ const UserManagementPage = () => {
               {...register('specialization')}
             />
             <div className="md:col-span-2">
+              <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-sm font-semibold text-slate-700">Finance Approval Grants</p>
+                <label className="flex items-center gap-3 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    value="finance_approve_director"
+                    {...register('custom_permissions')}
+                  />
+                  <span>Director approval stage</span>
+                </label>
+                <label className="flex items-center gap-3 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    value="finance_approve_accountant"
+                    {...register('custom_permissions')}
+                  />
+                  <span>Accountant approval stage</span>
+                </label>
+              </div>
+            </div>
+            <div className="md:col-span-2">
               <Input
                 label="Temporary Password"
                 error={errors.temporary_password?.message}
-                helperText="The new user signs in with this password first and can change it later."
                 {...register('temporary_password')}
               />
             </div>

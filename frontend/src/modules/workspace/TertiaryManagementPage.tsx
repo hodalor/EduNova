@@ -59,6 +59,12 @@ interface TertiaryOverview {
     max_carry_over_credits: number;
     allow_manual_overrides: boolean;
   };
+  finance_policy: {
+    new_student_registration_percent: number;
+    returning_student_registration_percent: number;
+    midsem_exam_percent: number;
+    final_exam_percent: number;
+  };
   credentials: string[];
   id_format: string;
 }
@@ -105,6 +111,12 @@ const TertiaryManagementPage = () => {
     max_carry_over_courses: '0',
     max_carry_over_credits: '0',
     allow_manual_overrides: true,
+  });
+  const [financePolicyForm, setFinancePolicyForm] = useState({
+    new_student_registration_percent: '50',
+    returning_student_registration_percent: '50',
+    midsem_exam_percent: '50',
+    final_exam_percent: '100',
   });
   const [programForm, setProgramForm] = useState({
     department_id: '',
@@ -196,6 +208,15 @@ const TertiaryManagementPage = () => {
     onError: (error: unknown) =>
       toast.error(resolveApiErrorMessage(error, 'Unable to update progression policy.')),
   });
+  const updateFinancePolicy = useMutation({
+    mutationFn: eduovaApi.tertiary.updateFinancePolicy,
+    onSuccess: () => {
+      toast.success('Finance policy updated.');
+      void refreshOverview();
+    },
+    onError: (error: unknown) =>
+      toast.error(resolveApiErrorMessage(error, 'Unable to update finance policy.')),
+  });
 
   useEffect(() => {
     if (!data?.progression_policy) {
@@ -209,6 +230,23 @@ const TertiaryManagementPage = () => {
       allow_manual_overrides: Boolean(data.progression_policy.allow_manual_overrides),
     });
   }, [data?.progression_policy]);
+
+  useEffect(() => {
+    if (!data?.finance_policy) {
+      return;
+    }
+
+    setFinancePolicyForm({
+      new_student_registration_percent: String(
+        data.finance_policy.new_student_registration_percent ?? 50
+      ),
+      returning_student_registration_percent: String(
+        data.finance_policy.returning_student_registration_percent ?? 50
+      ),
+      midsem_exam_percent: String(data.finance_policy.midsem_exam_percent ?? 50),
+      final_exam_percent: String(data.finance_policy.final_exam_percent ?? 100),
+    });
+  }, [data?.finance_policy]);
 
   if (isLoading) {
     return <PageLoader />;
@@ -381,6 +419,85 @@ const TertiaryManagementPage = () => {
             />
             <span>Allow admin manual progression overrides for special cases</span>
           </label>
+        </div>
+      </Card>
+
+      <Card
+        title="Finance Policy"
+        description="Set the default payment thresholds that control registration and exam eligibility for tertiary students."
+        action={
+          <Button
+            onClick={() =>
+              updateFinancePolicy.mutate({
+                new_student_registration_percent: Number(
+                  financePolicyForm.new_student_registration_percent || 0
+                ),
+                returning_student_registration_percent: Number(
+                  financePolicyForm.returning_student_registration_percent || 0
+                ),
+                midsem_exam_percent: Number(financePolicyForm.midsem_exam_percent || 0),
+                final_exam_percent: Number(financePolicyForm.final_exam_percent || 0),
+              })
+            }
+            loading={updateFinancePolicy.isPending}
+          >
+            Save Finance Policy
+          </Button>
+        }
+      >
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <Input
+            label="New Student Registration %"
+            type="number"
+            min="0"
+            max="100"
+            value={financePolicyForm.new_student_registration_percent}
+            onChange={(event) =>
+              setFinancePolicyForm((current) => ({
+                ...current,
+                new_student_registration_percent: event.target.value,
+              }))
+            }
+          />
+          <Input
+            label="Existing Student Registration %"
+            type="number"
+            min="0"
+            max="100"
+            value={financePolicyForm.returning_student_registration_percent}
+            onChange={(event) =>
+              setFinancePolicyForm((current) => ({
+                ...current,
+                returning_student_registration_percent: event.target.value,
+              }))
+            }
+          />
+          <Input
+            label="Mid-Sem Exam %"
+            type="number"
+            min="0"
+            max="100"
+            value={financePolicyForm.midsem_exam_percent}
+            onChange={(event) =>
+              setFinancePolicyForm((current) => ({
+                ...current,
+                midsem_exam_percent: event.target.value,
+              }))
+            }
+          />
+          <Input
+            label="End-Of-Sem Exam %"
+            type="number"
+            min="0"
+            max="100"
+            value={financePolicyForm.final_exam_percent}
+            onChange={(event) =>
+              setFinancePolicyForm((current) => ({
+                ...current,
+                final_exam_percent: event.target.value,
+              }))
+            }
+          />
         </div>
       </Card>
 

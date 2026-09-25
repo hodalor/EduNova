@@ -32,6 +32,8 @@ export interface StudentDetail {
     total: number;
     paid: number;
     balance: number;
+    net_balance?: number;
+    credit_balance?: number;
     status: string;
   }>;
   discipline: Array<{

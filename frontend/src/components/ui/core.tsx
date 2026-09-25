@@ -123,7 +123,7 @@ export interface InputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 
 export const Input = ({
   className,
   label,
-  helperText,
+  helperText: _helperText,
   error,
   prefix,
   suffix,
@@ -149,8 +149,6 @@ export const Input = ({
     </span>
     {error ? (
       <span className="text-xs font-medium text-rose-500">{error}</span>
-    ) : helperText ? (
-      <span className="text-xs text-slate-500">{helperText}</span>
     ) : null}
   </label>
 );
@@ -161,7 +159,7 @@ export interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
   error?: string;
 }
 
-export const Select = ({ label, helperText, error, children, ...props }: SelectProps) => (
+export const Select = ({ label, helperText: _helperText, error, children, ...props }: SelectProps) => (
   <label className="block space-y-2">
     {label ? <span className="text-sm font-semibold text-slate-700">{label}</span> : null}
     <select className="field-base appearance-none" {...props}>
@@ -169,8 +167,6 @@ export const Select = ({ label, helperText, error, children, ...props }: SelectP
     </select>
     {error ? (
       <span className="text-xs font-medium text-rose-500">{error}</span>
-    ) : helperText ? (
-      <span className="text-xs text-slate-500">{helperText}</span>
     ) : null}
   </label>
 );

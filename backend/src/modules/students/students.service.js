@@ -34,6 +34,13 @@ const ensureAdmissionsSettings = (settings) => {
   return next;
 };
 
+const getStudentCreditBalance = ({ settings, studentId }) => {
+  const item = (settings?.finance?.student_credits || []).find(
+    (entry) => String(entry.student_id) === String(studentId)
+  );
+  return Number(item?.amount || 0);
+};
+
 const sortBySequence = (items = []) =>
   items.slice().sort((a, b) => {
     const sequenceDiff = Number(a.sequence || 0) - Number(b.sequence || 0);
@@ -339,6 +346,7 @@ const getStudentFromDatabase = async ({ institutionId, studentId }) => {
         }).catch(() => [])
       : Promise.resolve([]),
   ]);
+  const creditBalance = getStudentCreditBalance({ settings, studentId: student.id });
 
   return {
     id: student.id,
@@ -377,6 +385,8 @@ const getStudentFromDatabase = async ({ institutionId, studentId }) => {
       total: Number(item.total_amount || 0),
       paid: Number(item.paid_amount || 0),
       balance: Number(item.balance || 0),
+      net_balance: Math.max(Number(item.balance || 0) - creditBalance, 0),
+      credit_balance: creditBalance,
       status: item.status,
     })),
     discipline: disciplineRows.map((item) => ({

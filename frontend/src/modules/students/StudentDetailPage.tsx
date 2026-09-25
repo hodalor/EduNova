@@ -69,6 +69,12 @@ const StudentDetailPage = () => {
     (sum: number, invoice: StudentDetail['invoices'][number]) => sum + invoice.balance,
     0
   );
+  const availableCredit = data.invoices.reduce(
+    (max: number, invoice: StudentDetail['invoices'][number]) =>
+      Math.max(max, Number(invoice.credit_balance || 0)),
+    0
+  );
+  const netOutstandingBalance = Math.max(outstandingBalance - availableCredit, 0);
   const tertiaryRoadmap = data.tertiary?.roadmap || null;
   const currentLevelId = data.tertiary?.current_level?.id || null;
   const currentPeriodId = data.tertiary?.current_period?.id || null;
@@ -542,7 +548,13 @@ const StudentDetailPage = () => {
                 { header: 'Invoice', accessorKey: 'invoice_number' },
                 { header: 'Total', cell: ({ row }) => `GHS ${row.original.total.toLocaleString()}` },
                 { header: 'Paid', cell: ({ row }) => `GHS ${row.original.paid.toLocaleString()}` },
-                { header: 'Balance', cell: ({ row }) => `GHS ${row.original.balance.toLocaleString()}` },
+                {
+                  header: 'Balance',
+                  cell: ({ row }) => {
+                    const netBalance = Number(row.original.net_balance ?? row.original.balance ?? 0);
+                    return `GHS ${netBalance.toLocaleString()}`;
+                  },
+                },
                 {
                   header: 'Status',
                   cell: ({ row }) => (
@@ -563,16 +575,40 @@ const StudentDetailPage = () => {
             />
             <Card title="Payment History" description="Most recent payment posture and next steps.">
               <div className="space-y-4">
-                <div className="rounded-2xl bg-rose-50 p-4">
-                  <p className="text-xs uppercase tracking-[0.14em] text-rose-500">Outstanding</p>
-                  <p className="mt-2 text-3xl font-bold text-rose-600">
-                    GHS {outstandingBalance.toLocaleString()}
+                <div
+                  className={`rounded-2xl p-4 ${
+                    netOutstandingBalance > 0 ? 'bg-rose-50' : availableCredit > 0 ? 'bg-emerald-50' : 'bg-slate-50'
+                  }`}
+                >
+                  <p
+                    className={`text-xs uppercase tracking-[0.14em] ${
+                      netOutstandingBalance > 0
+                        ? 'text-rose-500'
+                        : availableCredit > 0
+                          ? 'text-emerald-500'
+                          : 'text-slate-500'
+                    }`}
+                  >
+                    {netOutstandingBalance > 0 ? 'Outstanding' : availableCredit > 0 ? 'Credit Balance' : 'Finance Position'}
+                  </p>
+                  <p
+                    className={`mt-2 text-3xl font-bold ${
+                      netOutstandingBalance > 0
+                        ? 'text-rose-600'
+                        : availableCredit > 0
+                          ? 'text-emerald-600'
+                          : 'text-brand-navy'
+                    }`}
+                  >
+                    GHS {(netOutstandingBalance > 0 ? netOutstandingBalance : availableCredit).toLocaleString()}
                   </p>
                 </div>
                 <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">
-                  {outstandingBalance > 0
+                  {netOutstandingBalance > 0
                     ? 'Payment reminders are recommended before the next fee checkpoint.'
-                    : 'No outstanding balance at the moment.'}
+                    : availableCredit > 0
+                      ? 'This learner has a positive finance credit that can offset the next invoice.'
+                      : 'No outstanding balance at the moment.'}
                 </div>
                 <Button>Record Payment</Button>
               </div>

@@ -97,6 +97,15 @@ module.exports = {
     });
     res.json({ success: true, data });
   },
+  updateFinancePolicy: async (req, res) => {
+    const data = await tertiaryService.updateFinancePolicy({
+      institutionId: req.institutionId,
+      payload: req.body,
+      userId: req.user.id,
+      ip: req.ip,
+    });
+    res.json({ success: true, data });
+  },
   updateStudentProgress: async (req, res) => {
     const data = await tertiaryService.updateStudentProgress({
       institutionId: req.institutionId,

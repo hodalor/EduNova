@@ -34,6 +34,7 @@ import {
   TabsTrigger,
 } from '../../components/ui/Tabs';
 import PageHeader from '../shared/PageHeader';
+import { useAuthStore } from '../../store/authStore';
 
 const statusStyles: Record<string, string> = {
   paid: 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200',
@@ -59,6 +60,8 @@ const paymentSchema = z.object({
   transactionRef: z.string().optional(),
   paidAt: z.string().min(1, 'Payment date is required'),
   notes: z.string().optional(),
+  requiresApproval: z.boolean().optional(),
+  proofReference: z.string().optional(),
 });
 
 const paymentTermSchema = z.object({
@@ -79,10 +82,13 @@ interface InvoiceRow {
   invoice_number: string;
   student_id?: string;
   student_name?: string;
+  student_number?: string;
   class_name?: string;
   total_amount: number | string;
   paid_amount: number | string;
   balance: number | string;
+  credit_balance?: number | string;
+  net_balance?: number | string;
   status: 'paid' | 'partial' | 'pending' | 'overdue' | string;
   due_date?: string;
 }
@@ -97,6 +103,26 @@ interface PaymentRow {
   transaction_ref?: string;
   paid_at: string;
   received_by?: string;
+  notes?: string;
+}
+
+interface PaymentApprovalRow {
+  id: string;
+  invoice_id: string;
+  invoice_number?: string;
+  student_name?: string;
+  class_name?: string;
+  amount: number | string;
+  payment_method: string;
+  transaction_ref?: string;
+  proof_reference?: string;
+  status: 'pending_director' | 'pending_accountant' | 'approved' | 'rejected' | string;
+  requested_at: string;
+  requested_by?: string;
+  rejection_reason?: string | null;
+  director_approval?: { approved_by?: string; approved_at?: string; note?: string } | null;
+  accountant_approval?: { approved_by?: string; approved_at?: string; note?: string } | null;
+  posted_payment?: { id?: string; receipt_number?: string | null; amount?: number | string } | null;
 }
 
 interface DebtorRow {
@@ -125,6 +151,40 @@ interface PaymentTermRow {
   is_active: boolean;
 }
 
+interface PaymentGatewayRequestRow {
+  id: string;
+  student_id: string;
+  student_number?: string | null;
+  student_name?: string | null;
+  program_name?: string | null;
+  invoice_id: string;
+  invoice_number?: string | null;
+  amount: number | string;
+  channel: 'bank' | 'card' | 'mobile_money' | 'ussd' | string;
+  status: 'pending_gateway' | 'success' | 'failed' | string;
+  gateway_reference: string;
+  checkout_url?: string | null;
+  ussd_code?: string | null;
+  provider_message?: string | null;
+  callback_status?: string | null;
+  created_at: string;
+  posted_payment?: { receipt_number?: string | null; amount?: number | string } | null;
+}
+
+interface PaymentAccountLookup {
+  student_id: string;
+  student_number?: string | null;
+  student_name?: string | null;
+  class_name?: string | null;
+  level_code?: string | null;
+  program_name?: string | null;
+  credit_balance?: number | string;
+  outstanding_amount?: number | string;
+  net_outstanding_amount?: number | string;
+  invoices: InvoiceRow[];
+  payments: PaymentRow[];
+}
+
 interface StudentLookupRow {
   id: string;
   name: string;
@@ -138,8 +198,14 @@ const currency = (value: number | string | null | undefined) => {
   return num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
+const approvalLabel = (status: PaymentApprovalRow['status']) =>
+  String(status || '').replaceAll('_', ' ');
+
 const FinanceDashboardPage = () => {
   const queryClient = useQueryClient();
+  const permissions = useAuthStore((state) => state.permissions);
+  const canDirectorApprove = permissions.includes('finance_approve_director');
+  const canAccountantApprove = permissions.includes('finance_approve_accountant');
   const [tab, setTab] = useState('invoices');
 
   const [invoiceOpen, setInvoiceOpen] = useState(false);
@@ -155,12 +221,22 @@ const FinanceDashboardPage = () => {
   const [studentLookupField, setStudentLookupField] = useState<'studentName' | 'studentNumber'>(
     'studentName'
   );
+  const [paymentChannelStudentId, setPaymentChannelStudentId] = useState('');
+  const [gatewayInvoiceId, setGatewayInvoiceId] = useState('');
+  const [gatewayChannel, setGatewayChannel] = useState<'bank' | 'card' | 'mobile_money' | 'ussd'>(
+    'mobile_money'
+  );
+  const [gatewayAmount, setGatewayAmount] = useState('');
+  const [gatewayPhone, setGatewayPhone] = useState('');
+  const [gatewayReference, setGatewayReference] = useState('');
 
   const invalidateFinance = () => {
     queryClient.invalidateQueries({ queryKey: ['finance-invoices'] });
     queryClient.invalidateQueries({ queryKey: ['finance-payments'] });
+    queryClient.invalidateQueries({ queryKey: ['finance-payment-approvals'] });
     queryClient.invalidateQueries({ queryKey: ['finance-debtors'] });
     queryClient.invalidateQueries({ queryKey: ['finance-payment-terms'] });
+    queryClient.invalidateQueries({ queryKey: ['finance-payment-gateway-requests'] });
     queryClient.invalidateQueries({ queryKey: ['finance-dashboard'] });
   };
 
@@ -179,6 +255,24 @@ const FinanceDashboardPage = () => {
   });
   const payments = useMemo<PaymentRow[]>(() => paymentsQuery.data ?? [], [paymentsQuery.data]);
   const paymentsLoading = paymentsQuery.isLoading;
+
+  const approvalsQuery = useQuery<PaymentApprovalRow[]>({
+    queryKey: ['finance-payment-approvals'],
+    queryFn: eduovaApi.finance.paymentApprovals,
+  });
+  const approvals = useMemo<PaymentApprovalRow[]>(
+    () => approvalsQuery.data ?? [],
+    [approvalsQuery.data]
+  );
+
+  const gatewayRequestsQuery = useQuery<PaymentGatewayRequestRow[]>({
+    queryKey: ['finance-payment-gateway-requests'],
+    queryFn: eduovaApi.finance.paymentGatewayRequests,
+  });
+  const gatewayRequests = useMemo<PaymentGatewayRequestRow[]>(
+    () => gatewayRequestsQuery.data ?? [],
+    [gatewayRequestsQuery.data]
+  );
 
   const debtorsQuery = useQuery<DebtorRow[]>({
     queryKey: ['finance-debtors'],
@@ -213,6 +307,21 @@ const FinanceDashboardPage = () => {
     [studentsQuery.data]
   );
 
+  const paymentAccountLookup = useMutation({
+    mutationFn: (identifier: string) => eduovaApi.finance.lookupPaymentAccount(identifier),
+    onSuccess: (account: PaymentAccountLookup) => {
+      toast.success('Student account confirmed.');
+      const nextInvoiceId =
+        account.invoices.find((item) => Number(item.net_balance ?? item.balance ?? 0) > 0)?.id || '';
+      setGatewayInvoiceId(nextInvoiceId);
+      const matchedInvoice = account.invoices.find((item) => item.id === nextInvoiceId);
+      setGatewayAmount(
+        matchedInvoice ? String(Number(matchedInvoice.net_balance ?? matchedInvoice.balance ?? 0)) : ''
+      );
+    },
+    onError: () => toast.error('Unable to confirm that student ID.'),
+  });
+
   const invoiceForm = useForm<InvoiceValues>({
     resolver: zodResolver(invoiceSchema),
     defaultValues: {
@@ -235,6 +344,8 @@ const FinanceDashboardPage = () => {
       transactionRef: '',
       paidAt: new Date().toISOString().slice(0, 10),
       notes: '',
+      requiresApproval: false,
+      proofReference: '',
     },
   });
 
@@ -271,22 +382,74 @@ const FinanceDashboardPage = () => {
   });
 
   const recordPayment = useMutation({
-    mutationFn: (values: PaymentValues) =>
-      eduovaApi.finance.recordPayment({
+    mutationFn: async (values: PaymentValues) => {
+      if (values.requiresApproval) {
+        return eduovaApi.finance.initiatePaymentApproval({
+          invoice_id: values.invoiceId,
+          amount: Number(values.amount),
+          payment_method: values.paymentMethod,
+          transaction_ref: values.transactionRef || undefined,
+          proof_reference: values.proofReference || undefined,
+          notes: values.notes || undefined,
+        });
+      }
+      return eduovaApi.finance.recordPayment({
         invoice_id: values.invoiceId,
         amount: Number(values.amount),
         payment_method: values.paymentMethod,
         transaction_ref: values.transactionRef || undefined,
         paid_at: values.paidAt,
         notes: values.notes || undefined,
-      }),
+      });
+    },
     onSuccess: () => {
-      toast.success('Payment recorded successfully.');
+      toast.success('Payment request saved successfully.');
       setPaymentOpen(false);
       paymentForm.reset();
       invalidateFinance();
     },
-    onError: () => toast.error('Unable to record payment. Please try again.'),
+    onError: () => toast.error('Unable to save payment request. Please try again.'),
+  });
+
+  const approvePaymentApproval = useMutation({
+    mutationFn: ({ id, action }: { id: string; action: 'approve' | 'reject' }) =>
+      eduovaApi.finance.approvePaymentApproval(id, { action }),
+    onSuccess: () => {
+      toast.success('Approval updated.');
+      invalidateFinance();
+    },
+    onError: () => toast.error('Unable to update finance approval.'),
+  });
+
+  const initiateGatewayPayment = useMutation({
+    mutationFn: () =>
+      eduovaApi.finance.initiateGatewayPayment({
+        student_identifier: paymentChannelStudentId,
+        invoice_id: gatewayInvoiceId,
+        amount: Number(gatewayAmount || 0),
+        channel: gatewayChannel,
+        payer_phone: gatewayPhone || undefined,
+      }),
+    onSuccess: (request: PaymentGatewayRequestRow) => {
+      toast.success('Gateway request created.');
+      setGatewayReference(request.gateway_reference);
+      queryClient.invalidateQueries({ queryKey: ['finance-payment-gateway-requests'] });
+      invalidateFinance();
+    },
+    onError: () => toast.error('Unable to start the gateway payment skeleton.'),
+  });
+
+  const handleGatewayCallback = useMutation({
+    mutationFn: (status: 'success' | 'failed') =>
+      eduovaApi.finance.handleGatewayCallback({
+        gateway_reference: gatewayReference,
+        status,
+      }),
+    onSuccess: () => {
+      toast.success('Gateway callback processed.');
+      invalidateFinance();
+    },
+    onError: () => toast.error('Unable to process the gateway callback.'),
   });
 
   const savePaymentTerm = useMutation({
@@ -392,6 +555,21 @@ const FinanceDashboardPage = () => {
     );
   }, [debtors, searchDebtor]);
 
+  const directorQueue = useMemo(
+    () => approvals.filter((item) => item.status === 'pending_director'),
+    [approvals]
+  );
+  const accountantQueue = useMemo(
+    () => approvals.filter((item) => item.status === 'pending_accountant'),
+    [approvals]
+  );
+  const closedApprovals = useMemo(
+    () => approvals.filter((item) => item.status === 'approved' || item.status === 'rejected'),
+    [approvals]
+  );
+  const paymentAccount = paymentAccountLookup.data ?? null;
+  const paymentAccountInvoices = paymentAccount?.invoices ?? [];
+
   const invoiceStudentName = invoiceForm.watch('studentName') || '';
   const invoiceStudentNumber = invoiceForm.watch('studentNumber') || '';
   const invoiceStudentId = invoiceForm.watch('studentId');
@@ -491,11 +669,13 @@ const FinanceDashboardPage = () => {
     if (invoice) {
       paymentForm.reset({
         invoiceId: invoice.id,
-        amount: Number(invoice.balance || 0),
+        amount: Number(invoice.net_balance ?? invoice.balance ?? 0),
         paymentMethod: 'cash',
         transactionRef: '',
         paidAt: new Date().toISOString().slice(0, 10),
         notes: '',
+        requiresApproval: false,
+        proofReference: '',
       });
     }
     setPaymentOpen(true);
@@ -597,6 +777,8 @@ const FinanceDashboardPage = () => {
         <TabsList>
           <TabsTrigger value="invoices">Invoices</TabsTrigger>
           <TabsTrigger value="payments">Payments</TabsTrigger>
+          <TabsTrigger value="approvals">Approvals</TabsTrigger>
+          <TabsTrigger value="channels">Payment Channels</TabsTrigger>
           <TabsTrigger value="debtors">Debtors</TabsTrigger>
           <TabsTrigger value="terms">Payment Terms</TabsTrigger>
         </TabsList>
@@ -671,8 +853,21 @@ const FinanceDashboardPage = () => {
                         <td className="px-5 py-4 text-right font-medium text-emerald-700">
                           {currency(inv.paid_amount)}
                         </td>
-                        <td className="px-5 py-4 text-right font-semibold text-brand-navy">
-                          {currency(inv.balance)}
+                        <td
+                          className={`px-5 py-4 text-right font-semibold ${
+                            Number(inv.net_balance ?? inv.balance ?? 0) > 0
+                              ? 'text-rose-700'
+                              : Number(inv.credit_balance || 0) > 0
+                                ? 'text-emerald-700'
+                                : 'text-brand-navy'
+                          }`}
+                        >
+                          {currency(inv.net_balance ?? inv.balance)}
+                          {Number(inv.credit_balance || 0) > 0 ? (
+                            <div className="text-[11px] font-medium text-emerald-600">
+                              Credit {currency(inv.credit_balance)}
+                            </div>
+                          ) : null}
                         </td>
                         <td className="px-5 py-4 text-slate-500">
                           {inv.due_date ? String(inv.due_date).slice(0, 10) : '—'}
@@ -692,7 +887,7 @@ const FinanceDashboardPage = () => {
                             variant="secondary"
                             leftIcon={<Banknote className="h-4 w-4" />}
                             onClick={() => openPaymentModal(inv)}
-                            disabled={Number(inv.balance || 0) <= 0}
+                            disabled={Number(inv.net_balance ?? inv.balance ?? 0) <= 0}
                           >
                             Record Payment
                           </Button>
@@ -772,6 +967,325 @@ const FinanceDashboardPage = () => {
               </div>
             )}
           </Card>
+        </TabsContent>
+
+        <TabsContent value="approvals">
+          <div className="grid gap-6 xl:grid-cols-3">
+            <Card title="Director Queue" description="Manual deposits wait here first.">
+              <div className="space-y-3">
+                {directorQueue.length ? (
+                  directorQueue.map((item) => (
+                    <div key={item.id} className="rounded-2xl border border-slate-200 p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="font-semibold text-brand-navy">
+                            {item.student_name || 'Student'} · {item.invoice_number || item.invoice_id}
+                          </p>
+                          <p className="mt-1 text-sm text-slate-500">
+                            {String(item.payment_method).replace('_', ' ')} · {currency(item.amount)}
+                          </p>
+                          <p className="mt-1 text-xs text-slate-400">
+                            {item.proof_reference || item.transaction_ref || 'Awaiting proof reference'}
+                          </p>
+                        </div>
+                        <Badge variant="info">{approvalLabel(item.status)}</Badge>
+                      </div>
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        <Button
+                          size="sm"
+                          onClick={() => approvePaymentApproval.mutate({ id: item.id, action: 'approve' })}
+                          loading={approvePaymentApproval.isPending}
+                          disabled={!canDirectorApprove}
+                        >
+                          Approve
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => approvePaymentApproval.mutate({ id: item.id, action: 'reject' })}
+                          loading={approvePaymentApproval.isPending}
+                          disabled={!canDirectorApprove}
+                        >
+                          Reject
+                        </Button>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <EmptyState
+                    icon={<ShieldAlert className="h-6 w-6" />}
+                    title="No director approvals pending"
+                    message="New manual payment requests will land here before they move to the accountant."
+                  />
+                )}
+              </div>
+            </Card>
+
+            <Card title="Accountant Queue" description="Second approval posts the payment to the student account.">
+              <div className="space-y-3">
+                {accountantQueue.length ? (
+                  accountantQueue.map((item) => (
+                    <div key={item.id} className="rounded-2xl border border-slate-200 p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="font-semibold text-brand-navy">
+                            {item.student_name || 'Student'} · {item.invoice_number || item.invoice_id}
+                          </p>
+                          <p className="mt-1 text-sm text-slate-500">
+                            {String(item.payment_method).replace('_', ' ')} · {currency(item.amount)}
+                          </p>
+                          <p className="mt-1 text-xs text-slate-400">
+                            Director approved on {String(item.director_approval?.approved_at || '').slice(0, 10) || '—'}
+                          </p>
+                        </div>
+                        <Badge variant="info">{approvalLabel(item.status)}</Badge>
+                      </div>
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        <Button
+                          size="sm"
+                          onClick={() => approvePaymentApproval.mutate({ id: item.id, action: 'approve' })}
+                          loading={approvePaymentApproval.isPending}
+                          disabled={!canAccountantApprove}
+                        >
+                          Final Approve
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => approvePaymentApproval.mutate({ id: item.id, action: 'reject' })}
+                          loading={approvePaymentApproval.isPending}
+                          disabled={!canAccountantApprove}
+                        >
+                          Reject
+                        </Button>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <EmptyState
+                    icon={<BadgeCheck className="h-6 w-6" />}
+                    title="No accountant approvals pending"
+                    message="Director-approved requests will appear here for final posting."
+                  />
+                )}
+              </div>
+            </Card>
+
+            <Card title="Closed Requests" description="Approved and rejected manual payment requests.">
+              <div className="space-y-3">
+                {closedApprovals.length ? (
+                  closedApprovals.slice(0, 8).map((item) => (
+                    <div key={item.id} className="rounded-2xl border border-slate-200 p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="font-semibold text-brand-navy">
+                            {item.student_name || 'Student'} · {item.invoice_number || item.invoice_id}
+                          </p>
+                          <p className="mt-1 text-sm text-slate-500">
+                            {currency(item.amount)} · {String(item.payment_method).replace('_', ' ')}
+                          </p>
+                          <p className="mt-1 text-xs text-slate-400">
+                            {item.posted_payment?.receipt_number
+                              ? `Receipt ${item.posted_payment.receipt_number}`
+                              : item.rejection_reason || 'Closed'}
+                          </p>
+                        </div>
+                        <Badge variant={item.status === 'approved' ? 'active' : 'inactive'}>
+                          {approvalLabel(item.status)}
+                        </Badge>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <EmptyState
+                    icon={<ReceiptText className="h-6 w-6" />}
+                    title="No approval history yet"
+                    message="Approved and rejected requests will build an audit trail here."
+                  />
+                )}
+              </div>
+            </Card>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="channels">
+          <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+            <Card title="Student Payment Lookup" description="Confirm a student ID before card, bank, mobile money, or USSD payment.">
+              <div className="grid gap-4 md:grid-cols-2">
+                <Input
+                  label="Student ID"
+                  value={paymentChannelStudentId}
+                  onChange={(event) => setPaymentChannelStudentId(event.target.value)}
+                />
+                <div className="flex items-end">
+                  <Button
+                    className="w-full"
+                    onClick={() => paymentAccountLookup.mutate(paymentChannelStudentId)}
+                    loading={paymentAccountLookup.isPending}
+                  >
+                    Confirm Student
+                  </Button>
+                </div>
+                {paymentAccount ? (
+                  <>
+                    <div className="rounded-2xl bg-slate-50 p-4">
+                      <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Student</p>
+                      <p className="mt-2 font-semibold text-brand-navy">
+                        {paymentAccount.student_name || 'Student'}
+                      </p>
+                      <p className="mt-1 text-sm text-slate-500">
+                        {paymentAccount.student_number || paymentAccount.student_id}
+                      </p>
+                    </div>
+                    <div className="rounded-2xl bg-slate-50 p-4">
+                      <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Program</p>
+                      <p className="mt-2 font-semibold text-brand-navy">
+                        {paymentAccount.program_name || paymentAccount.class_name || 'Not assigned'}
+                      </p>
+                      <p className="mt-1 text-sm text-slate-500">
+                        Outstanding {currency(paymentAccount.net_outstanding_amount)}
+                      </p>
+                    </div>
+                    <div className="md:col-span-2">
+                      <Select
+                        label="Invoice"
+                        value={gatewayInvoiceId}
+                        onChange={(event) => {
+                          const nextValue = event.target.value;
+                          setGatewayInvoiceId(nextValue);
+                          const match = paymentAccountInvoices.find((item) => item.id === nextValue);
+                          setGatewayAmount(
+                            match ? String(Number(match.net_balance ?? match.balance ?? 0)) : ''
+                          );
+                        }}
+                      >
+                        <option value="">Select invoice…</option>
+                        {paymentAccountInvoices
+                          .filter((item) => Number(item.net_balance ?? item.balance ?? 0) > 0)
+                          .map((item) => (
+                            <option key={item.id} value={item.id}>
+                              {item.invoice_number} · {currency(item.net_balance ?? item.balance)} balance
+                            </option>
+                          ))}
+                      </Select>
+                    </div>
+                    <Input
+                      label="Amount"
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={gatewayAmount}
+                      onChange={(event) => setGatewayAmount(event.target.value)}
+                    />
+                    <Select
+                      label="Channel"
+                      value={gatewayChannel}
+                      onChange={(event) =>
+                        setGatewayChannel(
+                          event.target.value as 'bank' | 'card' | 'mobile_money' | 'ussd'
+                        )
+                      }
+                    >
+                      <option value="mobile_money">Mobile Money</option>
+                      <option value="card">Bank Card</option>
+                      <option value="bank">Bank Transfer</option>
+                      <option value="ussd">USSD</option>
+                    </Select>
+                    <Input
+                      label="Payer Phone"
+                      value={gatewayPhone}
+                      onChange={(event) => setGatewayPhone(event.target.value)}
+                    />
+                    <div className="md:col-span-2 flex justify-end">
+                      <Button
+                        onClick={() => initiateGatewayPayment.mutate()}
+                        loading={initiateGatewayPayment.isPending}
+                        disabled={!paymentAccount || !gatewayInvoiceId || !gatewayAmount}
+                      >
+                        Start Payment Skeleton
+                      </Button>
+                    </div>
+                  </>
+                ) : (
+                  <div className="md:col-span-2">
+                    <Alert
+                      title="Lookup required"
+                      message="Enter the student ID first so the name, program, and invoice balance can be confirmed before payment."
+                      variant="info"
+                    />
+                  </div>
+                )}
+              </div>
+            </Card>
+
+            <Card title="Gateway Callback Sandbox" description="Simulate the provider callback that credits the invoice after success.">
+              <div className="space-y-4">
+                <Input
+                  label="Gateway Reference"
+                  value={gatewayReference}
+                  onChange={(event) => setGatewayReference(event.target.value)}
+                />
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    onClick={() => handleGatewayCallback.mutate('success')}
+                    loading={handleGatewayCallback.isPending}
+                    disabled={!gatewayReference}
+                  >
+                    Simulate Success
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    onClick={() => handleGatewayCallback.mutate('failed')}
+                    loading={handleGatewayCallback.isPending}
+                    disabled={!gatewayReference}
+                  >
+                    Simulate Failure
+                  </Button>
+                </div>
+                <div className="space-y-3 border-t border-slate-100 pt-4">
+                  {gatewayRequests.length ? (
+                    gatewayRequests.slice(0, 8).map((request) => (
+                      <div key={request.id} className="rounded-2xl border border-slate-200 p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="font-semibold text-brand-navy">
+                              {request.student_name || request.student_number || request.student_id}
+                            </p>
+                            <p className="mt-1 text-sm text-slate-500">
+                              {request.invoice_number || request.invoice_id} · {currency(request.amount)}
+                            </p>
+                            <p className="mt-1 text-xs text-slate-400">{request.gateway_reference}</p>
+                            {request.ussd_code ? (
+                              <p className="mt-1 text-xs font-semibold text-brand-navy">
+                                USSD {request.ussd_code}
+                              </p>
+                            ) : null}
+                          </div>
+                          <Badge
+                            variant={
+                              request.status === 'success'
+                                ? 'active'
+                                : request.status === 'failed'
+                                  ? 'inactive'
+                                  : 'info'
+                            }
+                          >
+                            {request.status}
+                          </Badge>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <EmptyState
+                      icon={<Wallet className="h-6 w-6" />}
+                      title="No gateway requests yet"
+                      message="Once a student payment skeleton starts, the callback-ready references will show here."
+                    />
+                  )}
+                </div>
+              </div>
+            </Card>
+          </div>
         </TabsContent>
 
         <TabsContent value="debtors">
@@ -1135,11 +1649,11 @@ const FinanceDashboardPage = () => {
             >
               <option value="">Select invoice…</option>
               {invoices
-                .filter((inv) => Number(inv.balance || 0) > 0)
+                .filter((inv) => Number(inv.net_balance ?? inv.balance ?? 0) > 0)
                 .map((inv) => (
                   <option key={inv.id} value={inv.id}>
                     {inv.invoice_number} · {inv.student_name || 'Student'} ·{' '}
-                    {currency(inv.balance)} balance
+                    {currency(inv.net_balance ?? inv.balance)} balance
                   </option>
                 ))}
             </Select>
@@ -1172,6 +1686,26 @@ const FinanceDashboardPage = () => {
             label="Transaction Reference (optional)"
             {...paymentForm.register('transactionRef')}
           />
+          <div className="md:col-span-2 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <label className="flex items-start gap-3 text-sm text-slate-700">
+              <input type="checkbox" className="mt-0.5" {...paymentForm.register('requiresApproval')} />
+              <span>
+                Use manual approval flow.
+                <span className="mt-1 block text-xs text-slate-500">
+                  Director approves first, then accountant posts the payment to the student account.
+                </span>
+              </span>
+            </label>
+          </div>
+          {paymentForm.watch('requiresApproval') ? (
+            <div className="md:col-span-2">
+              <Input
+                label="Proof Reference"
+                error={paymentForm.formState.errors.proofReference?.message}
+                {...paymentForm.register('proofReference')}
+              />
+            </div>
+          ) : null}
           <div className="md:col-span-2">
             <Input
               label="Notes (optional)"

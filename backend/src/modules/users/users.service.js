@@ -5,8 +5,41 @@ const { logAudit } = require('../../shared/services/audit-log.service');
 const { store } = require('../../shared/store/runtime-store');
 const { Op } = require('sequelize');
 
-const allowedRoles = ['institution_admin', 'teacher'];
+const allowedRoles = ['institution_admin', 'teacher', 'accountant'];
 const allowedEmploymentTypes = ['full_time', 'part_time', 'contract'];
+const allowedCustomPermissions = ['finance_approve_director', 'finance_approve_accountant'];
+
+const clone = (value) => JSON.parse(JSON.stringify(value || {}));
+
+const ensureAccessControlSettings = (settings) => {
+  const next = clone(settings);
+  next.access_control = next.access_control || {};
+  next.access_control.finance_approval_grants = next.access_control.finance_approval_grants || {};
+  return next;
+};
+
+const normalizeCustomPermissions = (value) =>
+  Array.from(
+    new Set(
+      (Array.isArray(value) ? value : [])
+        .map((item) => String(item || '').trim())
+        .filter((item) => allowedCustomPermissions.includes(item))
+    )
+  );
+
+const getCustomPermissionsFromSettings = ({ settings, userId }) =>
+  normalizeCustomPermissions(settings?.access_control?.finance_approval_grants?.[userId]);
+
+const setCustomPermissionsInSettings = ({ settings, userId, permissions }) => {
+  const normalized = normalizeCustomPermissions(permissions);
+  settings.access_control.finance_approval_grants = settings.access_control.finance_approval_grants || {};
+  if (normalized.length) {
+    settings.access_control.finance_approval_grants[userId] = normalized;
+  } else {
+    delete settings.access_control.finance_approval_grants[userId];
+  }
+  return normalized;
+};
 
 const serializeRuntimeUser = (item) => ({
   id: item.id,
@@ -25,7 +58,8 @@ const serializeRuntimeUser = (item) => ({
   date_joined: item.date_joined,
   is_active: item.is_active,
   status: item.status || (item.is_active ? 'active' : 'inactive'),
-  permissions: getPermissionsForRole(item.role),
+  custom_permissions: normalizeCustomPermissions(item.custom_permissions),
+  permissions: getPermissionsForRole(item.role).concat(normalizeCustomPermissions(item.custom_permissions)),
 });
 
 const listUsersFromRuntime = async ({ institutionId, role }) =>
@@ -42,33 +76,44 @@ const listUsersFromDatabase = async ({ institutionId, role }) => {
     where.role = role;
   }
 
-  const users = await models.User.findAll({
-    where,
-    include: [{ model: models.Staff, as: 'staffProfile', required: false }],
-    order: [['created_at', 'DESC']],
-  });
+  const [users, institution] = await Promise.all([
+    models.User.findAll({
+      where,
+      include: [{ model: models.Staff, as: 'staffProfile', required: false }],
+      order: [['created_at', 'DESC']],
+    }),
+    models.Institution.findByPk(institutionId, { attributes: ['id', 'settings'] }).catch(() => null),
+  ]);
+  const settings = ensureAccessControlSettings(institution?.settings);
 
   return users
     .filter((item) => allowedRoles.includes(item.role))
-    .map((user) => ({
-      id: user.id,
-      institution_id: user.institution_id,
-      email: user.email,
-      phone: user.phone,
-      role: user.role,
-      first_name: user.first_name,
-      last_name: user.last_name,
-      staff_number: user.staffProfile?.staff_number || null,
-      department: user.staffProfile?.department || null,
-      designation: user.staffProfile?.designation || null,
-      qualification: user.staffProfile?.qualification || null,
-      specialization: user.staffProfile?.specialization || null,
-      employment_type: user.staffProfile?.employment_type || null,
-      date_joined: user.staffProfile?.date_joined || null,
-      is_active: user.is_active,
-      status: user.is_active ? 'active' : 'inactive',
-      permissions: getPermissionsForRole(user.role),
-    }));
+    .map((user) => {
+      const customPermissions = getCustomPermissionsFromSettings({
+        settings,
+        userId: user.id,
+      });
+      return {
+        id: user.id,
+        institution_id: user.institution_id,
+        email: user.email,
+        phone: user.phone,
+        role: user.role,
+        first_name: user.first_name,
+        last_name: user.last_name,
+        staff_number: user.staffProfile?.staff_number || null,
+        department: user.staffProfile?.department || null,
+        designation: user.staffProfile?.designation || null,
+        qualification: user.staffProfile?.qualification || null,
+        specialization: user.staffProfile?.specialization || null,
+        employment_type: user.staffProfile?.employment_type || null,
+        date_joined: user.staffProfile?.date_joined || null,
+        is_active: user.is_active,
+        status: user.is_active ? 'active' : 'inactive',
+        custom_permissions: customPermissions,
+        permissions: getPermissionsForRole(user.role).concat(customPermissions),
+      };
+    });
 };
 
 const listUsers = async ({ institutionId, role }) => {
@@ -82,7 +127,7 @@ const listUsers = async ({ institutionId, role }) => {
 const validatePayload = (payload) => {
   if (!allowedRoles.includes(payload.role)) {
     throw Object.assign(
-      new Error('Only institution_admin and teacher accounts can be created here.'),
+      new Error('Only institution_admin, teacher, and accountant accounts can be created here.'),
       { statusCode: 400 }
     );
   }
@@ -136,6 +181,7 @@ const createUserInRuntime = async ({ institutionId, payload, actorId, ip }) => {
     date_joined: payload.date_joined,
     is_active: true,
     status: 'active',
+    custom_permissions: normalizeCustomPermissions(payload.custom_permissions),
     password_hash: await hashPassword(payload.temporary_password),
   };
 
@@ -177,6 +223,10 @@ const createUserInDatabase = async ({ institutionId, payload, actorId, ip }) => 
   const transaction = await sequelize.transaction();
 
   try {
+    const institution = await models.Institution.findByPk(institutionId, {
+      attributes: ['id', 'settings'],
+      transaction,
+    });
     const user = await models.User.create(
       {
         institution_id: institutionId,
@@ -206,6 +256,16 @@ const createUserInDatabase = async ({ institutionId, payload, actorId, ip }) => 
       { transaction }
     );
 
+    const settings = ensureAccessControlSettings(institution?.settings);
+    const customPermissions = setCustomPermissionsInSettings({
+      settings,
+      userId: user.id,
+      permissions: payload.custom_permissions,
+    });
+    if (institution) {
+      await institution.update({ settings }, { transaction });
+    }
+
     await transaction.commit();
 
     incrementInstitutionStaffCount(institutionId);
@@ -227,7 +287,8 @@ const createUserInDatabase = async ({ institutionId, payload, actorId, ip }) => 
       date_joined: staff.date_joined,
       is_active: user.is_active,
       status: user.is_active ? 'active' : 'inactive',
-      permissions: getPermissionsForRole(user.role),
+      custom_permissions: customPermissions,
+      permissions: getPermissionsForRole(user.role).concat(customPermissions),
     };
 
     await logAudit({
@@ -254,6 +315,71 @@ const createUser = async ({ institutionId, payload, actorId, ip }) => {
   }
 
   return createUserInRuntime({ institutionId, payload, actorId, ip });
+};
+
+const updateUserAccess = async ({ institutionId, userId, payload, actorId, ip }) => {
+  const customPermissions = normalizeCustomPermissions(payload.custom_permissions);
+
+  if (models.Institution && models.User) {
+    const institution = await models.Institution.findByPk(institutionId);
+    if (!institution) {
+      throw Object.assign(new Error('Institution not found.'), { statusCode: 404 });
+    }
+    const user = await models.User.findOne({
+      where: { id: userId, institution_id: institutionId },
+    });
+    if (!user) {
+      throw Object.assign(new Error('User not found.'), { statusCode: 404 });
+    }
+
+    const settings = ensureAccessControlSettings(institution.settings);
+    const previous = getCustomPermissionsFromSettings({ settings, userId });
+    const next = setCustomPermissionsInSettings({
+      settings,
+      userId,
+      permissions: customPermissions,
+    });
+    await institution.update({ settings });
+
+    await logAudit({
+      userId: actorId,
+      action: 'UPDATE',
+      resourceType: 'user_access',
+      resourceId: userId,
+      previousValues: { custom_permissions: previous },
+      newValues: { custom_permissions: next },
+      ip,
+    });
+
+    return {
+      user_id: userId,
+      custom_permissions: next,
+      permissions: getPermissionsForRole(user.role).concat(next),
+    };
+  }
+
+  const runtimeUser = store.users.accounts.find(
+    (item) => item.id === userId && item.institution_id === institutionId
+  );
+  if (!runtimeUser) {
+    throw Object.assign(new Error('User not found.'), { statusCode: 404 });
+  }
+  runtimeUser.custom_permissions = customPermissions;
+
+  await logAudit({
+    userId: actorId,
+    action: 'UPDATE',
+    resourceType: 'user_access',
+    resourceId: userId,
+    newValues: { custom_permissions: customPermissions },
+    ip,
+  });
+
+  return {
+    user_id: userId,
+    custom_permissions: customPermissions,
+    permissions: getPermissionsForRole(runtimeUser.role).concat(customPermissions),
+  };
 };
 
 const serializeParent = (item) => ({
@@ -319,5 +445,6 @@ const searchParents = async ({ institutionId, search, limit }) => {
 module.exports = {
   listUsers,
   createUser,
+  updateUserAccess,
   searchParents,
 };

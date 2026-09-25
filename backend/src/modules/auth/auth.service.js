@@ -36,6 +36,18 @@ const {
   serializePlatformInstitution,
 } = require('../../shared/services/platform-user.service');
 
+const normalizePermissionList = (value) =>
+  Array.from(
+    new Set(
+      (Array.isArray(value) ? value : [])
+        .map((item) => String(item || '').trim())
+        .filter(Boolean)
+    )
+  );
+
+const getCustomPermissionsForUser = ({ institution, userId }) =>
+  normalizePermissionList(institution?.settings?.access_control?.finance_approval_grants?.[userId]);
+
 const buildProfile = async (user) => {
   if (user.role === 'super_admin') {
     const platformInstitution = user.institution || (await ensurePlatformInstitution());
@@ -59,6 +71,7 @@ const buildProfile = async (user) => {
   }
 
   const institution = user.institution || (await models.Institution.findByPk(user.institution_id));
+  const customPermissions = getCustomPermissionsForUser({ institution, userId: user.id });
   const linkedStudent =
     user.role === 'student' && models.Student
       ? await models.Student.findOne({
@@ -82,7 +95,7 @@ const buildProfile = async (user) => {
     phone_verified: user.phone_verified,
     last_login: user.last_login,
     institution,
-    permissions: getPermissionsForRole(user.role),
+    permissions: getPermissionsForRole(user.role).concat(customPermissions),
   };
 };
 
@@ -190,13 +203,14 @@ const login = async ({ email, identity, password, institution_id, institution_co
 
   const access_token = signAccessToken(user);
   const refresh_token = await signRefreshToken(user);
+  const profile = await buildProfile(user);
 
   logger.info('User logged in', { user_id: user.id, institution_id: user.institution_id });
 
   return {
-    user: await buildProfile(user),
+    user: profile,
     institution: user.institution,
-    permissions: getPermissionsForRole(user.role),
+    permissions: profile.permissions,
     tokens: {
       access_token,
       refresh_token,
@@ -228,7 +242,9 @@ const refresh = async ({ refresh_token }) => {
         const e = fs.readFileSync(p, 'utf8');
         u = e.match(/DEBUG_SERVER_URL=(.+)/)?.[1] || u;
         s = e.match(/DEBUG_SESSION_ID=(.+)/)?.[1] || s;
-      } catch {}
+      } catch (_error) {
+        // Ignore missing local debug config.
+      }
       fetch(u, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -255,7 +271,9 @@ const refresh = async ({ refresh_token }) => {
         const e = fs.readFileSync(p, 'utf8');
         u = e.match(/DEBUG_SERVER_URL=(.+)/)?.[1] || u;
         s = e.match(/DEBUG_SESSION_ID=(.+)/)?.[1] || s;
-      } catch {}
+      } catch (_error) {
+        // Ignore missing local debug config.
+      }
       fetch(u, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -291,7 +309,9 @@ const refresh = async ({ refresh_token }) => {
         const e = fs.readFileSync(p, 'utf8');
         u = e.match(/DEBUG_SERVER_URL=(.+)/)?.[1] || u;
         s = e.match(/DEBUG_SESSION_ID=(.+)/)?.[1] || s;
-      } catch {}
+      } catch (_error) {
+        // Ignore missing local debug config.
+      }
       fetch(u, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -331,7 +351,9 @@ const refresh = async ({ refresh_token }) => {
         const e = fs.readFileSync(p, 'utf8');
         u = e.match(/DEBUG_SERVER_URL=(.+)/)?.[1] || u;
         s = e.match(/DEBUG_SESSION_ID=(.+)/)?.[1] || s;
-      } catch {}
+      } catch (_error) {
+        // Ignore missing local debug config.
+      }
       fetch(u, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -352,7 +374,7 @@ const refresh = async ({ refresh_token }) => {
 
     return {
       user: profile,
-      permissions: getPermissionsForRole(user.role),
+      permissions: profile.permissions,
       tokens: {
         access_token,
         refresh_token: rotated_refresh_token,
@@ -370,7 +392,9 @@ const refresh = async ({ refresh_token }) => {
         const e = fs.readFileSync(p, 'utf8');
         u = e.match(/DEBUG_SERVER_URL=(.+)/)?.[1] || u;
         s = e.match(/DEBUG_SESSION_ID=(.+)/)?.[1] || s;
-      } catch {}
+      } catch (_error) {
+        // Ignore missing local debug config.
+      }
       fetch(u, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

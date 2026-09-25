@@ -165,12 +165,17 @@ const buildProgramRoadmap = ({ program, settings }) => {
 const buildFeeSummary = ({
   currentPeriod,
   currentCourses,
+  outstandingCourses = [],
   progress,
   financePolicy,
   paidAmount = 0,
   invoicedAmount = 0,
 }) => {
   const courseTotal = currentCourses.reduce(
+    (sum, item) => sum + Number(item.fee_amount || 0),
+    0
+  );
+  const resitCourseTotal = outstandingCourses.reduce(
     (sum, item) => sum + Number(item.fee_amount || 0),
     0
   );
@@ -192,7 +197,11 @@ const buildFeeSummary = ({
   const penaltyApplied = Boolean(
     penaltyDeadline && String(today) > String(penaltyDeadline).slice(0, 10)
   );
-  const totalAmount = baseFeeAmount + courseTotal + (penaltyApplied ? lateRegistrationPenalty : 0);
+  const totalAmount =
+    baseFeeAmount +
+    courseTotal +
+    resitCourseTotal +
+    (penaltyApplied ? lateRegistrationPenalty : 0);
   const minimumRequiredAmount =
     minimumPaymentPercent > 0 ? (totalAmount * minimumPaymentPercent) / 100 : 0;
   const manualClearance = progress.fee_clearance !== false;
@@ -201,6 +210,7 @@ const buildFeeSummary = ({
   return {
     base_fee_amount: baseFeeAmount,
     course_fee_total: courseTotal,
+    resit_course_total: resitCourseTotal,
     late_registration_penalty: lateRegistrationPenalty,
     penalty_deadline: penaltyDeadline,
     penalty_applied: penaltyApplied,
@@ -326,6 +336,7 @@ const getOverviewFromDatabase = async ({ institutionId }) => {
     })),
     progression: settings.tertiary.progression,
     progression_policy: getProgressionPolicy(settings),
+    finance_policy: getFinancePolicy(settings),
     credentials: settings.tertiary.credentials,
     id_format: settings.tertiary.id_format,
   };
@@ -350,6 +361,7 @@ const getOverviewFromRuntime = async ({ institutionId }) => ({
     'Outstanding resits block forward registration until cleared.',
   ],
   progression_policy: { ...defaultProgressionPolicy },
+  finance_policy: { ...defaultFinancePolicy },
   credentials: ['Certificate', 'Diploma', 'Degree'],
   id_format: 'FAC/DEPT/YEAR/SEQ',
 });
@@ -635,6 +647,71 @@ const updateProgressionPolicy = async ({ institutionId, payload, userId, ip }) =
   return settings.tertiary.progression_policy;
 };
 
+const updateFinancePolicy = async ({ institutionId, payload, userId, ip }) => {
+  if (!databaseReady()) {
+    store.tertiary.financePolicy = {
+      ...(store.tertiary.financePolicy || defaultFinancePolicy),
+      new_student_registration_percent: normalizeNumber(
+        payload.new_student_registration_percent,
+        store.tertiary.financePolicy?.new_student_registration_percent ??
+          defaultFinancePolicy.new_student_registration_percent
+      ),
+      returning_student_registration_percent: normalizeNumber(
+        payload.returning_student_registration_percent,
+        store.tertiary.financePolicy?.returning_student_registration_percent ??
+          defaultFinancePolicy.returning_student_registration_percent
+      ),
+      midsem_exam_percent: normalizeNumber(
+        payload.midsem_exam_percent,
+        store.tertiary.financePolicy?.midsem_exam_percent ??
+          defaultFinancePolicy.midsem_exam_percent
+      ),
+      final_exam_percent: normalizeNumber(
+        payload.final_exam_percent,
+        store.tertiary.financePolicy?.final_exam_percent ??
+          defaultFinancePolicy.final_exam_percent
+      ),
+    };
+
+    return store.tertiary.financePolicy;
+  }
+
+  const institution = await models.Institution.findByPk(institutionId);
+  if (!institution) {
+    throw Object.assign(new Error('Institution not found.'), { statusCode: 404 });
+  }
+
+  const settings = ensureTertiarySettings(institution.settings);
+  const previous = getFinancePolicy(settings);
+  settings.tertiary.finance_policy = {
+    ...previous,
+    new_student_registration_percent: normalizeNumber(
+      payload.new_student_registration_percent,
+      previous.new_student_registration_percent
+    ),
+    returning_student_registration_percent: normalizeNumber(
+      payload.returning_student_registration_percent,
+      previous.returning_student_registration_percent
+    ),
+    midsem_exam_percent: normalizeNumber(payload.midsem_exam_percent, previous.midsem_exam_percent),
+    final_exam_percent: normalizeNumber(payload.final_exam_percent, previous.final_exam_percent),
+  };
+
+  await institution.update({ settings });
+
+  await logAudit({
+    userId,
+    action: 'UPDATE',
+    resourceType: 'tertiary_finance_policy',
+    resourceId: institutionId,
+    previousValues: previous,
+    newValues: settings.tertiary.finance_policy,
+    ip,
+  });
+
+  return settings.tertiary.finance_policy;
+};
+
 const updateStudentProgress = async ({ institutionId, studentId, payload, userId, ip }) => {
   if (!databaseReady()) {
     const progressIndex = store.tertiary.studentProgress.findIndex(
@@ -727,6 +804,7 @@ const getRegistrationStateFromSettings = async ({ institutionId, studentId }) =>
 
   const settings = ensureTertiarySettings(institution.settings);
   const progressionPolicy = getProgressionPolicy(settings);
+  const financePolicy = getFinancePolicy(settings);
   const progress = settings.tertiary.student_progress.find(
     (item) => item.student_id === studentId && item.institution_id === institutionId
   );
@@ -798,7 +876,11 @@ const getRegistrationStateFromSettings = async ({ institutionId, studentId }) =>
   const feeSummary = buildFeeSummary({
     currentPeriod,
     currentCourses: currentOfferings,
+    outstandingCourses: carryOverSummary.outstanding_courses
+      .map((item) => offerings.find((offering) => offering.code === item.code))
+      .filter(Boolean),
     progress,
+    financePolicy,
     paidAmount: financeTotals.paidAmount,
     invoicedAmount: financeTotals.invoicedAmount,
   });
@@ -814,6 +896,7 @@ const getRegistrationStateFromSettings = async ({ institutionId, studentId }) =>
     progression_override: carryOverSummary.progression_override,
     progression_note: progress.progression_note || null,
     progression_policy: progressionPolicy,
+    finance_policy: financePolicy,
     carry_over_summary: carryOverSummary,
     outstanding_resit_codes: progress.outstanding_resit_codes || [],
     eligible_courses: eligibleCourses,
@@ -851,6 +934,7 @@ const getStudentRegistrationState = async ({ institutionId, studentId }) => {
   }
 
   const progressionPolicy = store.tertiary.progressionPolicy || { ...defaultProgressionPolicy };
+  const financePolicy = store.tertiary.financePolicy || { ...defaultFinancePolicy };
   const progress = store.tertiary.studentProgress.find(
     (item) => item.student_id === studentId && item.institution_id === institutionId
   );
@@ -921,7 +1005,11 @@ const getStudentRegistrationState = async ({ institutionId, studentId }) => {
   const feeSummary = buildFeeSummary({
     currentPeriod,
     currentCourses: currentOfferings,
+    outstandingCourses: carryOverSummary.outstanding_courses
+      .map((item) => offerings.find((offering) => offering.code === item.code))
+      .filter(Boolean),
     progress,
+    financePolicy,
     paidAmount: periodInvoices.reduce((sum, item) => sum + Number(item.paid_amount || 0), 0),
     invoicedAmount: periodInvoices.reduce((sum, item) => sum + Number(item.total_amount || 0), 0),
   });
@@ -936,6 +1024,7 @@ const getStudentRegistrationState = async ({ institutionId, studentId }) => {
     progression_override: carryOverSummary.progression_override,
     progression_note: progress.progression_note || null,
     progression_policy: progressionPolicy,
+    finance_policy: financePolicy,
     carry_over_summary: carryOverSummary,
     outstanding_resit_codes: progress.outstanding_resit_codes,
     eligible_courses: eligibleCourses,
@@ -1130,6 +1219,7 @@ module.exports = {
   listPrograms,
   createProgram,
   updateProgressionPolicy,
+  updateFinancePolicy,
   updateStudentProgress,
   getStudentRegistrationState,
   registerCourses,

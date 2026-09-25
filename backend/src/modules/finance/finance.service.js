@@ -1,3 +1,5 @@
+const { Op } = require('sequelize');
+
 const { createSequence } = require('../../shared/helpers/common');
 const { logAudit } = require('../../shared/services/audit-log.service');
 const { store } = require('../../shared/store/runtime-store');
@@ -11,13 +13,342 @@ const ensureAdmissionsSettings = (settings) => {
   return next;
 };
 
+const clone = (value) => JSON.parse(JSON.stringify(value || {}));
+
+const ensureFinanceSettings = (settings) => {
+  const next = clone(settings);
+  next.finance = next.finance || {};
+  next.finance.payment_approvals = next.finance.payment_approvals || [];
+  next.finance.student_credits = next.finance.student_credits || [];
+  next.finance.payment_gateway_requests = next.finance.payment_gateway_requests || [];
+  next.access_control = next.access_control || {};
+  next.access_control.finance_approval_grants = next.access_control.finance_approval_grants || {};
+  return next;
+};
+
+const ensureFinanceRuntimeState = () => {
+  store.finance.paymentApprovals = store.finance.paymentApprovals || [];
+  store.finance.studentCredits = store.finance.studentCredits || [];
+  store.finance.paymentGatewayRequests = store.finance.paymentGatewayRequests || [];
+  store.users.accessGrants = store.users.accessGrants || {};
+};
+
+const normalizePermissionList = (value) =>
+  Array.from(
+    new Set(
+      (Array.isArray(value) ? value : [])
+        .map((item) => String(item || '').trim())
+        .filter(Boolean)
+    )
+  );
+
+const getUserFinanceApprovalGrants = ({ settings, userId }) =>
+  normalizePermissionList(settings?.access_control?.finance_approval_grants?.[userId]);
+
+const getRuntimeFinanceApprovalGrants = (userId) => {
+  ensureFinanceRuntimeState();
+  return normalizePermissionList(store.users.accessGrants?.[userId]);
+};
+
+const getStudentCreditBalance = ({ settings, studentId }) => {
+  const item = (settings?.finance?.student_credits || []).find(
+    (entry) => String(entry.student_id) === String(studentId)
+  );
+  return Number(item?.amount || 0);
+};
+
+const setStudentCreditBalance = ({ settings, studentId, amount }) => {
+  settings.finance.student_credits = settings.finance.student_credits || [];
+  const nextAmount = Number(amount || 0);
+  const index = settings.finance.student_credits.findIndex(
+    (entry) => String(entry.student_id) === String(studentId)
+  );
+
+  if (nextAmount <= 0) {
+    if (index >= 0) {
+      settings.finance.student_credits.splice(index, 1);
+    }
+    return 0;
+  }
+
+  if (index >= 0) {
+    settings.finance.student_credits[index].amount = nextAmount;
+  } else {
+    settings.finance.student_credits.push({ student_id: studentId, amount: nextAmount });
+  }
+
+  return nextAmount;
+};
+
+const getRuntimeStudentCreditBalance = (studentId) => {
+  ensureFinanceRuntimeState();
+  const item = (store.finance.studentCredits || []).find(
+    (entry) => String(entry.student_id) === String(studentId)
+  );
+  return Number(item?.amount || 0);
+};
+
+const setRuntimeStudentCreditBalance = (studentId, amount) => {
+  ensureFinanceRuntimeState();
+  const nextAmount = Number(amount || 0);
+  const index = (store.finance.studentCredits || []).findIndex(
+    (entry) => String(entry.student_id) === String(studentId)
+  );
+
+  if (nextAmount <= 0) {
+    if (index >= 0) {
+      store.finance.studentCredits.splice(index, 1);
+    }
+    return 0;
+  }
+
+  if (index >= 0) {
+    store.finance.studentCredits[index].amount = nextAmount;
+  } else {
+    store.finance.studentCredits.push({ student_id: studentId, amount: nextAmount });
+  }
+
+  return nextAmount;
+};
+
+const ensureCurrentAcademicYear = async ({ institutionId, transaction }) => {
+  if (!models.AcademicYear) {
+    return null;
+  }
+
+  const existing = await models.AcademicYear.findOne({
+    where: { institution_id: institutionId, is_current: true },
+    transaction,
+  });
+  if (existing) {
+    return existing;
+  }
+
+  const year = new Date().getFullYear();
+  return models.AcademicYear.create(
+    {
+      institution_id: institutionId,
+      name: `${year}/${year + 1}`,
+      start_date: `${year}-01-01`,
+      end_date: `${year}-12-31`,
+      is_current: true,
+    },
+    { transaction }
+  );
+};
+
+const resolveInvoiceAcademicContext = async ({ institutionId, payload, transaction }) => {
+  const academicYear = payload.academic_year_id
+    ? { id: payload.academic_year_id }
+    : await ensureCurrentAcademicYear({ institutionId, transaction });
+
+  if (payload.term_id) {
+    return {
+      academic_year_id: academicYear?.id || null,
+      term_id: payload.term_id,
+    };
+  }
+
+  if (!payload.student_id || !models.Institution) {
+    return {
+      academic_year_id: academicYear?.id || null,
+      term_id: null,
+    };
+  }
+
+  const institution = await models.Institution.findByPk(institutionId, {
+    attributes: ['id', 'settings'],
+    transaction,
+  }).catch(() => null);
+  const settings = ensureFinanceSettings(ensureAdmissionsSettings(institution?.settings));
+  const currentProgress = (settings.tertiary?.student_progress || []).find(
+    (item) => String(item.student_id) === String(payload.student_id)
+  );
+  const currentPeriodId = currentProgress?.current_period_id || null;
+  const period = (settings.academics?.periods || []).find((item) => item.id === currentPeriodId);
+
+  return {
+    academic_year_id: academicYear?.id || null,
+    term_id: payload.term_id || period?.term_semester_id || null,
+  };
+};
+
+const findPaymentAccountInProfiles = ({ settings, identifier }) => {
+  const query = String(identifier || '').trim().toLowerCase();
+  if (!query) {
+    return null;
+  }
+
+  const progress = (settings?.tertiary?.student_progress || []).find(
+    (item) =>
+      String(item.student_id || '').trim().toLowerCase() === query ||
+      String(item.student_number || '').trim().toLowerCase() === query
+  );
+  const profile = (settings?.admissions?.student_profiles || []).find((item) => {
+    const fullName = String(item.full_name || '').trim().toLowerCase();
+    return (
+      String(item.student_id || '').trim().toLowerCase() === query ||
+      String(item.student_number || '').trim().toLowerCase() === query ||
+      fullName === query
+    );
+  });
+
+  const programId = progress?.program_id || profile?.tertiary?.program_id || null;
+  const program =
+    (settings?.tertiary?.programs || []).find((item) => String(item.id) === String(programId)) ||
+    null;
+
+  return {
+    student_id: progress?.student_id || profile?.student_id || null,
+    student_number: progress?.student_number || profile?.student_number || null,
+    student_name: profile?.full_name || null,
+    class_name:
+      profile?.group_name ||
+      profile?.class_name ||
+      profile?.assigned_class ||
+      null,
+    level_code: profile?.level_code || null,
+    program_id: program?.id || programId || null,
+    program_name: program?.name || null,
+  };
+};
+
+const findStudentPaymentAccount = async ({ institutionId, identifier, actor }) => {
+  const query = String(identifier || '').trim();
+  if (!query) {
+    throw Object.assign(new Error('Student ID is required.'), { statusCode: 400 });
+  }
+
+  const institution = models.Institution
+    ? await models.Institution.findByPk(institutionId, { attributes: ['id', 'settings'] }).catch(() => null)
+    : null;
+  const settings = ensureFinanceSettings(ensureAdmissionsSettings(institution?.settings));
+
+  let restrictedStudentId = null;
+  if (actor?.role === 'student' && models.Student) {
+    const linkedStudent = await models.Student.findOne({
+      where: { user_id: actor.id, institution_id: institutionId },
+      attributes: ['id', 'student_number'],
+    }).catch(() => null);
+    if (!linkedStudent) {
+      throw Object.assign(new Error('Student finance profile not found.'), { statusCode: 404 });
+    }
+    restrictedStudentId = linkedStudent.id;
+  }
+
+  let account = null;
+  if (models.Student && models.User) {
+    const dbStudent = await models.Student.findOne({
+      where: {
+        institution_id: institutionId,
+        ...(restrictedStudentId
+          ? { id: restrictedStudentId }
+          : {
+              [Op.or]: [{ id: query }, { student_number: query }],
+            }),
+      },
+      attributes: ['id', 'student_number'],
+      include: [
+        { model: models.User, as: 'user', required: false, attributes: ['first_name', 'last_name'] },
+        { model: models.Class, as: 'class', required: false, attributes: ['name'] },
+        { model: models.EducationLevel, as: 'level', required: false, attributes: ['level_code'] },
+      ],
+    }).catch(() => null);
+
+    if (dbStudent) {
+      const profile = (settings.admissions.student_profiles || []).find(
+        (item) => String(item.student_id) === String(dbStudent.id)
+      );
+      const progress = (settings.tertiary.student_progress || []).find(
+        (item) => String(item.student_id) === String(dbStudent.id)
+      );
+      const programId = progress?.program_id || profile?.tertiary?.program_id || null;
+      const program =
+        (settings.tertiary.programs || []).find((item) => String(item.id) === String(programId)) ||
+        null;
+
+      account = {
+        student_id: dbStudent.id,
+        student_number: dbStudent.student_number || profile?.student_number || null,
+        student_name:
+          `${dbStudent.user?.first_name || ''} ${dbStudent.user?.last_name || ''}`.trim() ||
+          profile?.full_name ||
+          null,
+        class_name:
+          dbStudent.class?.name ||
+          profile?.group_name ||
+          profile?.class_name ||
+          profile?.assigned_class ||
+          null,
+        level_code: dbStudent.level?.level_code || profile?.level_code || null,
+        program_id: program?.id || programId || null,
+        program_name: program?.name || null,
+      };
+    }
+  }
+
+  if (!account) {
+    account = findPaymentAccountInProfiles({ settings, identifier: restrictedStudentId || query });
+  }
+
+  if (!account?.student_id) {
+    throw Object.assign(new Error('Student account not found.'), { statusCode: 404 });
+  }
+
+  const invoices = (await listInvoices({ institutionId, query: {} })).filter(
+    (item) => String(item.student_id) === String(account.student_id)
+  );
+  const payments = (await listPayments({
+    institutionId,
+    query: { student_id: account.student_id },
+  })).filter((item) => String(item.student_id) === String(account.student_id));
+  const creditBalance = models.Institution
+    ? getStudentCreditBalance({ settings, studentId: account.student_id })
+    : getRuntimeStudentCreditBalance(account.student_id);
+  const totalOutstanding = invoices.reduce((sum, item) => sum + Number(item.balance || 0), 0);
+
+  return {
+    ...account,
+    credit_balance: creditBalance,
+    outstanding_amount: totalOutstanding,
+    net_outstanding_amount: Math.max(totalOutstanding - creditBalance, 0),
+    invoices,
+    payments,
+  };
+};
+
+const applyInvoicePaymentState = ({ invoice, amount }) => {
+  const totalAmount = Number(invoice.total_amount || 0);
+  const currentPaid = Number(invoice.paid_amount || 0);
+  const nextPaidAttempt = currentPaid + Number(amount || 0);
+  const appliedAmount = Math.min(nextPaidAttempt, totalAmount) - currentPaid;
+  const excessAmount = Math.max(nextPaidAttempt - totalAmount, 0);
+  const nextPaid = Math.min(nextPaidAttempt, totalAmount);
+  const nextBalance = Math.max(totalAmount - nextPaid, 0);
+  const nextStatus = nextBalance === 0 ? 'paid' : nextPaid > 0 ? 'partial' : 'pending';
+
+  invoice.paid_amount = nextPaid;
+  invoice.balance = nextBalance;
+  invoice.status = nextStatus;
+
+  return {
+    invoice,
+    applied_amount: Math.max(appliedAmount, 0),
+    excess_amount: excessAmount,
+  };
+};
+
 const listInvoices = async ({ institutionId, query }) => {
+  const runtimeItems = (store.finance.invoices || []).filter(
+    (invoice) => invoice.institution_id === institutionId
+  );
+
   if (models.StudentInvoice) {
     try {
       const institution = models.Institution
         ? await models.Institution.findByPk(institutionId).catch(() => null)
         : null;
-      const settings = ensureAdmissionsSettings(institution?.settings);
+      const settings = ensureFinanceSettings(ensureAdmissionsSettings(institution?.settings));
       const profileMap = new Map(
         settings.admissions.student_profiles.map((item) => [item.student_id, item])
       );
@@ -40,10 +371,11 @@ const listInvoices = async ({ institutionId, query }) => {
         ],
         order: [['created_at', 'DESC']],
       });
-      return rows.map((row) => {
+      const dbItems = rows.map((row) => {
         const invoice = row.toJSON();
         const profile = profileMap.get(invoice.student_id) || {};
         const fullName = `${invoice.student?.user?.first_name || ''} ${invoice.student?.user?.last_name || ''}`.trim();
+        const creditBalance = getStudentCreditBalance({ settings, studentId: invoice.student_id });
 
         return {
           ...invoice,
@@ -56,13 +388,40 @@ const listInvoices = async ({ institutionId, query }) => {
             null,
           student_number: invoice.student?.student_number || profile.student_number || null,
           level_code: invoice.student?.level?.level_code || profile.level_code || null,
+          credit_balance: creditBalance,
+          net_balance: Math.max(Number(invoice.balance || 0) - creditBalance, 0),
         };
       });
+
+      const merged = [...dbItems];
+      runtimeItems.forEach((item) => {
+        if (!merged.some((entry) => String(entry.id) === String(item.id))) {
+          merged.push(item);
+        }
+      });
+
+      const enriched = merged.map((invoice) => {
+        const creditBalance = getStudentCreditBalance({ settings, studentId: invoice.student_id });
+        return {
+          ...invoice,
+          credit_balance: creditBalance,
+          net_balance: Math.max(Number(invoice.balance || 0) - creditBalance, 0),
+        };
+      });
+
+      return query.status ? enriched.filter((invoice) => invoice.status === query.status) : enriched;
     } catch (_error) {
       // fall through to runtime
     }
   }
-  const items = store.finance.invoices.filter((invoice) => invoice.institution_id === institutionId);
+  const items = runtimeItems.map((invoice) => {
+    const creditBalance = getRuntimeStudentCreditBalance(invoice.student_id);
+    return {
+      ...invoice,
+      credit_balance: creditBalance,
+      net_balance: Math.max(Number(invoice.balance || 0) - creditBalance, 0),
+    };
+  });
   if (query.status) {
     return items.filter((invoice) => invoice.status === query.status);
   }
@@ -88,29 +447,44 @@ const createInvoice = async ({ institutionId, userId, payload, ip }) => {
 
   if (models.StudentInvoice && sequelize?.transaction) {
     try {
-      const row = await models.StudentInvoice.create({
-        institution_id: institutionId,
-        student_id: payload.student_id,
-        academic_year_id: payload.academic_year_id || null,
-        term_id: payload.term_id || null,
-        invoice_number: baseInvoice.invoice_number,
-        total_amount: totalAmount,
-        paid_amount: 0,
-        balance: totalAmount,
-        status: 'pending',
-        due_date: payload.due_date || null,
-        items: payload.items || [],
-      });
-      const invoice = { ...baseInvoice, id: row.id };
-      await logAudit({
-        userId,
-        action: 'CREATE',
-        resourceType: 'invoice',
-        resourceId: row.id,
-        newValues: invoice,
-        ip,
-      });
-      return invoice;
+      const transaction = await sequelize.transaction();
+      try {
+        const academicContext = await resolveInvoiceAcademicContext({
+          institutionId,
+          payload,
+          transaction,
+        });
+        const row = await models.StudentInvoice.create(
+          {
+            institution_id: institutionId,
+            student_id: payload.student_id,
+            academic_year_id: academicContext.academic_year_id,
+            term_id: academicContext.term_id,
+            invoice_number: baseInvoice.invoice_number,
+            total_amount: totalAmount,
+            paid_amount: 0,
+            balance: totalAmount,
+            status: 'pending',
+            due_date: payload.due_date || null,
+            items: payload.items || [],
+          },
+          { transaction }
+        );
+        await transaction.commit();
+        const invoice = { ...baseInvoice, id: row.id, ...academicContext };
+        await logAudit({
+          userId,
+          action: 'CREATE',
+          resourceType: 'invoice',
+          resourceId: row.id,
+          newValues: invoice,
+          ip,
+        });
+        return invoice;
+      } catch (error) {
+        await transaction.rollback();
+        throw error;
+      }
     } catch (_error) {
       // fall through to runtime
     }
@@ -151,11 +525,29 @@ const recordPayment = async ({ institutionId, userId, payload, ip }) => {
           await tx.rollback();
           throw Object.assign(new Error('Invoice not found.'), { statusCode: 404 });
         }
-        invoiceModel.paid_amount = Number(invoiceModel.paid_amount || 0) + amount;
-        invoiceModel.balance = Math.max(Number(invoiceModel.total_amount || 0) - Number(invoiceModel.paid_amount || 0), 0);
-        invoiceModel.status =
-          invoiceModel.balance === 0 ? 'paid' : Number(invoiceModel.paid_amount) > 0 ? 'partial' : 'pending';
+        const institution = models.Institution
+          ? await models.Institution.findByPk(institutionId, {
+              attributes: ['id', 'settings'],
+              transaction: tx,
+            }).catch(() => null)
+          : null;
+        const settings = ensureFinanceSettings(ensureAdmissionsSettings(institution?.settings));
+        const paymentState = applyInvoicePaymentState({ invoice: invoiceModel, amount });
         await invoiceModel.save({ transaction: tx });
+        if (paymentState.excess_amount > 0) {
+          const existingCredit = getStudentCreditBalance({
+            settings,
+            studentId: invoiceModel.student_id,
+          });
+          setStudentCreditBalance({
+            settings,
+            studentId: invoiceModel.student_id,
+            amount: existingCredit + paymentState.excess_amount,
+          });
+          if (institution) {
+            await institution.update({ settings }, { transaction: tx });
+          }
+        }
 
         const payment = await models.Payment.create(
           {
@@ -167,7 +559,12 @@ const recordPayment = async ({ institutionId, userId, payload, ip }) => {
             receipt_number: payload.receipt_number || createSequence('RCT', new Date(), (store.finance.payments.length || 0) + 1, 3),
             paid_at: payload.paid_at || new Date().toISOString(),
             received_by: userId,
-            notes: payload.notes || null,
+            notes:
+              paymentState.excess_amount > 0
+                ? [payload.notes || null, `Excess credited: ${paymentState.excess_amount}`]
+                    .filter(Boolean)
+                    .join(' | ')
+                : payload.notes || null,
             is_verified: true,
           },
           { transaction: tx }
@@ -203,10 +600,11 @@ const recordPayment = async ({ institutionId, userId, payload, ip }) => {
     throw Object.assign(new Error('Invoice not found.'), { statusCode: 404 });
   }
 
-  invoice.paid_amount = Number(invoice.paid_amount || 0) + amount;
-  invoice.balance = Math.max(Number(invoice.total_amount || 0) - Number(invoice.paid_amount || 0), 0);
-  invoice.status =
-    invoice.balance === 0 ? 'paid' : Number(invoice.paid_amount) > 0 ? 'partial' : 'pending';
+  const paymentState = applyInvoicePaymentState({ invoice, amount });
+  if (paymentState.excess_amount > 0) {
+    const existingCredit = getRuntimeStudentCreditBalance(invoice.student_id);
+    setRuntimeStudentCreditBalance(invoice.student_id, existingCredit + paymentState.excess_amount);
+  }
 
   const payment = {
     id: `pay-${(store.finance.payments.length || 0) + 1}`,
@@ -218,6 +616,12 @@ const recordPayment = async ({ institutionId, userId, payload, ip }) => {
     receipt_number: createSequence('RCT', new Date(), (store.finance.payments.length || 0) + 1, 3),
     paid_at: payload.paid_at || new Date().toISOString(),
     received_by: userId,
+    notes:
+      paymentState.excess_amount > 0
+        ? [payload.notes || null, `Excess credited: ${paymentState.excess_amount}`]
+            .filter(Boolean)
+            .join(' | ')
+        : payload.notes || null,
   };
   store.finance.payments.push(payment);
 
@@ -232,6 +636,459 @@ const recordPayment = async ({ institutionId, userId, payload, ip }) => {
 
   await analyticsService.invalidateAnalyticsCache(institutionId);
   return { invoice, payment };
+};
+
+const ensureApprovalGrant = async ({ institutionId, userId, grant }) => {
+  if (models.Institution) {
+    const institution = await models.Institution.findByPk(institutionId, {
+      attributes: ['id', 'settings'],
+    }).catch(() => null);
+    const settings = ensureFinanceSettings(institution?.settings);
+    const grants = getUserFinanceApprovalGrants({ settings, userId });
+    if (!grants.includes(grant)) {
+      throw Object.assign(new Error('You do not have this finance approval grant.'), {
+        statusCode: 403,
+      });
+    }
+    return { institution, settings, grants };
+  }
+
+  const grants = getRuntimeFinanceApprovalGrants(userId);
+  if (!grants.includes(grant)) {
+    throw Object.assign(new Error('You do not have this finance approval grant.'), {
+      statusCode: 403,
+    });
+  }
+  return { institution: null, settings: null, grants };
+};
+
+const listPaymentApprovals = async ({ institutionId, query = {} }) => {
+  if (models.Institution) {
+    const institution = await models.Institution.findByPk(institutionId, {
+      attributes: ['id', 'settings'],
+    }).catch(() => null);
+    const settings = ensureFinanceSettings(institution?.settings);
+    return (settings.finance.payment_approvals || [])
+      .filter((item) => !query.status || item.status === query.status)
+      .sort((a, b) => String(b.requested_at || '').localeCompare(String(a.requested_at || '')));
+  }
+
+  ensureFinanceRuntimeState();
+  return (store.finance.paymentApprovals || [])
+    .filter(
+      (item) =>
+        item.institution_id === institutionId && (!query.status || item.status === query.status)
+    )
+    .sort((a, b) => String(b.requested_at || '').localeCompare(String(a.requested_at || '')));
+};
+
+const listPaymentGatewayRequests = async ({ institutionId, query = {} }) => {
+  if (models.Institution) {
+    const institution = await models.Institution.findByPk(institutionId, {
+      attributes: ['id', 'settings'],
+    }).catch(() => null);
+    const settings = ensureFinanceSettings(institution?.settings);
+    return (settings.finance.payment_gateway_requests || [])
+      .filter((item) => !query.status || item.status === query.status)
+      .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
+  }
+
+  ensureFinanceRuntimeState();
+  return (store.finance.paymentGatewayRequests || [])
+    .filter(
+      (item) =>
+        item.institution_id === institutionId && (!query.status || item.status === query.status)
+    )
+    .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
+};
+
+const getPaymentAccountLookup = async ({ institutionId, identifier, actor }) =>
+  findStudentPaymentAccount({ institutionId, identifier, actor });
+
+const initiateGatewayPayment = async ({ institutionId, userId, payload, actor, ip }) => {
+  const account = await findStudentPaymentAccount({
+    institutionId,
+    identifier: payload.student_identifier,
+    actor,
+  });
+  const amount = Number(payload.amount || 0);
+  if (amount <= 0) {
+    throw Object.assign(new Error('Payment amount must be greater than zero.'), { statusCode: 400 });
+  }
+
+  const channel = String(payload.channel || '').trim().toLowerCase();
+  if (!['bank', 'card', 'mobile_money', 'ussd'].includes(channel)) {
+    throw Object.assign(new Error('Unsupported payment channel.'), { statusCode: 400 });
+  }
+
+  const targetInvoice = account.invoices.find(
+    (item) => String(item.id) === String(payload.invoice_id)
+  );
+  if (!targetInvoice) {
+    throw Object.assign(new Error('Select an invoice to continue with payment.'), { statusCode: 400 });
+  }
+
+  const request = {
+    id: `pgr-${Date.now()}`,
+    institution_id: institutionId,
+    student_id: account.student_id,
+    student_number: account.student_number,
+    student_name: account.student_name,
+    program_name: account.program_name,
+    invoice_id: targetInvoice.id,
+    invoice_number: targetInvoice.invoice_number,
+    amount,
+    channel,
+    payer_phone: payload.payer_phone || null,
+    status: 'pending_gateway',
+    gateway_reference: `PGW-${Date.now()}`,
+    checkout_url:
+      channel === 'card'
+        ? `https://gateway.example/checkout/${Date.now()}`
+        : null,
+    ussd_code:
+      channel === 'ussd' ? `*170*555*${String(Date.now()).slice(-4)}#` : null,
+    provider_message:
+      channel === 'ussd'
+        ? 'Dial the generated USSD code to complete this payment on a mobile device.'
+        : channel === 'mobile_money'
+          ? 'A mobile money prompt will be sent once the live aggregator is connected.'
+          : channel === 'bank'
+            ? 'Bank transfer verification will use callback confirmation when the aggregator is connected.'
+            : 'Card checkout URL is reserved for live gateway handoff.',
+    metadata: {
+      proof_reference: payload.proof_reference || null,
+      payer_name: payload.payer_name || null,
+    },
+    created_by: userId,
+    created_at: new Date().toISOString(),
+    callback_status: 'awaiting',
+    posted_payment: null,
+  };
+
+  if (models.Institution) {
+    const institution = await models.Institution.findByPk(institutionId);
+    if (!institution) {
+      throw Object.assign(new Error('Institution not found.'), { statusCode: 404 });
+    }
+    const settings = ensureFinanceSettings(institution.settings);
+    settings.finance.payment_gateway_requests.push(request);
+    await institution.update({ settings });
+  } else {
+    ensureFinanceRuntimeState();
+    store.finance.paymentGatewayRequests.push(request);
+  }
+
+  await logAudit({
+    userId,
+    action: 'CREATE',
+    resourceType: 'gateway_payment_request',
+    resourceId: request.id,
+    newValues: request,
+    ip,
+  });
+
+  return request;
+};
+
+const handleGatewayCallback = async ({ institutionId, payload, userId, ip }) => {
+  const reference = String(payload.gateway_reference || payload.reference || '').trim();
+  if (!reference) {
+    throw Object.assign(new Error('Gateway reference is required.'), { statusCode: 400 });
+  }
+  const outcome = String(payload.status || '').trim().toLowerCase();
+  if (!['success', 'failed'].includes(outcome)) {
+    throw Object.assign(new Error('Callback status must be success or failed.'), { statusCode: 400 });
+  }
+
+  const finalizeRequest = async (request, persist) => {
+    if (request.status !== 'pending_gateway') {
+      throw Object.assign(new Error('This gateway request is already closed.'), { statusCode: 400 });
+    }
+
+    request.callback_status = outcome;
+    request.callback_payload = clone(payload);
+    request.callback_at = new Date().toISOString();
+
+    if (outcome === 'failed') {
+      request.status = 'failed';
+      await persist(request);
+      return request;
+    }
+
+    const result = await recordPayment({
+      institutionId,
+      userId,
+      payload: {
+        invoice_id: request.invoice_id,
+        amount: request.amount,
+        payment_method: request.channel,
+        transaction_ref: request.gateway_reference,
+        notes: `Gateway callback success (${request.channel})`,
+      },
+      ip,
+    });
+
+    request.status = 'success';
+    request.posted_payment = {
+      id: result.payment.id,
+      receipt_number: result.payment.receipt_number || null,
+      amount: result.payment.amount,
+    };
+    await persist(request);
+    return request;
+  };
+
+  if (models.Institution) {
+    const institution = await models.Institution.findByPk(institutionId);
+    if (!institution) {
+      throw Object.assign(new Error('Institution not found.'), { statusCode: 404 });
+    }
+    const settings = ensureFinanceSettings(institution.settings);
+    const index = settings.finance.payment_gateway_requests.findIndex(
+      (item) => String(item.gateway_reference) === reference
+    );
+    if (index < 0) {
+      throw Object.assign(new Error('Gateway payment request not found.'), { statusCode: 404 });
+    }
+    const request = settings.finance.payment_gateway_requests[index];
+    const updated = await finalizeRequest(request, async (nextRequest) => {
+      settings.finance.payment_gateway_requests[index] = nextRequest;
+      await institution.update({ settings });
+    });
+    await logAudit({
+      userId,
+      action: 'UPDATE',
+      resourceType: 'gateway_payment_request',
+      resourceId: updated.id,
+      newValues: updated,
+      ip,
+    });
+    return updated;
+  }
+
+  ensureFinanceRuntimeState();
+  const index = store.finance.paymentGatewayRequests.findIndex(
+    (item) =>
+      item.institution_id === institutionId && String(item.gateway_reference) === reference
+  );
+  if (index < 0) {
+    throw Object.assign(new Error('Gateway payment request not found.'), { statusCode: 404 });
+  }
+  const request = store.finance.paymentGatewayRequests[index];
+  const updated = await finalizeRequest(request, async (nextRequest) => {
+    store.finance.paymentGatewayRequests[index] = nextRequest;
+  });
+  await logAudit({
+    userId,
+    action: 'UPDATE',
+    resourceType: 'gateway_payment_request',
+    resourceId: updated.id,
+    newValues: updated,
+    ip,
+  });
+  return updated;
+};
+
+const initiatePaymentApproval = async ({ institutionId, userId, payload, ip }) => {
+  const invoiceList = await listInvoices({ institutionId, query: {} });
+  const invoice = invoiceList.find((item) => String(item.id) === String(payload.invoice_id));
+  if (!invoice) {
+    throw Object.assign(new Error('Invoice not found.'), { statusCode: 404 });
+  }
+
+  const approval = {
+    id: `payapp-${Date.now()}`,
+    institution_id: institutionId,
+    invoice_id: invoice.id,
+    invoice_number: invoice.invoice_number,
+    student_id: invoice.student_id,
+    student_name: invoice.student_name,
+    class_name: invoice.class_name,
+    amount: Number(payload.amount || 0),
+    payment_method: payload.payment_method || 'bank',
+    transaction_ref: payload.transaction_ref || null,
+    proof_reference: payload.proof_reference || null,
+    notes: payload.notes || null,
+    status: 'pending_director',
+    requested_by: userId,
+    requested_at: new Date().toISOString(),
+    director_approval: null,
+    accountant_approval: null,
+  };
+
+  if (models.Institution) {
+    const institution = await models.Institution.findByPk(institutionId);
+    if (!institution) {
+      throw Object.assign(new Error('Institution not found.'), { statusCode: 404 });
+    }
+    const settings = ensureFinanceSettings(institution.settings);
+    settings.finance.payment_approvals.push(approval);
+    await institution.update({ settings });
+  } else {
+    ensureFinanceRuntimeState();
+    store.finance.paymentApprovals.push(approval);
+  }
+
+  await logAudit({
+    userId,
+    action: 'CREATE',
+    resourceType: 'finance_payment_approval',
+    resourceId: approval.id,
+    newValues: approval,
+    ip,
+  });
+
+  return approval;
+};
+
+const approvePaymentApproval = async ({ institutionId, approvalId, payload, userId, ip }) => {
+  const action = String(payload.action || 'approve').toLowerCase();
+  const note = payload.note || null;
+  const rejectionReason = payload.rejection_reason || null;
+
+  if (models.Institution) {
+    const institution = await models.Institution.findByPk(institutionId);
+    if (!institution) {
+      throw Object.assign(new Error('Institution not found.'), { statusCode: 404 });
+    }
+
+    const settings = ensureFinanceSettings(institution.settings);
+    const index = settings.finance.payment_approvals.findIndex((item) => item.id === approvalId);
+    if (index < 0) {
+      throw Object.assign(new Error('Payment approval request not found.'), { statusCode: 404 });
+    }
+
+    const current = settings.finance.payment_approvals[index];
+    if (current.status === 'pending_director') {
+      await ensureApprovalGrant({ institutionId, userId, grant: 'finance_approve_director' });
+      if (action === 'reject') {
+        current.status = 'rejected';
+        current.rejection_reason = rejectionReason;
+      } else {
+        current.director_approval = { approved_by: userId, approved_at: new Date().toISOString(), note };
+        current.status = 'pending_accountant';
+      }
+    } else if (current.status === 'pending_accountant') {
+      await ensureApprovalGrant({ institutionId, userId, grant: 'finance_approve_accountant' });
+      if (current.director_approval?.approved_by && String(current.director_approval.approved_by) === String(userId)) {
+        throw Object.assign(new Error('Director and accountant approvals must be completed by different users.'), {
+          statusCode: 400,
+        });
+      }
+      if (action === 'reject') {
+        current.status = 'rejected';
+        current.rejection_reason = rejectionReason;
+      } else {
+        const result = await recordPayment({
+          institutionId,
+          userId,
+          payload: {
+            invoice_id: current.invoice_id,
+            amount: current.amount,
+            payment_method: current.payment_method,
+            transaction_ref: current.transaction_ref,
+            notes: [current.notes || null, note || null].filter(Boolean).join(' | ') || null,
+          },
+          ip,
+        });
+        current.accountant_approval = {
+          approved_by: userId,
+          approved_at: new Date().toISOString(),
+          note,
+        };
+        current.status = 'approved';
+        current.posted_payment = {
+          id: result.payment.id,
+          receipt_number: result.payment.receipt_number || null,
+          amount: result.payment.amount,
+        };
+      }
+    } else {
+      throw Object.assign(new Error('This approval request is already closed.'), { statusCode: 400 });
+    }
+
+    settings.finance.payment_approvals[index] = current;
+    await institution.update({ settings });
+
+    await logAudit({
+      userId,
+      action: 'UPDATE',
+      resourceType: 'finance_payment_approval',
+      resourceId: current.id,
+      newValues: current,
+      ip,
+    });
+
+    return current;
+  }
+
+  ensureFinanceRuntimeState();
+  const index = store.finance.paymentApprovals.findIndex(
+    (item) => item.id === approvalId && item.institution_id === institutionId
+  );
+  if (index < 0) {
+    throw Object.assign(new Error('Payment approval request not found.'), { statusCode: 404 });
+  }
+  const current = store.finance.paymentApprovals[index];
+  if (current.status === 'pending_director') {
+    await ensureApprovalGrant({ institutionId, userId, grant: 'finance_approve_director' });
+    if (action === 'reject') {
+      current.status = 'rejected';
+      current.rejection_reason = rejectionReason;
+    } else {
+      current.director_approval = { approved_by: userId, approved_at: new Date().toISOString(), note };
+      current.status = 'pending_accountant';
+    }
+  } else if (current.status === 'pending_accountant') {
+    await ensureApprovalGrant({ institutionId, userId, grant: 'finance_approve_accountant' });
+    if (current.director_approval?.approved_by && String(current.director_approval.approved_by) === String(userId)) {
+      throw Object.assign(new Error('Director and accountant approvals must be completed by different users.'), {
+        statusCode: 400,
+      });
+    }
+    if (action === 'reject') {
+      current.status = 'rejected';
+      current.rejection_reason = rejectionReason;
+    } else {
+      const result = await recordPayment({
+        institutionId,
+        userId,
+        payload: {
+          invoice_id: current.invoice_id,
+          amount: current.amount,
+          payment_method: current.payment_method,
+          transaction_ref: current.transaction_ref,
+          notes: [current.notes || null, note || null].filter(Boolean).join(' | ') || null,
+        },
+        ip,
+      });
+      current.accountant_approval = {
+        approved_by: userId,
+        approved_at: new Date().toISOString(),
+        note,
+      };
+      current.status = 'approved';
+      current.posted_payment = {
+        id: result.payment.id,
+        receipt_number: result.payment.receipt_number || null,
+        amount: result.payment.amount,
+      };
+    }
+  } else {
+    throw Object.assign(new Error('This approval request is already closed.'), { statusCode: 400 });
+  }
+
+  store.finance.paymentApprovals[index] = current;
+  await logAudit({
+    userId,
+    action: 'UPDATE',
+    resourceType: 'finance_payment_approval',
+    resourceId: current.id,
+    newValues: current,
+    ip,
+  });
+  return current;
 };
 
 const listFeeStructures = async ({ institutionId }) => {
@@ -538,6 +1395,13 @@ module.exports = {
   listInvoices,
   createInvoice,
   recordPayment,
+  listPaymentApprovals,
+  initiatePaymentApproval,
+  approvePaymentApproval,
+  listPaymentGatewayRequests,
+  getPaymentAccountLookup,
+  initiateGatewayPayment,
+  handleGatewayCallback,
   listFeeStructures,
   getOverdueInvoices,
   listDebtors,

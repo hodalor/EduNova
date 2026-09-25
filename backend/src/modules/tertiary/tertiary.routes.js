@@ -45,6 +45,11 @@ router.patch(
   controller.updateProgressionPolicy
 );
 router.patch(
+  '/finance-policy',
+  authorize(['institution_admin', 'teacher']),
+  controller.updateFinancePolicy
+);
+router.patch(
   '/student-progress/:studentId',
   authorize(['institution_admin', 'teacher']),
   controller.updateStudentProgress

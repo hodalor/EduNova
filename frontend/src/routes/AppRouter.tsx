@@ -27,6 +27,7 @@ const StudentDetailPage = lazy(() => import('../modules/students/StudentDetailPa
 const StudentEnrollmentForm = lazy(() => import('../modules/students/StudentEnrollmentForm'));
 const StudentIDCard = lazy(() => import('../modules/students/StudentIDCard'));
 const FinanceDashboardPage = lazy(() => import('../modules/finance/FinanceDashboardPage'));
+const StudentFinancePage = lazy(() => import('../modules/finance/StudentFinancePage'));
 const InvoicesPage = lazy(() => import('../modules/finance/InvoicesPage'));
 const PaymentFormPage = lazy(() => import('../modules/finance/PaymentFormPage'));
 const DefaultersPage = lazy(() => import('../modules/finance/DefaultersPage'));
@@ -195,7 +196,7 @@ const AppRouter = () => {
             <Route
               path="/finance"
               element={
-                <ProtectedRoute allowedRoles={['institution_admin', 'accountant']}>
+                <ProtectedRoute allowedRoles={['institution_admin', 'accountant', 'teacher']}>
                   <FinanceDashboardPage />
                 </ProtectedRoute>
               }
@@ -203,7 +204,7 @@ const AppRouter = () => {
             <Route
               path="/finance/invoices"
               element={
-                <ProtectedRoute allowedRoles={['institution_admin', 'accountant']}>
+                <ProtectedRoute allowedRoles={['institution_admin', 'accountant', 'teacher']}>
                   <InvoicesPage />
                 </ProtectedRoute>
               }
@@ -211,7 +212,7 @@ const AppRouter = () => {
             <Route
               path="/finance/payments"
               element={
-                <ProtectedRoute allowedRoles={['institution_admin', 'accountant']}>
+                <ProtectedRoute allowedRoles={['institution_admin', 'accountant', 'teacher']}>
                   <PaymentFormPage />
                 </ProtectedRoute>
               }
@@ -219,7 +220,7 @@ const AppRouter = () => {
             <Route
               path="/finance/defaulters"
               element={
-                <ProtectedRoute allowedRoles={['institution_admin', 'accountant']}>
+                <ProtectedRoute allowedRoles={['institution_admin', 'accountant', 'teacher']}>
                   <DefaultersPage />
                 </ProtectedRoute>
               }
@@ -227,7 +228,7 @@ const AppRouter = () => {
             <Route
               path="/finance/expenses"
               element={
-                <ProtectedRoute allowedRoles={['institution_admin', 'accountant']}>
+                <ProtectedRoute allowedRoles={['institution_admin', 'accountant', 'teacher']}>
                   <ExpensesPage />
                 </ProtectedRoute>
               }
@@ -235,7 +236,7 @@ const AppRouter = () => {
             <Route
               path="/finance/fee-structures"
               element={
-                <ProtectedRoute allowedRoles={['institution_admin', 'accountant']}>
+                <ProtectedRoute allowedRoles={['institution_admin', 'accountant', 'teacher']}>
                   <FeeStructurePage />
                 </ProtectedRoute>
               }
@@ -493,24 +494,7 @@ const AppRouter = () => {
               path="/student/finance"
               element={
                 <ProtectedRoute allowedRoles={['student']}>
-                  <WorkspaceHubPage
-                    title="My Finance"
-                    description="View fee balances, payment expectations, and finance-related reminders without exposing institution-wide billing data."
-                    metrics={[
-                      { label: 'Outstanding', value: 'GHS 1,280', helper: 'Current unpaid balance on linked invoices.' },
-                      { label: 'Invoices', value: '3', helper: 'Issued finance records this term or semester.' },
-                      { label: 'Payment Status', value: 'Partial', helper: 'Overall settlement standing.' },
-                      { label: 'Reminder Cycle', value: 'Active', helper: 'Automated reminder flow for unpaid balances.' },
-                    ]}
-                    links={[
-                      { title: 'Main Workspace', description: 'Return to the student overview.', to: '/' },
-                      { title: 'Communication', description: 'Open notices and billing reminders.', to: '/communication' },
-                      { title: 'My Academics', description: 'Check whether finance clearance affects results or progression.', to: '/student/academics' },
-                    ]}
-                    checklist={[
-                      { title: 'Privacy aware', description: 'Students can only view their own finance area, not institution-wide collections.', status: 'success' },
-                    ]}
-                  />
+                  <StudentFinancePage />
                 </ProtectedRoute>
               }
             />

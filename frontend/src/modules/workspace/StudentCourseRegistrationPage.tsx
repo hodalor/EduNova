@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { BookOpenCheck, CalendarRange, GraduationCap, ShieldCheck } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 
 import { eduovaApi } from '../../api/eduovaApi';
 import Alert from '../../components/ui/Alert';
@@ -13,8 +13,10 @@ import Input from '../../components/ui/Input';
 import PageLoader from '../../components/ui/PageLoader';
 import SearchInput from '../../components/ui/SearchInput';
 import Select from '../../components/ui/Select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/Tabs';
 import PageHeader from '../shared/PageHeader';
 import { useAuthStore } from '../../store/authStore';
+import { useStudent, type StudentDetail } from '../students/hooks/useStudent';
 import { useStudents, type StudentListItem } from '../students/hooks/useStudents';
 
 interface RegistrationCourse {
@@ -50,6 +52,12 @@ interface RegistrationState {
     max_carry_over_credits: number;
     allow_manual_overrides: boolean;
   };
+  finance_policy?: {
+    new_student_registration_percent: number;
+    returning_student_registration_percent: number;
+    midsem_exam_percent: number;
+    final_exam_percent: number;
+  };
   carry_over_summary?: {
     outstanding_count: number;
     outstanding_credit_hours: number;
@@ -66,6 +74,7 @@ interface RegistrationState {
   fee_summary: {
     base_fee_amount: number;
     course_fee_total: number;
+    resit_course_total?: number;
     late_registration_penalty: number;
     penalty_deadline: string | null;
     penalty_applied: boolean;
@@ -75,6 +84,7 @@ interface RegistrationState {
     paid_amount: number;
     invoiced_amount: number;
     outstanding_amount: number;
+    is_new_student?: boolean;
     fee_clearance: boolean;
   };
 }
@@ -87,6 +97,7 @@ const StudentCourseRegistrationPage = () => {
   const [selectedCourseIds, setSelectedCourseIds] = useState<string[]>([]);
   const [search, setSearch] = useState('');
   const [selectedStudentId, setSelectedStudentId] = useState('');
+  const [activeTab, setActiveTab] = useState('roadmap');
   const [progressionOverride, setProgressionOverride] = useState<'default' | 'allow' | 'hold'>(
     'default'
   );
@@ -107,6 +118,7 @@ const StudentCourseRegistrationPage = () => {
     queryFn: () => eduovaApi.tertiary.studentRegistration(targetStudentId),
     enabled: Boolean(targetStudentId),
   });
+  const { data: studentDetail } = useStudent(targetStudentId);
 
   const registerCourses = useMutation({
     mutationFn: eduovaApi.tertiary.registerCourses,
@@ -186,6 +198,10 @@ const StudentCourseRegistrationPage = () => {
       sum + Number(item.courses?.length || 0),
     0
   );
+  const tertiaryRoadmap = studentDetail?.tertiary?.roadmap || null;
+  const registeredCourses = data.already_registered.flatMap(
+    (item: { id: string; courses?: RegistrationCourse[] }) => item.courses || []
+  );
 
   return (
     <div className="space-y-6">
@@ -225,78 +241,102 @@ const StudentCourseRegistrationPage = () => {
           ) : null}
         </Card>
       ) : null}
+      <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+        <Card title="Student And Session">
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="rounded-2xl bg-slate-50 p-4">
+              <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Student</p>
+              <p className="mt-2 font-semibold text-brand-navy">
+                {selectedStudent?.name || user?.first_name || 'Student'}
+              </p>
+              <p className="mt-1 text-sm text-slate-500">
+                {selectedStudent?.student_number || user?.student_number || '-'}
+              </p>
+            </div>
+            <div className="rounded-2xl bg-slate-50 p-4">
+              <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Program Context</p>
+              <p className="mt-2 font-semibold text-brand-navy">{data.current_group.name}</p>
+              <p className="mt-1 text-sm text-slate-500">{data.current_period.name}</p>
+            </div>
+            <div className="rounded-2xl bg-slate-50 p-4">
+              <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Eligible Courses</p>
+              <p className="mt-2 text-2xl font-bold text-brand-navy">{data.eligible_courses.length}</p>
+            </div>
+            <div className="rounded-2xl bg-slate-50 p-4">
+              <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Registered Courses</p>
+              <p className="mt-2 text-2xl font-bold text-brand-navy">{alreadyRegisteredCount}</p>
+            </div>
+          </div>
+        </Card>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {[
-          {
-            label: 'Current Level',
-            value: data.current_group.code,
-            helper: data.current_group.name,
-            icon: GraduationCap,
-          },
-          {
-            label: 'Active Semester',
-            value: data.current_period.name,
-            helper: `Sequence ${data.current_period.sequence}`,
-            icon: CalendarRange,
-          },
-          {
-            label: 'Eligible Courses',
-            value: `${data.eligible_courses.length}`,
-            helper: 'Only these can be added now.',
-            icon: BookOpenCheck,
-          },
-          {
-            label: 'Registered Courses',
-            value: `${alreadyRegisteredCount}`,
-            helper: 'Saved in your current semester cart.',
-            icon: ShieldCheck,
-          },
-        ].map((item) => {
-          const Icon = item.icon;
-          return (
-            <Card key={item.label}>
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <p className="text-sm font-medium text-slate-500">{item.label}</p>
-                  <p className="mt-3 text-3xl font-bold text-brand-navy">{item.value}</p>
-                  <p className="mt-2 text-sm text-slate-500">{item.helper}</p>
-                </div>
-                <span className="rounded-2xl bg-brand-navy/5 p-3 text-brand-navy">
-                  <Icon className="h-6 w-6" />
-                </span>
-              </div>
-            </Card>
-          );
-        })}
+        <Card title="Finance And Clearance">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="rounded-2xl bg-slate-50 p-4">
+              <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Semester Courses</p>
+              <p className="mt-2 font-semibold text-brand-navy">
+                GHS {Number(data.fee_summary.course_fee_total || 0).toLocaleString()}
+              </p>
+            </div>
+            <div className="rounded-2xl bg-slate-50 p-4">
+              <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Minimum Before Registration</p>
+              <p className="mt-2 font-semibold text-brand-navy">
+                {Number(data.fee_summary.minimum_payment_percent || 0)}% · GHS {Number(
+                  data.fee_summary.minimum_required_amount || 0
+                ).toLocaleString()}
+              </p>
+            </div>
+            <div className="rounded-2xl bg-slate-50 p-4">
+              <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Resit Courses</p>
+              <p className="mt-2 font-semibold text-brand-navy">
+                GHS {Number(data.fee_summary.resit_course_total || 0).toLocaleString()}
+              </p>
+            </div>
+            <div className="rounded-2xl bg-slate-50 p-4">
+              <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Paid So Far</p>
+              <p className="mt-2 font-semibold text-brand-navy">
+                GHS {Number(data.fee_summary.paid_amount || 0).toLocaleString()}
+              </p>
+            </div>
+            <div className="rounded-2xl bg-slate-50 p-4">
+              <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Total Expected</p>
+              <p className="mt-2 font-semibold text-brand-navy">
+                GHS {Number(data.fee_summary.total_amount || 0).toLocaleString()}
+              </p>
+            </div>
+            <div className="rounded-2xl bg-slate-50 p-4">
+              <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Outstanding</p>
+              <p className="mt-2 font-semibold text-rose-600">
+                GHS {Number(data.fee_summary.outstanding_amount || 0).toLocaleString()}
+              </p>
+            </div>
+          </div>
+          <div className="mt-4 space-y-3">
+            <Alert
+              title={data.fee_clearance ? 'Registration cleared' : 'Registration blocked by finance'}
+              message={
+                data.fee_clearance
+                  ? 'The student has met the registration payment threshold.'
+                  : `This ${
+                      data.fee_summary.is_new_student ? 'new' : 'existing'
+                    } student must meet the tertiary payment rule before registration.`
+              }
+              variant={data.fee_clearance ? 'success' : 'warning'}
+            />
+            <Alert
+              title={data.can_progress ? 'Progression allowed' : 'Progression blocked'}
+              message={
+                data.carry_over_summary?.reason ||
+                'Progression follows the recorded results, carry-over load, and institution policy.'
+              }
+              variant={data.can_progress ? 'success' : 'warning'}
+            />
+          </div>
+        </Card>
       </div>
-
-      {data.outstanding_resit_codes.length > 0 ? (
-        <Alert
-          title={
-            data.can_progress
-              ? 'Carry-over progression allowed'
-              : 'Outstanding resit detected'
-          }
-          message={
-            data.can_progress
-              ? `${data.outstanding_resit_codes.join(', ')} can be carried with the next semester because this student is within policy or has an admin override.`
-              : `You have carry-over courses: ${data.outstanding_resit_codes.join(', ')}. ${data.carry_over_summary?.reason || 'The system restricts progression until those courses are handled.'}`
-          }
-          variant={data.can_progress ? 'info' : 'warning'}
-        />
-      ) : (
-        <Alert
-          title="Progression status is clear"
-          message="You have no active resit hold, so the platform can show your current semester courses and next-semester preview."
-          variant="success"
-        />
-      )}
 
       {isAdminMode ? (
         <Card
           title="Progression Override"
-          description="Use this only when the institution wants to release or hold a student outside the automatic carry-over policy."
           action={
             <Button
               onClick={() =>
@@ -312,33 +352,7 @@ const StudentCourseRegistrationPage = () => {
             </Button>
           }
         >
-          <div className="grid gap-4 xl:grid-cols-4">
-            <div className="rounded-2xl bg-slate-50 p-4">
-              <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Base Result Status</p>
-              <p className="mt-2 font-semibold text-brand-navy">
-                {data.base_can_progress ? 'Eligible to progress' : 'Held by results'}
-              </p>
-            </div>
-            <div className="rounded-2xl bg-slate-50 p-4">
-              <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Effective Status</p>
-              <p className="mt-2 font-semibold text-brand-navy">
-                {data.can_progress ? 'Progression allowed' : 'Progression blocked'}
-              </p>
-            </div>
-            <div className="rounded-2xl bg-slate-50 p-4">
-              <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Carry-over Load</p>
-              <p className="mt-2 font-semibold text-brand-navy">
-                {data.carry_over_summary?.outstanding_count || 0} course(s)
-              </p>
-            </div>
-            <div className="rounded-2xl bg-slate-50 p-4">
-              <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Carry-over Credits</p>
-              <p className="mt-2 font-semibold text-brand-navy">
-                {Number(data.carry_over_summary?.outstanding_credit_hours || 0).toLocaleString()}
-              </p>
-            </div>
-          </div>
-          <div className="mt-4 grid gap-4 xl:grid-cols-3">
+          <div className="grid gap-4 xl:grid-cols-3">
             <Select
               label="Progression Override"
               value={progressionOverride}
@@ -351,244 +365,264 @@ const StudentCourseRegistrationPage = () => {
               <option value="hold">Place student on hold</option>
             </Select>
             <Input
-              label="Carry-over Course Codes"
+              label="Carry-Over Course Codes"
               value={carryOverCodes}
               onChange={(event) => setCarryOverCodes(event.target.value.toUpperCase())}
-              helperText="Separate multiple course codes with commas."
             />
             <Input
               label="Override Note"
               value={progressionNote}
               onChange={(event) => setProgressionNote(event.target.value)}
-              helperText="Keep a short explanation for the institution."
-            />
-          </div>
-          <div className="mt-4 space-y-3">
-            <Alert
-              title="Current progression decision"
-              message={data.carry_over_summary?.reason || 'The system is using the current progression policy.'}
-              variant={data.can_progress ? 'success' : 'warning'}
-            />
-            <Alert
-              title="Institution carry-over policy"
-              message={
-                data.progression_policy?.allow_carry_over_progression
-                  ? `This institution allows progression with up to ${Number(data.progression_policy.max_carry_over_courses || 0)} carry-over courses and ${Number(data.progression_policy.max_carry_over_credits || 0)} carry-over credits.`
-                  : 'This institution requires students to clear carry-over courses before moving forward unless an admin override is applied.'
-              }
-              variant="info"
             />
           </div>
         </Card>
       ) : null}
 
-      <Card
-        title="Fee And Clearance"
-        description="Course registration and finance are linked in real time for the active semester."
-      >
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-          <div className="rounded-2xl bg-slate-50 p-4">
-            <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Base Fee</p>
-            <p className="mt-2 font-semibold text-brand-navy">
-              GHS {Number(data.fee_summary.base_fee_amount || 0).toLocaleString()}
-            </p>
-          </div>
-          <div className="rounded-2xl bg-slate-50 p-4">
-            <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Course Fees</p>
-            <p className="mt-2 font-semibold text-brand-navy">
-              GHS {Number(data.fee_summary.course_fee_total || 0).toLocaleString()}
-            </p>
-          </div>
-          <div className="rounded-2xl bg-slate-50 p-4">
-            <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Minimum Before Registration</p>
-            <p className="mt-2 font-semibold text-brand-navy">
-              {Number(data.fee_summary.minimum_payment_percent || 0)}% · GHS {Number(data.fee_summary.minimum_required_amount || 0).toLocaleString()}
-            </p>
-          </div>
-          <div className="rounded-2xl bg-slate-50 p-4">
-            <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Paid So Far</p>
-            <p className="mt-2 font-semibold text-brand-navy">
-              GHS {Number(data.fee_summary.paid_amount || 0).toLocaleString()}
-            </p>
-          </div>
-          <div className="rounded-2xl bg-slate-50 p-4">
-            <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Outstanding</p>
-            <p className="mt-2 font-semibold text-brand-navy">
-              GHS {Number(data.fee_summary.outstanding_amount || 0).toLocaleString()}
-            </p>
-          </div>
-        </div>
-        <div className="mt-4 space-y-3">
-          <Alert
-            title={data.fee_clearance ? 'Registration fee threshold met' : 'Registration fee threshold not met'}
-            message={
-              data.fee_clearance
-                ? 'The student has met the current semester payment rule for course registration.'
-                : 'The student must meet the minimum payment rule before course registration can be completed.'
-            }
-            variant={data.fee_clearance ? 'success' : 'warning'}
-          />
-          {data.fee_summary.penalty_applied ? (
-            <Alert
-              title="Late registration penalty applied"
-              message={`Penalty deadline passed${data.fee_summary.penalty_deadline ? ` on ${data.fee_summary.penalty_deadline}` : ''}, so GHS ${Number(data.fee_summary.late_registration_penalty || 0).toLocaleString()} was added.`}
-              variant="warning"
-            />
-          ) : null}
-        </div>
-      </Card>
+      <Card>
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="roadmap">Levels And Semesters</TabsTrigger>
+            <TabsTrigger value="eligible">Eligible Courses</TabsTrigger>
+            <TabsTrigger value="registered">Registered Courses</TabsTrigger>
+          </TabsList>
 
-      <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-        <Card
-          title="Register Your Courses"
-          description="Choose from the courses assigned to your current level and semester only."
-          action={
-            <Button
-              onClick={() =>
-                registerCourses.mutate({
-                  student_id: targetStudentId,
-                  course_ids: selectedCourseIds,
-                })
-              }
-              disabled={
-                !data.current_period.registration_open ||
-                !data.fee_clearance ||
-                selectedCourseIds.length === 0
-              }
-              loading={registerCourses.isPending}
-            >
-              Submit Registration
-            </Button>
-          }
-        >
-          <div className="space-y-3">
-            {(data.eligible_courses || []).map((course: RegistrationCourse) => (
-              <label
-                key={course.id}
-                className="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 px-4 py-3 transition hover:bg-slate-50"
-              >
-                <input
-                  type="checkbox"
-                  className="mt-1 h-4 w-4 rounded border-slate-300"
-                  checked={selectedCourseIds.includes(course.id)}
-                  onChange={(event) =>
-                    setSelectedCourseIds((current) =>
-                      event.target.checked
-                        ? [...current, course.id]
-                        : current.filter((item) => item !== course.id)
-                    )
-                  }
-                />
-                <div className="flex-1">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="font-semibold text-brand-navy">
-                        {course.code} · {course.name}
-                      </p>
-                      <p className="text-sm text-slate-500">
-                        {course.credit_hours || 0} credit hours
-                        {typeof course.fee_amount === 'number' ? ` · GHS ${Number(course.fee_amount).toLocaleString()}` : ''}
-                        {course.prerequisite_codes?.length ? ` · prerequisite: ${course.prerequisite_codes.join(', ')}` : ''}
-                      </p>
-                    </div>
-                    <Badge variant="success">eligible</Badge>
-                  </div>
-                </div>
-              </label>
-            ))}
-          </div>
-          {!data.eligible_courses.length ? (
-            <div className="mt-4">
+          <TabsContent value="roadmap" className="mt-6">
+            {tertiaryRoadmap ? (
+              <div className="space-y-4">
+                {tertiaryRoadmap.levels.map(
+                  (
+                    level: NonNullable<
+                      NonNullable<NonNullable<StudentDetail['tertiary']>['roadmap']>['levels']
+                    >[number]
+                  ) => (
+                    <details key={level.id} className="rounded-2xl border border-slate-200 bg-white" open>
+                      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-4 font-semibold text-brand-navy">
+                        <span>{level.name}</span>
+                        <ChevronDown className="h-4 w-4 text-slate-500" />
+                      </summary>
+                      <div className="space-y-3 border-t border-slate-100 p-4">
+                        {level.periods.map((period) => (
+                          <details key={period.id} className="rounded-2xl bg-slate-50" open={data.current_period.id === period.id}>
+                            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 font-medium text-brand-navy">
+                              <span>
+                                {period.name}
+                                {data.current_period.id === period.id ? ' · Current' : ''}
+                              </span>
+                              <span className="text-sm text-slate-500">
+                                {Number(period.completed_courses || 0)}/{Number(period.total_courses || 0)} cleared
+                              </span>
+                            </summary>
+                            <div className="space-y-2 border-t border-slate-100 p-4">
+                              {period.courses.length ? (
+                                period.courses.map((course) => (
+                                  <div
+                                    key={course.id}
+                                    className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3"
+                                  >
+                                    <div>
+                                      <p className="font-semibold text-brand-navy">
+                                        {course.code} · {course.name}
+                                      </p>
+                                      <p className="text-sm text-slate-500">
+                                        {course.credit_hours || 0} credits
+                                      </p>
+                                    </div>
+                                    {course.completed ? (
+                                      <Badge variant="active">Cleared</Badge>
+                                    ) : course.outstanding ? (
+                                      <Badge variant="warning">Carry-Over</Badge>
+                                    ) : (
+                                      <Badge variant="inactive">Pending</Badge>
+                                    )}
+                                  </div>
+                                ))
+                              ) : (
+                                <EmptyState
+                                  title="No courses mapped"
+                                  message="This semester does not have any mapped courses yet."
+                                />
+                              )}
+                            </div>
+                          </details>
+                        ))}
+                      </div>
+                    </details>
+                  )
+                )}
+              </div>
+            ) : (
               <EmptyState
-                title="No eligible courses"
-                message="There are no courses available for registration in your current semester."
+                title="No roadmap available"
+                message="This student does not have a tertiary roadmap linked yet."
               />
+            )}
+          </TabsContent>
+
+          <TabsContent value="eligible" className="mt-6">
+            <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-lg font-semibold text-brand-navy">Register Current Semester Courses</p>
+                    <p className="text-sm text-slate-500">
+                      {selectedCourseIds.length} selected · {totalCredits} credit hours
+                    </p>
+                  </div>
+                  <Button
+                    onClick={() =>
+                      registerCourses.mutate({
+                        student_id: targetStudentId,
+                        course_ids: selectedCourseIds,
+                      })
+                    }
+                    disabled={
+                      !data.current_period.registration_open ||
+                      !data.fee_clearance ||
+                      selectedCourseIds.length === 0
+                    }
+                    loading={registerCourses.isPending}
+                  >
+                    Submit Registration
+                  </Button>
+                </div>
+
+                {data.eligible_courses.length ? (
+                  <div className="space-y-3">
+                    {data.eligible_courses.map((course: RegistrationCourse) => (
+                      <label
+                        key={course.id}
+                        className="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 px-4 py-3 transition hover:bg-slate-50"
+                      >
+                        <input
+                          type="checkbox"
+                          className="mt-1 h-4 w-4 rounded border-slate-300"
+                          checked={selectedCourseIds.includes(course.id)}
+                          onChange={(event) =>
+                            setSelectedCourseIds((current) =>
+                              event.target.checked
+                                ? [...current, course.id]
+                                : current.filter((item) => item !== course.id)
+                            )
+                          }
+                        />
+                        <div className="flex-1">
+                          <div className="flex items-center justify-between gap-3">
+                            <div>
+                              <p className="font-semibold text-brand-navy">
+                                {course.code} · {course.name}
+                              </p>
+                              <p className="text-sm text-slate-500">
+                                {course.credit_hours || 0} credit hours
+                                {typeof course.fee_amount === 'number'
+                                  ? ` · GHS ${Number(course.fee_amount).toLocaleString()}`
+                                  : ''}
+                              </p>
+                            </div>
+                            <Badge variant="success">Eligible</Badge>
+                          </div>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                ) : (
+                  <EmptyState
+                    title="No eligible courses"
+                    message="There are no courses available for registration in the active semester."
+                  />
+                )}
+              </div>
+
+              <div className="space-y-4">
+                <Card title="Registration Rules">
+                  <div className="space-y-3">
+                    <Alert
+                      title={data.current_period.registration_open ? 'Registration is open' : 'Registration is closed'}
+                      message={`${data.current_period.name} is the active ${data.current_period.calendar_type}.`}
+                      variant={data.current_period.registration_open ? 'success' : 'warning'}
+                    />
+                    <Alert
+                      title={data.fee_clearance ? 'Finance cleared' : 'Finance clearance pending'}
+                      message={`Required payment before registration: GHS ${Number(
+                        data.fee_summary.minimum_required_amount || 0
+                      ).toLocaleString()}.`}
+                      variant={data.fee_clearance ? 'success' : 'warning'}
+                    />
+                    <Alert
+                      title={data.can_progress ? 'Progression allowed' : 'Progression blocked'}
+                      message={data.carry_over_summary?.reason || 'The current progression rule is active.'}
+                      variant={data.can_progress ? 'success' : 'warning'}
+                    />
+                  </div>
+                </Card>
+
+                <Card title="Blocked Courses">
+                  <div className="space-y-3">
+                    {data.blocked_courses.length ? (
+                      data.blocked_courses.map((course: RegistrationCourse) => (
+                        <div key={course.id} className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
+                          <p className="font-semibold text-brand-navy">
+                            {course.code} · {course.name}
+                          </p>
+                          <p className="mt-1 text-sm text-slate-600">{course.reason}</p>
+                        </div>
+                      ))
+                    ) : (
+                      <EmptyState
+                        title="No blocked courses"
+                        message="All active-semester courses are open to this student."
+                      />
+                    )}
+                  </div>
+                </Card>
+              </div>
             </div>
-          ) : null}
-        </Card>
+          </TabsContent>
 
-        <Card title="Registration Rules" description="The system applies these checks before saving.">
-          <div className="space-y-3">
-            <Alert
-              title={data.current_period.registration_open ? 'Registration is open' : 'Registration is closed'}
-              message={`Current ${data.current_period.calendar_type}: ${data.current_period.name}.`}
-              variant={data.current_period.registration_open ? 'success' : 'warning'}
-            />
-            <Alert
-              title={data.fee_clearance ? 'Finance cleared' : 'Finance clearance pending'}
-              message="Fee clearance can be used to permit or block course registration."
-              variant={data.fee_clearance ? 'success' : 'warning'}
-            />
-            <Alert
-              title={data.can_progress ? 'Progression allowed' : 'Progression blocked'}
-              message={
-                data.carry_over_summary?.reason ||
-                'Progression follows the student results, carry-over load, and institution policy.'
-              }
-              variant={data.can_progress ? 'success' : 'warning'}
-            />
-            <Alert
-              title="Selected credit load"
-              message={`${selectedCourseIds.length} courses selected with ${totalCredits} credit hours.`}
-              variant="info"
-            />
-          </div>
-        </Card>
-      </div>
-
-      <div className="grid gap-6 xl:grid-cols-[1fr_1fr]">
-        <Card title="Blocked Courses" description="Courses outside your current eligibility are not selectable.">
-          <div className="space-y-3">
-            {data.blocked_courses.length ? (
-              data.blocked_courses.map((course: RegistrationCourse) => (
-                <div key={course.id} className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="font-semibold text-brand-navy">
-                        {course.code} · {course.name}
-                      </p>
-                      <p className="text-sm text-slate-600">{course.reason}</p>
-                    </div>
-                    <Badge variant="warning">blocked</Badge>
-                  </div>
+          <TabsContent value="registered" className="mt-6">
+            <div className="grid gap-6 xl:grid-cols-[1fr_1fr]">
+              <Card title="Registered Courses">
+                <div className="space-y-3">
+                  {registeredCourses.length ? (
+                    registeredCourses.map((course: RegistrationCourse, index: number) => (
+                      <div key={`${course.id}-${index}`} className="rounded-2xl border border-slate-200 px-4 py-3">
+                        <p className="font-semibold text-brand-navy">
+                          {course.code} · {course.name}
+                        </p>
+                        <p className="text-sm text-slate-500">{course.credit_hours || 0} credit hours</p>
+                      </div>
+                    ))
+                  ) : (
+                    <EmptyState
+                      title="No registered courses"
+                      message="This student has not submitted any course registration yet."
+                    />
+                  )}
                 </div>
-              ))
-            ) : (
-              <EmptyState
-                title="No blocked courses"
-                message="All courses assigned to the current semester are available to you."
-              />
-            )}
-          </div>
-        </Card>
+              </Card>
 
-        <Card title="Next Semester Preview" description="What comes next if you clear this semester without resits.">
-          <div className="space-y-3">
-            {data.next_period_preview.length ? (
-              data.next_period_preview.map((course: RegistrationCourse) => (
-                <div key={course.id} className="rounded-2xl border border-slate-200 px-4 py-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="font-semibold text-brand-navy">
-                        {course.code} · {course.name}
-                      </p>
-                      <p className="text-sm text-slate-500">
-                        {course.credit_hours || 0} credit hours
-                      </p>
-                    </div>
-                    <Badge variant="info">next</Badge>
-                  </div>
+              <Card title="Next Semester Preview">
+                <div className="space-y-3">
+                  {data.next_period_preview.length ? (
+                    data.next_period_preview.map((course: RegistrationCourse) => (
+                      <div key={course.id} className="rounded-2xl border border-slate-200 px-4 py-3">
+                        <p className="font-semibold text-brand-navy">
+                          {course.code} · {course.name}
+                        </p>
+                        <p className="text-sm text-slate-500">{course.credit_hours || 0} credit hours</p>
+                      </div>
+                    ))
+                  ) : (
+                    <EmptyState
+                      title="No next semester preview"
+                      message="The next set of semester courses will appear here when available."
+                    />
+                  )}
                 </div>
-              ))
-            ) : (
-              <EmptyState
-                title="No next semester preview"
-                message="The next semester courses will appear once the structure is defined."
-              />
-            )}
-          </div>
-        </Card>
-      </div>
+              </Card>
+            </div>
+          </TabsContent>
+        </Tabs>
+      </Card>
     </div>
   );
 };
