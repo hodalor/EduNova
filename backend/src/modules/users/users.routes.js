@@ -19,6 +19,8 @@ router.use(
 router.get('/', controller.listUsers);
 router.get('/parents', controller.searchParents);
 router.post('/', controller.createUser);
+router.patch('/:id', controller.updateUser);
 router.patch('/:id/access', controller.updateUserAccess);
+router.delete('/:id', controller.deleteUser);
 
 module.exports = router;

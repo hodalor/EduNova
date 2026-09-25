@@ -21,6 +21,15 @@ const ensureFinanceSettings = (settings) => {
   next.finance.payment_approvals = next.finance.payment_approvals || [];
   next.finance.student_credits = next.finance.student_credits || [];
   next.finance.payment_gateway_requests = next.finance.payment_gateway_requests || [];
+  next.finance.currencies = Array.isArray(next.finance.currencies) && next.finance.currencies.length
+    ? next.finance.currencies
+    : ['GHS', 'ZMW', 'USD'];
+  next.finance.default_local_currency =
+    next.finance.default_local_currency || next.finance.currencies[0] || 'GHS';
+  next.finance.default_international_currency =
+    next.finance.default_international_currency ||
+    next.finance.currencies.find((item) => item !== next.finance.default_local_currency) ||
+    'USD';
   next.access_control = next.access_control || {};
   next.access_control.finance_approval_grants = next.access_control.finance_approval_grants || {};
   return next;
@@ -1391,6 +1400,116 @@ const listPayments = async ({ institutionId, query = {} }) => {
   }).slice(0, 100);
 };
 
+const getFinanceSettings = async ({ institutionId }) => {
+  if (models.Institution) {
+    const institution = await models.Institution.findByPk(institutionId, {
+      attributes: ['id', 'settings'],
+    });
+    if (!institution) {
+      throw Object.assign(new Error('Institution not found.'), { statusCode: 404 });
+    }
+    const settings = ensureFinanceSettings(institution.settings);
+    return {
+      currencies: settings.finance.currencies,
+      default_local_currency: settings.finance.default_local_currency,
+      default_international_currency: settings.finance.default_international_currency,
+    };
+  }
+
+  const settings = ensureFinanceSettings(store.settings || {});
+  store.settings = settings;
+  return {
+    currencies: settings.finance.currencies,
+    default_local_currency: settings.finance.default_local_currency,
+    default_international_currency: settings.finance.default_international_currency,
+  };
+};
+
+const updateFinanceSettings = async ({ institutionId, userId, payload, ip }) => {
+  const normalizeCurrency = (value) => String(value || '').trim().toUpperCase();
+  const currencies = Array.from(
+    new Set((Array.isArray(payload.currencies) ? payload.currencies : []).map(normalizeCurrency).filter(Boolean))
+  );
+  const nextCurrencies = currencies.length ? currencies : ['GHS', 'ZMW', 'USD'];
+  const defaultLocal = normalizeCurrency(payload.default_local_currency) || nextCurrencies[0] || 'GHS';
+  const defaultInternational =
+    normalizeCurrency(payload.default_international_currency) ||
+    nextCurrencies.find((item) => item !== defaultLocal) ||
+    nextCurrencies[0] ||
+    'USD';
+
+  if (!nextCurrencies.includes(defaultLocal)) {
+    throw Object.assign(new Error('Default local currency must be one of the configured currencies.'), {
+      statusCode: 400,
+    });
+  }
+
+  if (!nextCurrencies.includes(defaultInternational)) {
+    throw Object.assign(
+      new Error('Default international currency must be one of the configured currencies.'),
+      { statusCode: 400 }
+    );
+  }
+
+  if (models.Institution) {
+    const institution = await models.Institution.findByPk(institutionId);
+    if (!institution) {
+      throw Object.assign(new Error('Institution not found.'), { statusCode: 404 });
+    }
+    const settings = ensureFinanceSettings(institution.settings);
+    const oldValues = {
+      currencies: settings.finance.currencies,
+      default_local_currency: settings.finance.default_local_currency,
+      default_international_currency: settings.finance.default_international_currency,
+    };
+    settings.finance.currencies = nextCurrencies;
+    settings.finance.default_local_currency = defaultLocal;
+    settings.finance.default_international_currency = defaultInternational;
+    await institution.update({ settings });
+    const newValues = {
+      currencies: settings.finance.currencies,
+      default_local_currency: settings.finance.default_local_currency,
+      default_international_currency: settings.finance.default_international_currency,
+    };
+    await logAudit({
+      userId,
+      action: 'UPDATE',
+      resourceType: 'finance_settings',
+      resourceId: institutionId,
+      oldValues,
+      newValues,
+      ip,
+    });
+    return newValues;
+  }
+
+  const settings = ensureFinanceSettings(store.settings || {});
+  const oldValues = {
+    currencies: settings.finance.currencies,
+    default_local_currency: settings.finance.default_local_currency,
+    default_international_currency: settings.finance.default_international_currency,
+  };
+  settings.finance.currencies = nextCurrencies;
+  settings.finance.default_local_currency = defaultLocal;
+  settings.finance.default_international_currency = defaultInternational;
+  store.settings = settings;
+  const newValues = {
+    currencies: settings.finance.currencies,
+    default_local_currency: settings.finance.default_local_currency,
+    default_international_currency: settings.finance.default_international_currency,
+  };
+  await logAudit({
+    userId,
+    action: 'UPDATE',
+    resourceType: 'finance_settings',
+    resourceId: institutionId,
+    oldValues,
+    newValues,
+    ip,
+  });
+  return newValues;
+};
+
 module.exports = {
   listInvoices,
   createInvoice,
@@ -1410,4 +1529,6 @@ module.exports = {
   updatePaymentTerm,
   deletePaymentTerm,
   listPayments,
+  getFinanceSettings,
+  updateFinanceSettings,
 };

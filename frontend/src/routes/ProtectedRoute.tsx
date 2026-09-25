@@ -8,11 +8,13 @@ import type { UserRole } from '../types/auth';
 interface ProtectedRouteProps {
   children: ReactElement;
   allowedRoles?: UserRole[];
+  allowedPermissions?: string[];
 }
 
-const ProtectedRoute = ({ children, allowedRoles }: ProtectedRouteProps) => {
+const ProtectedRoute = ({ children, allowedRoles, allowedPermissions }: ProtectedRouteProps) => {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const role = useAuthStore((state) => state.role);
+  const permissions = useAuthStore((state) => state.permissions);
   const accessToken = tokenStorage.getAccessToken();
 
   if (!isAuthenticated && !accessToken) {
@@ -22,6 +24,12 @@ const ProtectedRoute = ({ children, allowedRoles }: ProtectedRouteProps) => {
     return children;
   }
   if (allowedRoles?.length && role && !allowedRoles.includes(role)) {
+    return <Navigate to="/" replace />;
+  }
+  if (
+    allowedPermissions?.length &&
+    !allowedPermissions.some((permission) => permissions.includes(permission) || permissions.includes('*:*'))
+  ) {
     return <Navigate to="/" replace />;
   }
 

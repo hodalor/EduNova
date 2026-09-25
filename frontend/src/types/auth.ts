@@ -44,6 +44,11 @@ export interface InstitutionSummary {
       credentials?: string[];
       id_format?: string;
     };
+    finance?: {
+      currencies?: string[];
+      default_local_currency?: string;
+      default_international_currency?: string;
+    };
     daycare?: {
       pickup_pin_required?: boolean;
       session_model?: 'halfDay' | 'fullDay';

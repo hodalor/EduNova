@@ -98,7 +98,12 @@ axiosInstance.interceptors.response.use(
         // #endregion
 
         tokenStorage.setTokens(nextAccessToken, nextRefreshToken);
-        useAuthStore.getState().updateAccessToken(nextAccessToken, nextRefreshToken);
+        useAuthStore.getState().updateAccessToken(
+          nextAccessToken,
+          nextRefreshToken,
+          payload.permissions,
+          payload.user || null
+        );
 
         if (originalRequest.headers) {
           originalRequest.headers.set('Authorization', `Bearer ${nextAccessToken}`);

@@ -34,19 +34,25 @@ router.get(
   controller.getTranscript
 );
 router.get('/faculties', controller.listFaculties);
-router.post('/faculties', authorize(['institution_admin', 'teacher']), controller.createFaculty);
+router.post('/faculties', authorize(['institution_admin']), controller.createFaculty);
+router.patch('/faculties/:id', authorize(['institution_admin']), controller.updateFaculty);
+router.delete('/faculties/:id', authorize(['institution_admin']), controller.deleteFaculty);
 router.get('/departments', controller.listDepartments);
-router.post('/departments', authorize(['institution_admin', 'teacher']), controller.createDepartment);
+router.post('/departments', authorize(['institution_admin']), controller.createDepartment);
+router.patch('/departments/:id', authorize(['institution_admin']), controller.updateDepartment);
+router.delete('/departments/:id', authorize(['institution_admin']), controller.deleteDepartment);
 router.get('/programs', controller.listPrograms);
-router.post('/programs', authorize(['institution_admin', 'teacher']), controller.createProgram);
+router.post('/programs', authorize(['institution_admin']), controller.createProgram);
+router.patch('/programs/:id', authorize(['institution_admin']), controller.updateProgram);
+router.delete('/programs/:id', authorize(['institution_admin']), controller.deleteProgram);
 router.patch(
   '/progression-policy',
-  authorize(['institution_admin', 'teacher']),
+  authorize(['institution_admin']),
   controller.updateProgressionPolicy
 );
 router.patch(
   '/finance-policy',
-  authorize(['institution_admin', 'teacher']),
+  authorize(['institution_admin']),
   controller.updateFinancePolicy
 );
 router.patch(

@@ -91,6 +91,39 @@ const normalizeCode = (value) =>
     .trim()
     .toUpperCase();
 
+const normalizeOfferingFees = (payload = {}, current = {}) => {
+  const readNumber = (value, fallback = 0) => {
+    if (value === '' || value === null || value === undefined) {
+      return fallback;
+    }
+
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  };
+
+  const fallbackFee = readNumber(
+    payload.fee_amount,
+    readNumber(current.fee_amount, 0)
+  );
+  const localFee = readNumber(
+    payload.fee_amount_local ?? payload.local_fee_amount ?? payload.fee_amount,
+    readNumber(current.fee_amount_local ?? current.local_fee_amount ?? current.fee_amount, fallbackFee)
+  );
+  const internationalFee = readNumber(
+    payload.fee_amount_international ?? payload.international_fee_amount ?? payload.fee_amount,
+    readNumber(
+      current.fee_amount_international ?? current.international_fee_amount ?? current.fee_amount,
+      localFee
+    )
+  );
+
+  return {
+    fee_amount: localFee,
+    fee_amount_local: localFee,
+    fee_amount_international: internationalFee,
+  };
+};
+
 const destroyIfExists = async (model, id, options = {}) => {
   if (!model || !id) {
     return;
@@ -1032,6 +1065,7 @@ const createAcademicOfferingFromDatabase = async ({ institutionId, userId, paylo
       });
     }
 
+    const offeringFees = normalizeOfferingFees(payload);
     const offering = {
       id: payload.id || crypto.randomUUID(),
       institution_id: institutionId,
@@ -1044,10 +1078,7 @@ const createAcademicOfferingFromDatabase = async ({ institutionId, userId, paylo
         payload.credit_hours === '' || payload.credit_hours === null || payload.credit_hours === undefined
           ? null
           : Number(payload.credit_hours),
-      fee_amount:
-        payload.fee_amount === '' || payload.fee_amount === null || payload.fee_amount === undefined
-          ? 0
-          : Number(payload.fee_amount),
+      ...offeringFees,
       is_core: payload.is_core !== false,
       prerequisite_codes: payload.prerequisite_codes || [],
       next_offering_codes: payload.next_offering_codes || [],
@@ -1095,6 +1126,7 @@ const createAcademicOfferingFromRuntime = async ({ institutionId, userId, payloa
     });
   }
 
+  const offeringFees = normalizeOfferingFees(payload);
   const offering = {
     id: payload.id || `off-${store.academics.structure.offerings.length + 1}`,
     institution_id: institutionId,
@@ -1107,10 +1139,7 @@ const createAcademicOfferingFromRuntime = async ({ institutionId, userId, payloa
       payload.credit_hours === '' || payload.credit_hours === null || payload.credit_hours === undefined
         ? null
         : Number(payload.credit_hours),
-    fee_amount:
-      payload.fee_amount === '' || payload.fee_amount === null || payload.fee_amount === undefined
-        ? 0
-        : Number(payload.fee_amount),
+    ...offeringFees,
     is_core: payload.is_core !== false,
     prerequisite_codes: payload.prerequisite_codes || [],
     next_offering_codes: payload.next_offering_codes || [],
@@ -1175,6 +1204,7 @@ const updateAcademicOfferingFromDatabase = async ({
       );
     }
 
+    const offeringFees = normalizeOfferingFees(payload, current);
     const updated = {
       ...current,
       code: nextCode,
@@ -1185,12 +1215,7 @@ const updateAcademicOfferingFromDatabase = async ({
           : payload.credit_hours === null
             ? null
             : Number(payload.credit_hours),
-      fee_amount:
-        payload.fee_amount === '' || payload.fee_amount === undefined
-          ? current.fee_amount || 0
-          : payload.fee_amount === null
-            ? 0
-            : Number(payload.fee_amount),
+      ...offeringFees,
       is_core: payload.is_core === undefined ? current.is_core : payload.is_core !== false,
       prerequisite_codes: payload.prerequisite_codes || current.prerequisite_codes || [],
       next_offering_codes: payload.next_offering_codes || current.next_offering_codes || [],
@@ -1246,6 +1271,7 @@ const updateAcademicOfferingFromRuntime = async ({
   }
 
   const current = store.academics.structure.offerings[offeringIndex];
+  const offeringFees = normalizeOfferingFees(payload, current);
   const updated = {
     ...current,
     code: normalizeCode(payload.code ?? current.code),
@@ -1256,12 +1282,7 @@ const updateAcademicOfferingFromRuntime = async ({
         : payload.credit_hours === null
           ? null
           : Number(payload.credit_hours),
-    fee_amount:
-      payload.fee_amount === '' || payload.fee_amount === undefined
-        ? current.fee_amount || 0
-        : payload.fee_amount === null
-          ? 0
-          : Number(payload.fee_amount),
+    ...offeringFees,
     is_core: payload.is_core === undefined ? current.is_core : payload.is_core !== false,
     prerequisite_codes: payload.prerequisite_codes || current.prerequisite_codes || [],
     next_offering_codes: payload.next_offering_codes || current.next_offering_codes || [],

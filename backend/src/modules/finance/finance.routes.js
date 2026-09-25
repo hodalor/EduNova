@@ -18,6 +18,8 @@ router.use(
   generalApiRateLimiter
 );
 
+router.get('/settings', controller.getFinanceSettings);
+router.patch('/settings', controller.updateFinanceSettings);
 router.get('/invoices', controller.listInvoices);
 router.post('/invoices', controller.createInvoice);
 router.get('/payments', controller.listPayments);

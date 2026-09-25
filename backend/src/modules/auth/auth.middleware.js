@@ -1,5 +1,5 @@
 const { models } = require('../../config/database');
-const { hasPermission } = require('../../shared/constants/permissions');
+const { hasPermission, hasPermissionInList } = require('../../shared/constants/permissions');
 const { isTokenBlacklisted, verifyAccessToken } = require('../../shared/helpers/auth');
 const {
   findPlatformUserById,
@@ -77,7 +77,17 @@ const authorize = (roles = [], permission = null) => (req, res, next) => {
   if (roles.length && !roles.includes(req.user.role)) {
     return res.status(403).json({ success: false, message: 'Insufficient role privileges.' });
   }
-  if (permission && !hasPermission(req.user.role, permission)) {
+  const effectivePermissions =
+    Array.isArray(req.auth?.permissions) && req.auth.permissions.length
+      ? req.auth.permissions
+      : req.user?.permissions;
+  if (
+    permission &&
+    !(
+      (Array.isArray(effectivePermissions) && hasPermissionInList(effectivePermissions, permission)) ||
+      hasPermission(req.user.role, permission)
+    )
+  ) {
     return res.status(403).json({ success: false, message: 'Permission denied.' });
   }
   return next();

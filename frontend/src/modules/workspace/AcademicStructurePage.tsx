@@ -51,6 +51,9 @@ interface AcademicOffering {
   name: string;
   credit_hours: number | null;
   fee_amount?: number;
+  fee_amount_local?: number;
+  fee_amount_international?: number;
+  currency_code?: string;
   is_core: boolean;
   prerequisite_codes: string[];
   next_offering_codes: string[];
@@ -58,6 +61,12 @@ interface AcademicOffering {
 
 interface TertiaryOverview {
   programs: Array<{ id: string; name: string; code?: string; credential?: string }>;
+}
+
+interface FinanceSettings {
+  currencies: string[];
+  default_local_currency: string;
+  default_international_currency: string;
 }
 
 interface StructureResponse {
@@ -191,7 +200,8 @@ const initialOfferingForm = {
   code: '',
   name: '',
   credit_hours: '3',
-  fee_amount: '0',
+  fee_amount_local: '0',
+  fee_amount_international: '0',
   is_core: 'true',
   prerequisite_codes: [] as string[],
   next_offering_codes: [] as string[],
@@ -233,6 +243,11 @@ const AcademicStructurePage = () => {
     queryFn: eduovaApi.tertiary.overview,
     enabled: Boolean(activeInstitutionId && allowedLevels.includes('TR')),
   });
+  const { data: financeSettings } = useQuery<FinanceSettings>({
+    queryKey: ['finance-settings', activeInstitutionId],
+    queryFn: eduovaApi.finance.settings,
+    enabled: Boolean(activeInstitutionId),
+  });
   const levelOptions = useMemo(
     () => allowedLevels.map((code) => ({ code, label: educationLevelLabels[code] })),
     [allowedLevels]
@@ -244,6 +259,14 @@ const AcademicStructurePage = () => {
   const periodListLabel = pluralizeLabel(periodLabel);
   const offeringListLabel = pluralizeLabel(offeringLabel);
   const showCourseOption = allowedLevels.includes('TR');
+  const localCurrency =
+    financeSettings?.default_local_currency ||
+    activeInstitution?.settings?.finance?.default_local_currency ||
+    'GHS';
+  const internationalCurrency =
+    financeSettings?.default_international_currency ||
+    activeInstitution?.settings?.finance?.default_international_currency ||
+    'USD';
 
   const baseGroups = useMemo(
     () =>
@@ -702,7 +725,10 @@ const AcademicStructurePage = () => {
       code: offering.code,
       name: offering.name,
       credit_hours: offering.credit_hours === null ? '' : String(offering.credit_hours),
-      fee_amount: String(offering.fee_amount || 0),
+      fee_amount_local: String(offering.fee_amount_local ?? offering.fee_amount ?? 0),
+      fee_amount_international: String(
+        offering.fee_amount_international ?? offering.fee_amount_local ?? offering.fee_amount ?? 0
+      ),
       is_core: offering.is_core ? 'true' : 'false',
       prerequisite_codes: offering.prerequisite_codes || [],
       next_offering_codes: offering.next_offering_codes || [],
@@ -933,7 +959,17 @@ const AcademicStructurePage = () => {
               <table className="min-w-full divide-y divide-slate-200 text-sm">
                 <thead className="bg-slate-50">
                   <tr>
-                    {[groupLabel, periodLabel, 'Code', 'Name', 'Type', 'Credits', 'Status'].map((label) => (
+                    {[
+                      groupLabel,
+                      periodLabel,
+                      'Code',
+                      'Name',
+                      'Type',
+                      'Credits',
+                      `Local (${localCurrency})`,
+                      `International (${internationalCurrency})`,
+                      'Status',
+                    ].map((label) => (
                       <th key={label} className="px-4 py-3 text-left font-semibold uppercase text-slate-600">
                         {label}
                       </th>
@@ -959,6 +995,14 @@ const AcademicStructurePage = () => {
                         <td className="px-4 py-3">{offering.name}</td>
                         <td className="px-4 py-3 capitalize">{offering.type}</td>
                         <td className="px-4 py-3">{offering.credit_hours ?? '-'}</td>
+                        <td className="px-4 py-3">
+                          {Number(offering.fee_amount_local ?? offering.fee_amount ?? 0).toLocaleString()}
+                        </td>
+                        <td className="px-4 py-3">
+                          {Number(
+                            offering.fee_amount_international ?? offering.fee_amount_local ?? offering.fee_amount ?? 0
+                          ).toLocaleString()}
+                        </td>
                         <td className="px-4 py-3">
                           <Badge variant={offering.is_core ? 'success' : 'info'}>
                             {offering.is_core ? 'core' : 'elective'}
@@ -1106,13 +1150,14 @@ const AcademicStructurePage = () => {
                 Dates: {detailPeriod.start_date || 'Not set'} to {detailPeriod.end_date || 'Not set'}
               </p>
               <p className="mt-2 text-sm text-slate-500">
-                Semester base fee: GHS {Number(detailPeriod.base_fee_amount || 0).toLocaleString()}
+                Semester base fee: {localCurrency} {Number(detailPeriod.base_fee_amount || 0).toLocaleString()}
               </p>
               <p className="mt-2 text-sm text-slate-500">
                 Minimum payment before registration: {Number(detailPeriod.minimum_payment_percent || 0)}%
               </p>
               <p className="mt-2 text-sm text-slate-500">
-                Late registration penalty: GHS {Number(detailPeriod.late_registration_penalty || 0).toLocaleString()}
+                Late registration penalty: {localCurrency}{' '}
+                {Number(detailPeriod.late_registration_penalty || 0).toLocaleString()}
                 {detailPeriod.penalty_deadline ? ` after ${detailPeriod.penalty_deadline}` : ''}
               </p>
               <p className="mt-2 text-sm text-slate-500">
@@ -1160,9 +1205,25 @@ const AcademicStructurePage = () => {
                 <p className="mt-2 text-lg font-semibold text-brand-navy">{detailOffering.credit_hours ?? '-'}</p>
               </div>
               <div className="rounded-2xl bg-slate-50 p-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Course Fee</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                  Local Fee
+                </p>
                 <p className="mt-2 text-lg font-semibold text-brand-navy">
-                  GHS {Number(detailOffering.fee_amount || 0).toLocaleString()}
+                  {localCurrency} {Number(detailOffering.fee_amount_local ?? detailOffering.fee_amount ?? 0).toLocaleString()}
+                </p>
+              </div>
+              <div className="rounded-2xl bg-slate-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                  International Fee
+                </p>
+                <p className="mt-2 text-lg font-semibold text-brand-navy">
+                  {internationalCurrency}{' '}
+                  {Number(
+                    detailOffering.fee_amount_international ??
+                      detailOffering.fee_amount_local ??
+                      detailOffering.fee_amount ??
+                      0
+                  ).toLocaleString()}
                 </p>
               </div>
               <div className="rounded-2xl bg-slate-50 p-4">
@@ -1401,7 +1462,7 @@ const AcademicStructurePage = () => {
             onChange={(event) => setPeriodForm((current) => ({ ...current, end_date: event.target.value }))}
           />
           <Input
-            label="Semester Base Fee (GHS)"
+            label={`Semester Base Fee (${localCurrency})`}
             type="number"
             min="0"
             value={periodForm.base_fee_amount}
@@ -1418,7 +1479,7 @@ const AcademicStructurePage = () => {
             }
           />
           <Input
-            label="Late Registration Penalty (GHS)"
+            label={`Late Registration Penalty (${localCurrency})`}
             type="number"
             min="0"
             value={periodForm.late_registration_penalty}
@@ -1490,7 +1551,9 @@ const AcademicStructurePage = () => {
               ...offeringForm,
               code: offeringForm.code.toUpperCase(),
               credit_hours: offeringForm.credit_hours ? Number(offeringForm.credit_hours) : null,
-              fee_amount: Number(offeringForm.fee_amount || 0),
+              fee_amount: Number(offeringForm.fee_amount_local || 0),
+              fee_amount_local: Number(offeringForm.fee_amount_local || 0),
+              fee_amount_international: Number(offeringForm.fee_amount_international || 0),
               is_core: offeringForm.is_core === 'true',
               prerequisite_codes: offeringForm.prerequisite_codes,
               next_offering_codes: offeringForm.next_offering_codes,
@@ -1566,11 +1629,25 @@ const AcademicStructurePage = () => {
             onChange={(event) => setOfferingForm((current) => ({ ...current, credit_hours: event.target.value }))}
           />
           <Input
-            label="Course Fee (GHS)"
+            label={`Local Fee (${localCurrency})`}
             type="number"
             min="0"
-            value={offeringForm.fee_amount}
-            onChange={(event) => setOfferingForm((current) => ({ ...current, fee_amount: event.target.value }))}
+            value={offeringForm.fee_amount_local}
+            onChange={(event) =>
+              setOfferingForm((current) => ({ ...current, fee_amount_local: event.target.value }))
+            }
+          />
+          <Input
+            label={`International Fee (${internationalCurrency})`}
+            type="number"
+            min="0"
+            value={offeringForm.fee_amount_international}
+            onChange={(event) =>
+              setOfferingForm((current) => ({
+                ...current,
+                fee_amount_international: event.target.value,
+              }))
+            }
           />
           <Select
             label="Status"

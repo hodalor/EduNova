@@ -140,13 +140,13 @@ const comparePassword = (plainText, hash) => bcrypt.compare(plainText, hash);
 
 const signToken = (payload, secret, expiresIn) => jwt.sign(payload, secret, { expiresIn });
 
-const signAccessToken = (user) =>
+const signAccessToken = (user, permissions = getPermissionsForRole(user.role)) =>
   signToken(
     {
       sub: user.id,
       institution_id: user.institution_id,
       role: user.role,
-      permissions: getPermissionsForRole(user.role),
+      permissions,
       type: 'access',
     },
     env.JWT_SECRET,

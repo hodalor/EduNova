@@ -44,6 +44,7 @@ type NavItem = {
   to: string;
   icon: typeof LayoutDashboard;
   roles?: UserRole[];
+  permissions?: string[];
   visible?: (institution: InstitutionSummary | null) => boolean;
 };
 
@@ -65,6 +66,7 @@ const institutionNavGroups: NavGroup[] = [
         to: '/students',
         icon: GraduationCap,
         roles: ['institution_admin', 'teacher', 'librarian'],
+        permissions: ['academics:read'],
       },
       {
         name: 'Staff Access',
@@ -108,6 +110,7 @@ const institutionNavGroups: NavGroup[] = [
         to: '/academics/results-entry',
         icon: BookOpen,
         roles: ['institution_admin', 'teacher'],
+        permissions: ['academics:write'],
         visible: supportsAcademics,
       },
       {
@@ -115,6 +118,7 @@ const institutionNavGroups: NavGroup[] = [
         to: '/tertiary/course-registration',
         icon: Layers3,
         roles: ['institution_admin', 'teacher'],
+        permissions: ['academics:write'],
         visible: isTertiaryInstitution,
       },
       {
@@ -122,6 +126,7 @@ const institutionNavGroups: NavGroup[] = [
         to: '/attendance/taking',
         icon: ClipboardCheck,
         roles: ['institution_admin', 'teacher'],
+        permissions: ['attendance:write'],
         visible: supportsAttendance,
       },
       {
@@ -129,6 +134,7 @@ const institutionNavGroups: NavGroup[] = [
         to: '/finance',
         icon: CreditCard,
         roles: ['institution_admin', 'accountant', 'teacher'],
+        permissions: ['finance:read', 'finance_approve_director', 'finance_approve_accountant'],
         visible: supportsFinance,
       },
     ],
@@ -172,6 +178,7 @@ const institutionNavGroups: NavGroup[] = [
         to: '/analytics/finance',
         icon: FileBarChart2,
         roles: ['institution_admin', 'accountant', 'teacher'],
+        permissions: ['analytics:read'],
         visible: supportsAnalytics,
       },
       {
@@ -195,7 +202,8 @@ const superAdminNavGroups = [
 const buildNavGroups = (
   role: UserRole | null,
   institution: InstitutionSummary | null,
-  tenantContext: InstitutionSummary | null
+  tenantContext: InstitutionSummary | null,
+  permissions: string[]
 ): NavGroup[] => {
   const activeInstitution = tenantContext || institution;
 
@@ -219,8 +227,13 @@ const buildNavGroups = (
       ...group,
       items: group.items.filter((item) => {
         const matchesRole = !item.roles?.length || (role ? item.roles.includes(role) : false);
+        const matchesPermission =
+          !item.permissions?.length ||
+          item.permissions.some(
+            (permission) => permissions.includes(permission) || permissions.includes('*:*')
+          );
         const visible = item.visible ? item.visible(activeInstitution) : true;
-        return matchesRole && visible;
+        return matchesRole && matchesPermission && visible;
       }),
     }))
     .filter((group) => group.items.length > 0);
@@ -231,8 +244,9 @@ export const Sidebar = () => {
   const role = useAuthStore((state) => state.role);
   const institution = useAuthStore((state) => state.institution);
   const tenantContext = useAuthStore((state) => state.tenantContext);
+  const permissions = useAuthStore((state) => state.permissions);
   const activeInstitution = tenantContext || institution;
-  const groups = buildNavGroups(role, institution, tenantContext);
+  const groups = buildNavGroups(role, institution, tenantContext, permissions);
   const workspaceLabel = getWorkspaceLabel(activeInstitution);
 
   return (

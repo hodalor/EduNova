@@ -27,6 +27,7 @@ interface RegistrationCourse {
   prerequisite_codes?: string[];
   next_offering_codes?: string[];
   fee_amount?: number;
+  currency_code?: string;
   reason?: string;
 }
 
@@ -84,10 +85,15 @@ interface RegistrationState {
     paid_amount: number;
     invoiced_amount: number;
     outstanding_amount: number;
+    currency_code?: string;
+    student_category?: 'local' | 'international';
     is_new_student?: boolean;
     fee_clearance: boolean;
   };
 }
+
+const formatMoney = (currencyCode: string | undefined, value: number | string | null | undefined) =>
+  `${currencyCode || 'GHS'} ${Number(value || 0).toLocaleString()}`;
 
 const StudentCourseRegistrationPage = () => {
   const queryClient = useQueryClient();
@@ -157,6 +163,11 @@ const StudentCourseRegistrationPage = () => {
     setProgressionNote(data?.progression_note || '');
   }, [data?.outstanding_resit_codes, data?.progression_note, data?.progression_override]);
 
+  useEffect(() => {
+    const allowedIds = new Set((data?.eligible_courses || []).map((course: RegistrationCourse) => course.id));
+    setSelectedCourseIds((current) => current.filter((item) => allowedIds.has(item)));
+  }, [data?.eligible_courses]);
+
   if (isLoading) {
     return <PageLoader />;
   }
@@ -202,6 +213,7 @@ const StudentCourseRegistrationPage = () => {
   const registeredCourses = data.already_registered.flatMap(
     (item: { id: string; courses?: RegistrationCourse[] }) => item.courses || []
   );
+  const feeCurrency = data.fee_summary.currency_code || 'GHS';
 
   return (
     <div className="space-y-6">
@@ -274,39 +286,38 @@ const StudentCourseRegistrationPage = () => {
             <div className="rounded-2xl bg-slate-50 p-4">
               <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Semester Courses</p>
               <p className="mt-2 font-semibold text-brand-navy">
-                GHS {Number(data.fee_summary.course_fee_total || 0).toLocaleString()}
+                {formatMoney(feeCurrency, data.fee_summary.course_fee_total)}
               </p>
             </div>
             <div className="rounded-2xl bg-slate-50 p-4">
               <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Minimum Before Registration</p>
               <p className="mt-2 font-semibold text-brand-navy">
-                {Number(data.fee_summary.minimum_payment_percent || 0)}% · GHS {Number(
-                  data.fee_summary.minimum_required_amount || 0
-                ).toLocaleString()}
+                {Number(data.fee_summary.minimum_payment_percent || 0)}% ·{' '}
+                {formatMoney(feeCurrency, data.fee_summary.minimum_required_amount)}
               </p>
             </div>
             <div className="rounded-2xl bg-slate-50 p-4">
               <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Resit Courses</p>
               <p className="mt-2 font-semibold text-brand-navy">
-                GHS {Number(data.fee_summary.resit_course_total || 0).toLocaleString()}
+                {formatMoney(feeCurrency, data.fee_summary.resit_course_total)}
               </p>
             </div>
             <div className="rounded-2xl bg-slate-50 p-4">
               <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Paid So Far</p>
               <p className="mt-2 font-semibold text-brand-navy">
-                GHS {Number(data.fee_summary.paid_amount || 0).toLocaleString()}
+                {formatMoney(feeCurrency, data.fee_summary.paid_amount)}
               </p>
             </div>
             <div className="rounded-2xl bg-slate-50 p-4">
               <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Total Expected</p>
               <p className="mt-2 font-semibold text-brand-navy">
-                GHS {Number(data.fee_summary.total_amount || 0).toLocaleString()}
+                {formatMoney(feeCurrency, data.fee_summary.total_amount)}
               </p>
             </div>
             <div className="rounded-2xl bg-slate-50 p-4">
               <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Outstanding</p>
               <p className="mt-2 font-semibold text-rose-600">
-                GHS {Number(data.fee_summary.outstanding_amount || 0).toLocaleString()}
+                {formatMoney(feeCurrency, data.fee_summary.outstanding_amount)}
               </p>
             </div>
           </div>
@@ -514,7 +525,7 @@ const StudentCourseRegistrationPage = () => {
                               <p className="text-sm text-slate-500">
                                 {course.credit_hours || 0} credit hours
                                 {typeof course.fee_amount === 'number'
-                                  ? ` · GHS ${Number(course.fee_amount).toLocaleString()}`
+                                  ? ` · ${formatMoney(course.currency_code || feeCurrency, course.fee_amount)}`
                                   : ''}
                               </p>
                             </div>
@@ -542,9 +553,10 @@ const StudentCourseRegistrationPage = () => {
                     />
                     <Alert
                       title={data.fee_clearance ? 'Finance cleared' : 'Finance clearance pending'}
-                      message={`Required payment before registration: GHS ${Number(
-                        data.fee_summary.minimum_required_amount || 0
-                      ).toLocaleString()}.`}
+                      message={`Required payment before registration: ${formatMoney(
+                        feeCurrency,
+                        data.fee_summary.minimum_required_amount
+                      )}.`}
                       variant={data.fee_clearance ? 'success' : 'warning'}
                     />
                     <Alert

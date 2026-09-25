@@ -317,6 +317,161 @@ const createUser = async ({ institutionId, payload, actorId, ip }) => {
   return createUserInRuntime({ institutionId, payload, actorId, ip });
 };
 
+const updateUser = async ({ institutionId, userId, payload, actorId, ip }) => {
+  validatePayload({
+    ...payload,
+    employment_type: payload.employment_type || 'full_time',
+    role: payload.role,
+  });
+
+  if (models.User && models.Staff && sequelize?.transaction) {
+    const transaction = await sequelize.transaction();
+    try {
+      const institution = await models.Institution.findByPk(institutionId, {
+        attributes: ['id', 'settings'],
+        transaction,
+      });
+      const user = await models.User.findOne({
+        where: { id: userId, institution_id: institutionId },
+        include: [{ model: models.Staff, as: 'staffProfile', required: false }],
+        transaction,
+      });
+      if (!institution || !user) {
+        throw Object.assign(new Error('User not found.'), { statusCode: 404 });
+      }
+
+      const email = String(payload.email || '').trim().toLowerCase();
+      const duplicateEmail = await models.User.findOne({
+        where: {
+          institution_id: institutionId,
+          email,
+          id: { [Op.ne]: userId },
+        },
+        transaction,
+      });
+      if (duplicateEmail) {
+        throw Object.assign(new Error('A user with this email already exists.'), { statusCode: 409 });
+      }
+
+      const normalizedStaffNumber = String(payload.staff_number || '').trim();
+      const duplicateStaff = await models.Staff.findOne({
+        where: {
+          institution_id: institutionId,
+          staff_number: normalizedStaffNumber,
+          user_id: { [Op.ne]: userId },
+        },
+        transaction,
+      });
+      if (duplicateStaff) {
+        throw Object.assign(new Error('A user with this staff number already exists.'), {
+          statusCode: 409,
+        });
+      }
+
+      await user.update(
+        {
+          email,
+          phone: payload.phone || null,
+          role: payload.role,
+          first_name: payload.first_name,
+          last_name: payload.last_name,
+        },
+        { transaction }
+      );
+
+      if (user.staffProfile) {
+        await user.staffProfile.update(
+          {
+            staff_number: normalizedStaffNumber,
+            department: payload.department,
+            designation: payload.designation,
+            qualification: payload.qualification || null,
+            specialization: payload.specialization || null,
+            employment_type: payload.employment_type,
+            date_joined: payload.date_joined,
+          },
+          { transaction }
+        );
+      }
+
+      const settings = ensureAccessControlSettings(institution.settings);
+      const customPermissions = setCustomPermissionsInSettings({
+        settings,
+        userId,
+        permissions: payload.custom_permissions,
+      });
+      await institution.update({ settings }, { transaction });
+      await transaction.commit();
+
+      const response = {
+        id: user.id,
+        institution_id: institutionId,
+        email: user.email,
+        phone: user.phone,
+        role: user.role,
+        first_name: user.first_name,
+        last_name: user.last_name,
+        staff_number: normalizedStaffNumber,
+        department: payload.department,
+        designation: payload.designation,
+        qualification: payload.qualification || null,
+        specialization: payload.specialization || null,
+        employment_type: payload.employment_type,
+        date_joined: payload.date_joined,
+        is_active: user.is_active,
+        status: user.is_active ? 'active' : 'inactive',
+        custom_permissions: customPermissions,
+        permissions: getPermissionsForRole(user.role).concat(customPermissions),
+      };
+
+      await logAudit({
+        userId: actorId,
+        action: 'UPDATE',
+        resourceType: 'user_access',
+        resourceId: user.id,
+        newValues: response,
+        ip,
+      });
+
+      return response;
+    } catch (error) {
+      await transaction.rollback();
+      throw error;
+    }
+  }
+
+  const runtimeUser = store.users.accounts.find(
+    (item) => item.id === userId && item.institution_id === institutionId
+  );
+  if (!runtimeUser) {
+    throw Object.assign(new Error('User not found.'), { statusCode: 404 });
+  }
+  runtimeUser.email = String(payload.email || '').trim().toLowerCase();
+  runtimeUser.phone = payload.phone || null;
+  runtimeUser.role = payload.role;
+  runtimeUser.first_name = payload.first_name;
+  runtimeUser.last_name = payload.last_name;
+  runtimeUser.staff_number = String(payload.staff_number || '').trim();
+  runtimeUser.department = payload.department;
+  runtimeUser.designation = payload.designation;
+  runtimeUser.qualification = payload.qualification || null;
+  runtimeUser.specialization = payload.specialization || null;
+  runtimeUser.employment_type = payload.employment_type;
+  runtimeUser.date_joined = payload.date_joined;
+  runtimeUser.custom_permissions = normalizeCustomPermissions(payload.custom_permissions);
+
+  await logAudit({
+    userId: actorId,
+    action: 'UPDATE',
+    resourceType: 'user_access',
+    resourceId: userId,
+    newValues: serializeRuntimeUser(runtimeUser),
+    ip,
+  });
+
+  return serializeRuntimeUser(runtimeUser);
+};
+
 const updateUserAccess = async ({ institutionId, userId, payload, actorId, ip }) => {
   const customPermissions = normalizeCustomPermissions(payload.custom_permissions);
 
@@ -382,6 +537,68 @@ const updateUserAccess = async ({ institutionId, userId, payload, actorId, ip })
   };
 };
 
+const deleteUser = async ({ institutionId, userId, actorId, ip }) => {
+  if (models.Institution && models.User) {
+    const transaction = await sequelize.transaction();
+    try {
+      const institution = await models.Institution.findByPk(institutionId, { transaction });
+      const user = await models.User.findOne({
+        where: { id: userId, institution_id: institutionId },
+        include: [{ model: models.Staff, as: 'staffProfile', required: false }],
+        transaction,
+      });
+      if (!institution || !user) {
+        throw Object.assign(new Error('User not found.'), { statusCode: 404 });
+      }
+
+      const settings = ensureAccessControlSettings(institution.settings);
+      const previous = {
+        id: user.id,
+        role: user.role,
+        email: user.email,
+      };
+      setCustomPermissionsInSettings({ settings, userId, permissions: [] });
+      await institution.update({ settings }, { transaction });
+      if (user.staffProfile) {
+        await user.staffProfile.destroy({ transaction });
+      }
+      await user.destroy({ transaction });
+      await transaction.commit();
+
+      await logAudit({
+        userId: actorId,
+        action: 'DELETE',
+        resourceType: 'user_access',
+        resourceId: userId,
+        previousValues: previous,
+        ip,
+      });
+
+      return { id: userId, deleted: true };
+    } catch (error) {
+      await transaction.rollback();
+      throw error;
+    }
+  }
+
+  const index = store.users.accounts.findIndex(
+    (item) => item.id === userId && item.institution_id === institutionId
+  );
+  if (index < 0) {
+    throw Object.assign(new Error('User not found.'), { statusCode: 404 });
+  }
+  const [removed] = store.users.accounts.splice(index, 1);
+  await logAudit({
+    userId: actorId,
+    action: 'DELETE',
+    resourceType: 'user_access',
+    resourceId: userId,
+    previousValues: serializeRuntimeUser(removed),
+    ip,
+  });
+  return { id: userId, deleted: true };
+};
+
 const serializeParent = (item) => ({
   id: item.id,
   institution_id: item.institution_id,
@@ -445,6 +662,8 @@ const searchParents = async ({ institutionId, search, limit }) => {
 module.exports = {
   listUsers,
   createUser,
+  updateUser,
   updateUserAccess,
+  deleteUser,
   searchParents,
 };

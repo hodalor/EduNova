@@ -190,6 +190,9 @@ export const eduovaApi = {
     },
   },
   finance: {
+    settings: async () => (await axiosInstance.get('/finance/settings')).data.data,
+    updateSettings: async (payload: Record<string, unknown>) =>
+      (await axiosInstance.patch('/finance/settings', payload)).data.data,
     dashboard: async () => (await axiosInstance.get('/finance/dashboard')).data.data,
     invoices: async () => (await axiosInstance.get('/finance/invoices')).data.data,
     createInvoice: async (payload: Record<string, unknown>) =>
@@ -281,10 +284,22 @@ export const eduovaApi = {
     overview: async () => (await axiosInstance.get('/v1/tertiary/overview')).data.data,
     createFaculty: async (payload: Record<string, unknown>) =>
       (await axiosInstance.post('/v1/tertiary/faculties', payload)).data.data,
+    updateFaculty: async (id: string, payload: Record<string, unknown>) =>
+      (await axiosInstance.patch(`/v1/tertiary/faculties/${id}`, payload)).data.data,
+    deleteFaculty: async (id: string) =>
+      (await axiosInstance.delete(`/v1/tertiary/faculties/${id}`)).data.data,
     createDepartment: async (payload: Record<string, unknown>) =>
       (await axiosInstance.post('/v1/tertiary/departments', payload)).data.data,
+    updateDepartment: async (id: string, payload: Record<string, unknown>) =>
+      (await axiosInstance.patch(`/v1/tertiary/departments/${id}`, payload)).data.data,
+    deleteDepartment: async (id: string) =>
+      (await axiosInstance.delete(`/v1/tertiary/departments/${id}`)).data.data,
     createProgram: async (payload: Record<string, unknown>) =>
       (await axiosInstance.post('/v1/tertiary/programs', payload)).data.data,
+    updateProgram: async (id: string, payload: Record<string, unknown>) =>
+      (await axiosInstance.patch(`/v1/tertiary/programs/${id}`, payload)).data.data,
+    deleteProgram: async (id: string) =>
+      (await axiosInstance.delete(`/v1/tertiary/programs/${id}`)).data.data,
     updateProgressionPolicy: async (payload: Record<string, unknown>) =>
       (await axiosInstance.patch('/v1/tertiary/progression-policy', payload)).data.data,
     updateFinancePolicy: async (payload: Record<string, unknown>) =>
@@ -300,8 +315,11 @@ export const eduovaApi = {
     list: async () => (await axiosInstance.get('/v1/users')).data.data,
     create: async (payload: Record<string, unknown>) =>
       (await axiosInstance.post('/v1/users', payload)).data.data,
+    update: async (id: string, payload: Record<string, unknown>) =>
+      (await axiosInstance.patch(`/v1/users/${id}`, payload)).data.data,
     updateAccess: async (id: string, payload: Record<string, unknown>) =>
       (await axiosInstance.patch(`/v1/users/${id}/access`, payload)).data.data,
+    delete: async (id: string) => (await axiosInstance.delete(`/v1/users/${id}`)).data.data,
     searchParents: async (search: string, limit = 20) =>
       (
         await axiosInstance.get('/v1/users/parents', {

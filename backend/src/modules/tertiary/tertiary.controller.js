@@ -64,6 +64,25 @@ module.exports = {
     });
     res.status(201).json({ success: true, data });
   },
+  updateFaculty: async (req, res) => {
+    const data = await tertiaryService.updateFaculty({
+      institutionId: req.institutionId,
+      facultyId: req.params.id,
+      payload: req.body,
+      userId: req.user.id,
+      ip: req.ip,
+    });
+    res.json({ success: true, data });
+  },
+  deleteFaculty: async (req, res) => {
+    const data = await tertiaryService.deleteFaculty({
+      institutionId: req.institutionId,
+      facultyId: req.params.id,
+      userId: req.user.id,
+      ip: req.ip,
+    });
+    res.json({ success: true, data });
+  },
   listDepartments: wrap((req) =>
     tertiaryService.listDepartments({ institutionId: req.institutionId })
   ),
@@ -76,6 +95,25 @@ module.exports = {
     });
     res.status(201).json({ success: true, data });
   },
+  updateDepartment: async (req, res) => {
+    const data = await tertiaryService.updateDepartment({
+      institutionId: req.institutionId,
+      departmentId: req.params.id,
+      payload: req.body,
+      userId: req.user.id,
+      ip: req.ip,
+    });
+    res.json({ success: true, data });
+  },
+  deleteDepartment: async (req, res) => {
+    const data = await tertiaryService.deleteDepartment({
+      institutionId: req.institutionId,
+      departmentId: req.params.id,
+      userId: req.user.id,
+      ip: req.ip,
+    });
+    res.json({ success: true, data });
+  },
   listPrograms: wrap((req) =>
     tertiaryService.listPrograms({ institutionId: req.institutionId })
   ),
@@ -87,6 +125,25 @@ module.exports = {
       ip: req.ip,
     });
     res.status(201).json({ success: true, data });
+  },
+  updateProgram: async (req, res) => {
+    const data = await tertiaryService.updateProgram({
+      institutionId: req.institutionId,
+      programId: req.params.id,
+      payload: req.body,
+      userId: req.user.id,
+      ip: req.ip,
+    });
+    res.json({ success: true, data });
+  },
+  deleteProgram: async (req, res) => {
+    const data = await tertiaryService.deleteProgram({
+      institutionId: req.institutionId,
+      programId: req.params.id,
+      userId: req.user.id,
+      ip: req.ip,
+    });
+    res.json({ success: true, data });
   },
   updateProgressionPolicy: async (req, res) => {
     const data = await tertiaryService.updateProgressionPolicy({

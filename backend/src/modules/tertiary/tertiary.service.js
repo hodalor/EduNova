@@ -71,6 +71,8 @@ const getFinancePolicy = (settings) => ({
 
 const ensureTertiarySettings = (settings) => {
   const next = cloneSettings(settings);
+  next.admissions = next.admissions || {};
+  next.admissions.student_profiles = next.admissions.student_profiles || [];
   next.academics = next.academics || { groups: [], periods: [], offerings: [], progression_rules: [] };
   next.tertiary = next.tertiary || {};
   next.tertiary.faculties = next.tertiary.faculties || [];
@@ -89,6 +91,66 @@ const ensureTertiarySettings = (settings) => {
   next.tertiary.id_format = next.tertiary.id_format || 'FAC/DEPT/YEAR/SEQ';
   return next;
 };
+
+const getFinanceDefaults = (settings) => {
+  const currencies =
+    Array.isArray(settings?.finance?.currencies) && settings.finance.currencies.length
+      ? settings.finance.currencies
+      : ['GHS', 'ZMW', 'USD'];
+  const defaultLocal = settings?.finance?.default_local_currency || currencies[0] || 'GHS';
+  const defaultInternational =
+    settings?.finance?.default_international_currency ||
+    currencies.find((item) => item !== defaultLocal) ||
+    'USD';
+
+  return {
+    currencies,
+    default_local_currency: defaultLocal,
+    default_international_currency: defaultInternational,
+  };
+};
+
+const resolveStudentCategory = (profile = {}) =>
+  String(
+    profile?.student_category || profile?.studentCategory || profile?.tertiary?.student_category || 'local'
+  )
+    .trim()
+    .toLowerCase() === 'international'
+    ? 'international'
+    : 'local';
+
+const resolveOfferingFee = ({ offering, profile, settings }) => {
+  const financeDefaults = getFinanceDefaults(settings);
+  const studentCategory = resolveStudentCategory(profile);
+  const isInternational = studentCategory === 'international';
+  const resolvedAmount = isInternational
+    ? Number(
+        offering?.fee_amount_international ??
+          offering?.international_fee_amount ??
+          offering?.fee_amount ??
+          0
+      )
+    : Number(offering?.fee_amount_local ?? offering?.local_fee_amount ?? offering?.fee_amount ?? 0);
+
+  return {
+    amount: Number.isFinite(resolvedAmount) ? resolvedAmount : 0,
+    currency_code: isInternational
+      ? financeDefaults.default_international_currency
+      : financeDefaults.default_local_currency,
+    student_category: studentCategory,
+  };
+};
+
+const applyOfferingPricing = ({ offerings = [], profile, settings }) =>
+  offerings.map((offering) => {
+    const fee = resolveOfferingFee({ offering, profile, settings });
+    return {
+      ...offering,
+      fee_amount: fee.amount,
+      currency_code: fee.currency_code,
+      student_category: fee.student_category,
+    };
+  });
 
 const getAcademicStructureFromSettings = (settings) => {
   const groups = (settings.academics?.groups || []).filter((item) => item.level_code === 'TR');
@@ -206,6 +268,14 @@ const buildFeeSummary = ({
     minimumPaymentPercent > 0 ? (totalAmount * minimumPaymentPercent) / 100 : 0;
   const manualClearance = progress.fee_clearance !== false;
   const meetsThreshold = minimumRequiredAmount <= 0 || Number(paidAmount || 0) >= minimumRequiredAmount;
+  const currencyCode =
+    currentCourses.find((item) => item?.currency_code)?.currency_code ||
+    outstandingCourses.find((item) => item?.currency_code)?.currency_code ||
+    getFinanceDefaults({}).default_local_currency;
+  const studentCategory =
+    currentCourses.find((item) => item?.student_category)?.student_category ||
+    outstandingCourses.find((item) => item?.student_category)?.student_category ||
+    'local';
 
   return {
     base_fee_amount: baseFeeAmount,
@@ -222,6 +292,8 @@ const buildFeeSummary = ({
     outstanding_amount: Math.max(totalAmount - Number(paidAmount || 0), 0),
     clearance_source: meetsThreshold ? 'automatic' : 'manual_override_required',
     is_new_student: isNewStudent,
+    currency_code: currencyCode,
+    student_category: studentCategory,
     finance_policy: financePolicy,
     fee_clearance: manualClearance && meetsThreshold,
   };
@@ -415,6 +487,99 @@ const updateTertiaryCollection = async ({
   }
 };
 
+const updateTertiaryEntry = async ({
+  institutionId,
+  collection,
+  entryId,
+  userId,
+  ip,
+  resourceType,
+  buildEntry,
+}) => {
+  const transaction = await sequelize.transaction();
+
+  try {
+    const institution = await models.Institution.findByPk(institutionId, { transaction });
+    if (!institution) {
+      throw Object.assign(new Error('Institution not found.'), { statusCode: 404 });
+    }
+
+    const settings = ensureTertiarySettings(institution.settings);
+    const index = settings.tertiary[collection].findIndex((item) => item.id === entryId);
+    if (index < 0) {
+      throw Object.assign(new Error('Tertiary record not found.'), { statusCode: 404 });
+    }
+    const current = settings.tertiary[collection][index];
+    const next = buildEntry(settings, current);
+    settings.tertiary[collection][index] = next;
+    await institution.update({ settings }, { transaction });
+    await transaction.commit();
+
+    await logAudit({
+      userId,
+      action: 'UPDATE',
+      resourceType,
+      resourceId: entryId,
+      previousValues: current,
+      newValues: next,
+      ip,
+    });
+
+    return next;
+  } catch (error) {
+    await transaction.rollback();
+    throw error;
+  }
+};
+
+const deleteTertiaryEntry = async ({
+  institutionId,
+  collection,
+  entryId,
+  userId,
+  ip,
+  resourceType,
+  validateBeforeDelete,
+}) => {
+  const transaction = await sequelize.transaction();
+
+  try {
+    const institution = await models.Institution.findByPk(institutionId, { transaction });
+    if (!institution) {
+      throw Object.assign(new Error('Institution not found.'), { statusCode: 404 });
+    }
+
+    const settings = ensureTertiarySettings(institution.settings);
+    const index = settings.tertiary[collection].findIndex((item) => item.id === entryId);
+    if (index < 0) {
+      throw Object.assign(new Error('Tertiary record not found.'), { statusCode: 404 });
+    }
+
+    const current = settings.tertiary[collection][index];
+    if (validateBeforeDelete) {
+      validateBeforeDelete(settings, current);
+    }
+
+    settings.tertiary[collection].splice(index, 1);
+    await institution.update({ settings }, { transaction });
+    await transaction.commit();
+
+    await logAudit({
+      userId,
+      action: 'DELETE',
+      resourceType,
+      resourceId: entryId,
+      previousValues: current,
+      ip,
+    });
+
+    return { id: entryId, deleted: true };
+  } catch (error) {
+    await transaction.rollback();
+    throw error;
+  }
+};
+
 const createFaculty = async ({ institutionId, payload, userId, ip }) => {
   if (!databaseReady()) {
     const faculty = {
@@ -577,6 +742,271 @@ const createProgram = async ({ institutionId, payload, userId, ip }) => {
         roadmap_group_ids: roadmapGroupIds,
       };
     },
+  });
+};
+
+const updateFaculty = async ({ institutionId, facultyId, payload, userId, ip }) => {
+  if (!databaseReady()) {
+    const index = (store.tertiary.faculties || []).findIndex(
+      (item) => item.institution_id === institutionId && item.id === facultyId
+    );
+    if (index < 0) {
+      throw Object.assign(new Error('Faculty not found.'), { statusCode: 404 });
+    }
+    const current = store.tertiary.faculties[index];
+    const next = {
+      ...current,
+      name: payload.name || current.name,
+      code: String(payload.code || current.code || '')
+        .trim()
+        .toUpperCase()
+        .replace(/\s+/g, '-'),
+      dean: payload.dean || null,
+    };
+    store.tertiary.faculties[index] = next;
+    return next;
+  }
+
+  return updateTertiaryEntry({
+    institutionId,
+    collection: 'faculties',
+    entryId: facultyId,
+    userId,
+    ip,
+    resourceType: 'tertiary_faculty',
+    buildEntry: (settings, current) => {
+      const code = String(payload.code || current.code || '')
+        .trim()
+        .toUpperCase()
+        .replace(/\s+/g, '-');
+      if (
+        settings.tertiary.faculties.some((item) => item.id !== facultyId && item.code === code)
+      ) {
+        throw Object.assign(new Error('A faculty with this code already exists.'), {
+          statusCode: 409,
+        });
+      }
+      return {
+        ...current,
+        name: payload.name || current.name,
+        code,
+        dean: payload.dean || null,
+      };
+    },
+  });
+};
+
+const deleteFaculty = async ({ institutionId, facultyId, userId, ip }) => {
+  if (!databaseReady()) {
+    const linkedDepartments = (store.tertiary.departments || []).filter(
+      (item) => item.institution_id === institutionId && item.faculty_id === facultyId
+    );
+    if (linkedDepartments.length) {
+      throw Object.assign(new Error('Delete linked departments before removing this faculty.'), {
+        statusCode: 400,
+      });
+    }
+    store.tertiary.faculties = (store.tertiary.faculties || []).filter(
+      (item) => !(item.institution_id === institutionId && item.id === facultyId)
+    );
+    return { id: facultyId, deleted: true };
+  }
+
+  return deleteTertiaryEntry({
+    institutionId,
+    collection: 'faculties',
+    entryId: facultyId,
+    userId,
+    ip,
+    resourceType: 'tertiary_faculty',
+    validateBeforeDelete: (settings) => {
+      if (settings.tertiary.departments.some((item) => item.faculty_id === facultyId)) {
+        throw Object.assign(new Error('Delete linked departments before removing this faculty.'), {
+          statusCode: 400,
+        });
+      }
+    },
+  });
+};
+
+const updateDepartment = async ({ institutionId, departmentId, payload, userId, ip }) => {
+  if (!databaseReady()) {
+    const index = store.tertiary.departments.findIndex(
+      (item) => item.institution_id === institutionId && item.id === departmentId
+    );
+    if (index < 0) {
+      throw Object.assign(new Error('Department not found.'), { statusCode: 404 });
+    }
+    const faculty = (store.tertiary.faculties || []).find(
+      (item) => item.id === (payload.faculty_id || store.tertiary.departments[index].faculty_id)
+    );
+    const current = store.tertiary.departments[index];
+    const next = {
+      ...current,
+      faculty_id: faculty?.id || current.faculty_id,
+      faculty: faculty?.name || current.faculty,
+      name: payload.name || current.name,
+      code: String(payload.code || current.code || '')
+        .trim()
+        .toUpperCase()
+        .replace(/\s+/g, '-'),
+    };
+    store.tertiary.departments[index] = next;
+    return next;
+  }
+
+  return updateTertiaryEntry({
+    institutionId,
+    collection: 'departments',
+    entryId: departmentId,
+    userId,
+    ip,
+    resourceType: 'tertiary_department',
+    buildEntry: (settings, current) => {
+      const faculty = settings.tertiary.faculties.find(
+        (item) => item.id === (payload.faculty_id || current.faculty_id)
+      );
+      if (!faculty) {
+        throw Object.assign(new Error('Faculty not found for this department.'), {
+          statusCode: 404,
+        });
+      }
+      return {
+        ...current,
+        faculty_id: faculty.id,
+        faculty: faculty.name,
+        name: payload.name || current.name,
+        code: String(payload.code || current.code || '')
+          .trim()
+          .toUpperCase()
+          .replace(/\s+/g, '-'),
+      };
+    },
+  });
+};
+
+const deleteDepartment = async ({ institutionId, departmentId, userId, ip }) => {
+  if (!databaseReady()) {
+    const linkedPrograms = (store.tertiary.programs || []).filter(
+      (item) => item.institution_id === institutionId && item.department_id === departmentId
+    );
+    if (linkedPrograms.length) {
+      throw Object.assign(new Error('Delete linked programs before removing this department.'), {
+        statusCode: 400,
+      });
+    }
+    store.tertiary.departments = store.tertiary.departments.filter(
+      (item) => !(item.institution_id === institutionId && item.id === departmentId)
+    );
+    return { id: departmentId, deleted: true };
+  }
+
+  return deleteTertiaryEntry({
+    institutionId,
+    collection: 'departments',
+    entryId: departmentId,
+    userId,
+    ip,
+    resourceType: 'tertiary_department',
+    validateBeforeDelete: (settings) => {
+      if (settings.tertiary.programs.some((item) => item.department_id === departmentId)) {
+        throw Object.assign(new Error('Delete linked programs before removing this department.'), {
+          statusCode: 400,
+        });
+      }
+    },
+  });
+};
+
+const updateProgram = async ({ institutionId, programId, payload, userId, ip }) => {
+  if (!databaseReady()) {
+    const index = store.tertiary.programs.findIndex(
+      (item) => item.institution_id === institutionId && item.id === programId
+    );
+    if (index < 0) {
+      throw Object.assign(new Error('Program not found.'), { statusCode: 404 });
+    }
+    const current = store.tertiary.programs[index];
+    const department = store.tertiary.departments.find(
+      (item) => item.id === (payload.department_id || current.department_id)
+    );
+    const next = {
+      ...current,
+      name: payload.name || current.name,
+      code: String(payload.code || current.code || '')
+        .trim()
+        .toUpperCase()
+        .replace(/\s+/g, '-'),
+      credential: payload.credential || current.credential,
+      duration: payload.duration || current.duration,
+      calendar: payload.calendar || current.calendar,
+      department_id: department?.id || current.department_id,
+      department: department?.name || current.department,
+      faculty_id: department?.faculty_id || current.faculty_id,
+      faculty: department?.faculty || current.faculty,
+      roadmap_group_ids: Array.isArray(payload.roadmap_group_ids)
+        ? payload.roadmap_group_ids.filter(Boolean)
+        : current.roadmap_group_ids || [],
+    };
+    store.tertiary.programs[index] = next;
+    return next;
+  }
+
+  return updateTertiaryEntry({
+    institutionId,
+    collection: 'programs',
+    entryId: programId,
+    userId,
+    ip,
+    resourceType: 'tertiary_program',
+    buildEntry: (settings, current) => {
+      const department = settings.tertiary.departments.find(
+        (item) => item.id === (payload.department_id || current.department_id)
+      );
+      if (!department) {
+        throw Object.assign(new Error('Department not found for this program.'), {
+          statusCode: 404,
+        });
+      }
+      const availableGroups = (settings.academics?.groups || []).filter((item) => item.level_code === 'TR');
+      const availableGroupIds = new Set(availableGroups.map((item) => item.id));
+      return {
+        ...current,
+        faculty_id: department.faculty_id,
+        department_id: department.id,
+        faculty: department.faculty,
+        department: department.name,
+        name: payload.name || current.name,
+        code: String(payload.code || current.code || '')
+          .trim()
+          .toUpperCase()
+          .replace(/\s+/g, '-'),
+        credential: payload.credential || current.credential,
+        duration: payload.duration || current.duration,
+        calendar: payload.calendar || current.calendar,
+        roadmap_group_ids: Array.isArray(payload.roadmap_group_ids)
+          ? payload.roadmap_group_ids.filter((item) => availableGroupIds.has(item))
+          : current.roadmap_group_ids || [],
+      };
+    },
+  });
+};
+
+const deleteProgram = async ({ institutionId, programId, userId, ip }) => {
+  if (!databaseReady()) {
+    store.tertiary.programs = store.tertiary.programs.filter(
+      (item) => !(item.institution_id === institutionId && item.id === programId)
+    );
+    return { id: programId, deleted: true };
+  }
+
+  return deleteTertiaryEntry({
+    institutionId,
+    collection: 'programs',
+    entryId: programId,
+    userId,
+    ip,
+    resourceType: 'tertiary_program',
   });
 };
 
@@ -805,6 +1235,10 @@ const getRegistrationStateFromSettings = async ({ institutionId, studentId }) =>
   const settings = ensureTertiarySettings(institution.settings);
   const progressionPolicy = getProgressionPolicy(settings);
   const financePolicy = getFinancePolicy(settings);
+  const studentProfile =
+    settings.admissions.student_profiles.find(
+      (item) => String(item.student_id || item.id) === String(studentId)
+    ) || {};
   const progress = settings.tertiary.student_progress.find(
     (item) => item.student_id === studentId && item.institution_id === institutionId
   );
@@ -819,7 +1253,8 @@ const getRegistrationStateFromSettings = async ({ institutionId, studentId }) =>
     throw Object.assign(new Error('Current academic structure is incomplete.'), { statusCode: 400 });
   }
 
-  const currentOfferings = offerings.filter(
+  const pricedOfferings = applyOfferingPricing({ offerings, profile: studentProfile, settings });
+  const currentOfferings = pricedOfferings.filter(
     (item) => item.group_id === currentGroup.id && item.period_id === currentPeriod.id
   );
   const eligibleCurrentCourses = currentOfferings.filter((item) =>
@@ -858,7 +1293,7 @@ const getRegistrationStateFromSettings = async ({ institutionId, studentId }) =>
       Number(item.sequence || 0) === Number(currentPeriod.sequence || 0) + 1
   );
   const nextTermPreview = nextPeriod && carryOverSummary.effective_can_progress
-    ? offerings.filter((item) => item.group_id === currentGroup.id && item.period_id === nextPeriod.id)
+    ? pricedOfferings.filter((item) => item.group_id === currentGroup.id && item.period_id === nextPeriod.id)
     : [];
 
   const alreadyRegistered = settings.tertiary.registrations.filter(
@@ -866,6 +1301,18 @@ const getRegistrationStateFromSettings = async ({ institutionId, studentId }) =>
       item.institution_id === institutionId &&
       item.student_id === studentId &&
       item.period_id === currentPeriod.id
+  );
+  const alreadyRegisteredCourseIds = new Set(
+    alreadyRegistered.flatMap((item) => (item.courses || []).map((course) => course.id))
+  );
+  const alreadyRegisteredBlockedCourses = eligibleCourses
+    .filter((item) => alreadyRegisteredCourseIds.has(item.id))
+    .map((item) => ({
+      ...item,
+      reason: 'This course has already been registered for the active semester.',
+    }));
+  const filteredEligibleCourses = eligibleCourses.filter(
+    (item) => !alreadyRegisteredCourseIds.has(item.id)
   );
 
   const financeTotals = await getRegistrationFinanceTotals({
@@ -877,7 +1324,7 @@ const getRegistrationStateFromSettings = async ({ institutionId, studentId }) =>
     currentPeriod,
     currentCourses: currentOfferings,
     outstandingCourses: carryOverSummary.outstanding_courses
-      .map((item) => offerings.find((offering) => offering.code === item.code))
+      .map((item) => pricedOfferings.find((offering) => offering.code === item.code))
       .filter(Boolean),
     progress,
     financePolicy,
@@ -897,10 +1344,11 @@ const getRegistrationStateFromSettings = async ({ institutionId, studentId }) =>
     progression_note: progress.progression_note || null,
     progression_policy: progressionPolicy,
     finance_policy: financePolicy,
+    student_category: resolveStudentCategory(studentProfile),
     carry_over_summary: carryOverSummary,
     outstanding_resit_codes: progress.outstanding_resit_codes || [],
-    eligible_courses: eligibleCourses,
-    blocked_courses: blockedCourses,
+    eligible_courses: filteredEligibleCourses,
+    blocked_courses: [...blockedCourses, ...alreadyRegisteredBlockedCourses],
     next_period_preview: nextTermPreview,
     already_registered: alreadyRegistered,
     fee_summary: feeSummary,
@@ -935,6 +1383,10 @@ const getStudentRegistrationState = async ({ institutionId, studentId }) => {
 
   const progressionPolicy = store.tertiary.progressionPolicy || { ...defaultProgressionPolicy };
   const financePolicy = store.tertiary.financePolicy || { ...defaultFinancePolicy };
+  const studentProfile =
+    store.students.profiles.find(
+      (item) => String(item.student_id || item.id) === String(studentId)
+    ) || {};
   const progress = store.tertiary.studentProgress.find(
     (item) => item.student_id === studentId && item.institution_id === institutionId
   );
@@ -949,7 +1401,17 @@ const getStudentRegistrationState = async ({ institutionId, studentId }) => {
     throw Object.assign(new Error('Current academic structure is incomplete.'), { statusCode: 400 });
   }
 
-  const currentOfferings = offerings.filter(
+  const settingsForPricing = {
+    finance: {
+      ...getFinanceDefaults(store.settings || {}),
+    },
+  };
+  const pricedOfferings = applyOfferingPricing({
+    offerings,
+    profile: studentProfile,
+    settings: settingsForPricing,
+  });
+  const currentOfferings = pricedOfferings.filter(
     (item) => item.group_id === currentGroup.id && item.period_id === currentPeriod.id
   );
   const eligibleCurrentCourses = currentOfferings.filter((item) =>
@@ -986,7 +1448,7 @@ const getStudentRegistrationState = async ({ institutionId, studentId }) => {
       item.sequence === Number(currentPeriod.sequence || 0) + 1
   );
   const nextTermPreview = nextPeriod && carryOverSummary.effective_can_progress
-    ? offerings.filter((item) => item.group_id === currentGroup.id && item.period_id === nextPeriod.id)
+    ? pricedOfferings.filter((item) => item.group_id === currentGroup.id && item.period_id === nextPeriod.id)
     : [];
 
   const alreadyRegistered = store.tertiary.registrations.filter(
@@ -994,6 +1456,18 @@ const getStudentRegistrationState = async ({ institutionId, studentId }) => {
       item.institution_id === institutionId &&
       item.student_id === studentId &&
       item.period_id === currentPeriod.id
+  );
+  const alreadyRegisteredCourseIds = new Set(
+    alreadyRegistered.flatMap((item) => (item.courses || []).map((course) => course.id))
+  );
+  const alreadyRegisteredBlockedCourses = eligibleCourses
+    .filter((item) => alreadyRegisteredCourseIds.has(item.id))
+    .map((item) => ({
+      ...item,
+      reason: 'This course has already been registered for the active semester.',
+    }));
+  const filteredEligibleCourses = eligibleCourses.filter(
+    (item) => !alreadyRegisteredCourseIds.has(item.id)
   );
 
   const periodInvoices = store.finance.invoices.filter(
@@ -1006,7 +1480,7 @@ const getStudentRegistrationState = async ({ institutionId, studentId }) => {
     currentPeriod,
     currentCourses: currentOfferings,
     outstandingCourses: carryOverSummary.outstanding_courses
-      .map((item) => offerings.find((offering) => offering.code === item.code))
+      .map((item) => pricedOfferings.find((offering) => offering.code === item.code))
       .filter(Boolean),
     progress,
     financePolicy,
@@ -1025,10 +1499,11 @@ const getStudentRegistrationState = async ({ institutionId, studentId }) => {
     progression_note: progress.progression_note || null,
     progression_policy: progressionPolicy,
     finance_policy: financePolicy,
+    student_category: resolveStudentCategory(studentProfile),
     carry_over_summary: carryOverSummary,
     outstanding_resit_codes: progress.outstanding_resit_codes,
-    eligible_courses: eligibleCourses,
-    blocked_courses: blockedCourses,
+    eligible_courses: filteredEligibleCourses,
+    blocked_courses: [...blockedCourses, ...alreadyRegisteredBlockedCourses],
     next_period_preview: nextTermPreview,
     already_registered: alreadyRegistered,
     fee_summary: feeSummary,
@@ -1214,10 +1689,16 @@ module.exports = {
   getOverview,
   listFaculties,
   createFaculty,
+  updateFaculty,
+  deleteFaculty,
   listDepartments,
   createDepartment,
+  updateDepartment,
+  deleteDepartment,
   listPrograms,
   createProgram,
+  updateProgram,
+  deleteProgram,
   updateProgressionPolicy,
   updateFinancePolicy,
   updateStudentProgress,

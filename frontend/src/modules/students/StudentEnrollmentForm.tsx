@@ -40,6 +40,7 @@ const enrollmentSchema = z
     previousSchool: z.string().optional(),
     previousResults: z.string().optional(),
     qualification: z.string().optional(),
+    studentCategory: z.enum(['local', 'international']),
     facultyId: z.string().optional(),
     departmentId: z.string().optional(),
     programId: z.string().optional(),
@@ -149,6 +150,7 @@ const defaultValues: EnrollmentValues = {
   previousSchool: '',
   previousResults: '',
   qualification: '',
+  studentCategory: 'local',
   facultyId: '',
   departmentId: '',
   programId: '',
@@ -406,7 +408,7 @@ const StudentEnrollmentForm = () => {
       ['firstName', 'lastName', 'email', 'dateOfBirth'],
       ['guardianName', 'guardianPhone'],
       values.level === 'TR'
-        ? ['facultyId', 'departmentId', 'programId', 'qualification']
+        ? ['facultyId', 'departmentId', 'programId', 'qualification', 'studentCategory']
         : [],
       ['groupId', 'feePlan'],
       [],
@@ -438,6 +440,7 @@ const StudentEnrollmentForm = () => {
           previous_school: payload.previousSchool || undefined,
           previous_results: payload.previousResults || undefined,
           qualification: payload.qualification || undefined,
+          student_category: payload.studentCategory,
           faculty_id: payload.facultyId || undefined,
           department_id: payload.departmentId || undefined,
           program_id: payload.programId || undefined,
@@ -454,7 +457,7 @@ const StudentEnrollmentForm = () => {
       const errorFields = Object.keys(formErrors);
       if (
         errorFields.some((field) =>
-          ['facultyId', 'departmentId', 'programId', 'qualification'].includes(field)
+          ['facultyId', 'departmentId', 'programId', 'qualification', 'studentCategory'].includes(field)
         )
       ) {
         setStep(3);
@@ -694,6 +697,14 @@ const StudentEnrollmentForm = () => {
                       </option>
                     ))}
                   </Select>
+                  <Select
+                    label="Student Category"
+                    error={errors.studentCategory?.message}
+                    {...register('studentCategory')}
+                  >
+                    <option value="local">Local</option>
+                    <option value="international">International</option>
+                  </Select>
                   {selectedProgram ? (
                     <div className="xl:col-span-2">
                       <Alert
@@ -779,8 +790,10 @@ const StudentEnrollmentForm = () => {
                   </p>
                   <p className="mt-1 text-sm text-slate-500">
                     {selectedProgram
-                      ? `${selectedProgram.credential} · ${selectedProgram.duration} · ${selectedProgram.calendar}`
-                      : 'Faculty, department, and program selection will drive the semester roadmap.'}
+                      ? `${values.studentCategory === 'international' ? 'International' : 'Local'} student · ${
+                          selectedProgram.credential
+                        } · ${selectedProgram.duration} · ${selectedProgram.calendar}`
+                      : 'Faculty, department, program, and student category will drive the semester roadmap.'}
                   </p>
                 </div>
               ) : (

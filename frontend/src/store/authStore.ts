@@ -14,7 +14,12 @@ interface AuthState {
   role: UserRole | null;
   isAuthenticated: boolean;
   setSession: (payload: LoginResponse) => void;
-  updateAccessToken: (token: string, refreshToken?: string) => void;
+  updateAccessToken: (
+    token: string,
+    refreshToken?: string,
+    permissions?: string[],
+    user?: AuthUser | null
+  ) => void;
   setTenantContext: (institution: InstitutionSummary | null) => void;
   logout: () => void;
 }
@@ -62,11 +67,14 @@ export const useAuthStore = create<AuthState>()(
           isAuthenticated: true,
         });
       },
-      updateAccessToken: (token, refreshToken) => {
+      updateAccessToken: (token, refreshToken, permissions, user) => {
         tokenStorage.setTokens(token, refreshToken || tokenStorage.getRefreshToken() || '');
         set((state) => ({
           token,
           refreshToken: refreshToken || state.refreshToken,
+          permissions: permissions || state.permissions,
+          user: user ? normalizeUser(user) : state.user,
+          role: user?.role ? normalizeRole(user.role) : state.role,
           isAuthenticated: true,
         }));
       },

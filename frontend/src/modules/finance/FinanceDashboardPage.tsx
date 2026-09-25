@@ -594,7 +594,7 @@ const FinanceDashboardPage = () => {
       .slice(0, 8);
   }, [activeLookupValue, studentLookupOpen, students]);
 
-  const applyStudentSelection = (student: StudentLookupRow) => {
+  const applyStudentSelection = async (student: StudentLookupRow) => {
     invoiceForm.setValue('studentId', student.id, { shouldDirty: true });
     invoiceForm.setValue('studentName', student.name, {
       shouldDirty: true,
@@ -606,6 +606,35 @@ const FinanceDashboardPage = () => {
       shouldValidate: true,
     });
     setStudentLookupOpen(false);
+    try {
+      const registrationState = (await queryClient.fetchQuery({
+        queryKey: ['finance-invoice-preview', student.id],
+        queryFn: () => eduovaApi.tertiary.studentRegistration(student.id),
+      })) as {
+        current_period?: { name?: string };
+        fee_summary?: { outstanding_amount?: number; total_amount?: number };
+      };
+      const outstandingAmount = Number(
+        registrationState?.fee_summary?.outstanding_amount ??
+          registrationState?.fee_summary?.total_amount ??
+          0
+      );
+      if (outstandingAmount > 0) {
+        invoiceForm.setValue('totalAmount', outstandingAmount, {
+          shouldDirty: true,
+          shouldValidate: true,
+        });
+        invoiceForm.setValue(
+          'itemName',
+          registrationState?.current_period?.name
+            ? `${registrationState.current_period.name} semester fees`
+            : 'Semester fees',
+          { shouldDirty: true, shouldValidate: true }
+        );
+      }
+    } catch (_error) {
+      // Leave manual invoice entry available when no live fee preview is available.
+    }
   };
 
   const handleInvoiceStudentInput = (

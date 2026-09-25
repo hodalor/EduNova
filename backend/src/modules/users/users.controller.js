@@ -26,11 +26,38 @@ module.exports = {
       data,
     });
   },
+  updateUser: async (req, res) => {
+    const data = await usersService.updateUser({
+      institutionId: req.institutionId,
+      userId: req.params.id,
+      payload: req.body,
+      actorId: req.user.id,
+      ip: req.ip,
+    });
+
+    res.status(200).json({
+      success: true,
+      data,
+    });
+  },
   updateUserAccess: async (req, res) => {
     const data = await usersService.updateUserAccess({
       institutionId: req.institutionId,
       userId: req.params.id,
       payload: req.body,
+      actorId: req.user.id,
+      ip: req.ip,
+    });
+
+    res.status(200).json({
+      success: true,
+      data,
+    });
+  },
+  deleteUser: async (req, res) => {
+    const data = await usersService.deleteUser({
+      institutionId: req.institutionId,
+      userId: req.params.id,
       actorId: req.user.id,
       ip: req.ip,
     });

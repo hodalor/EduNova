@@ -23,7 +23,6 @@ const ROLE_PERMISSIONS = {
     'communication:read',
     'communication:write',
     'timetable:read',
-    'analytics:read',
   ],
   student: [
     'auth:read',
@@ -62,17 +61,25 @@ const expandPermissions = (permissions = []) => [
 
 const getPermissionsForRole = (role) => expandPermissions(ROLE_PERMISSIONS[role] || []);
 
-const hasPermission = (role, permission) => {
-  const permissions = getPermissionsForRole(role);
-  if (permissions.includes('*:*') || permissions.includes(permission)) {
+const hasPermissionInList = (permissions = [], permission) => {
+  if (!permission) {
+    return true;
+  }
+  const expanded = expandPermissions(permissions);
+  if (expanded.includes('*:*') || expanded.includes(permission)) {
     return true;
   }
   const [resource] = permission.split(':');
-  return permissions.includes(`${resource}:*`);
+  return expanded.includes(`${resource}:*`);
+};
+
+const hasPermission = (role, permission) => {
+  return hasPermissionInList(getPermissionsForRole(role), permission);
 };
 
 module.exports = {
   ROLE_PERMISSIONS,
   getPermissionsForRole,
+  hasPermissionInList,
   hasPermission,
 };

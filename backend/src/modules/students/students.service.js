@@ -1,4 +1,5 @@
 const { models, sequelize } = require('../../config/database');
+const { createSequence } = require('../../shared/helpers/common');
 const { hashPassword } = require('../../shared/helpers/auth');
 const { logAudit } = require('../../shared/services/audit-log.service');
 const { getLevelConfig, requireLevelConfig } = require('../../shared/services/level-config.service');
@@ -31,7 +32,188 @@ const ensureAdmissionsSettings = (settings) => {
   next.tertiary.faculties = next.tertiary.faculties || [];
   next.tertiary.departments = next.tertiary.departments || [];
   next.tertiary.programs = next.tertiary.programs || [];
+  next.finance = next.finance || {};
+  next.finance.student_credits = next.finance.student_credits || [];
   return next;
+};
+
+const getFinanceDefaults = (settings) => {
+  const currencies =
+    Array.isArray(settings?.finance?.currencies) && settings.finance.currencies.length
+      ? settings.finance.currencies
+      : ['GHS', 'ZMW', 'USD'];
+  const defaultLocal = settings?.finance?.default_local_currency || currencies[0] || 'GHS';
+  const defaultInternational =
+    settings?.finance?.default_international_currency ||
+    currencies.find((item) => item !== defaultLocal) ||
+    'USD';
+
+  return {
+    currencies,
+    default_local_currency: defaultLocal,
+    default_international_currency: defaultInternational,
+  };
+};
+
+const resolveStudentCategory = (profile = {}) =>
+  String(profile.student_category || profile.studentCategory || 'local').trim().toLowerCase() ===
+  'international'
+    ? 'international'
+    : 'local';
+
+const resolveOfferingFee = ({ offering, profile, settings }) => {
+  const financeDefaults = getFinanceDefaults(settings);
+  const studentCategory = resolveStudentCategory(profile);
+  const isInternational = studentCategory === 'international';
+  const resolvedAmount = isInternational
+    ? Number(
+        offering?.fee_amount_international ??
+          offering?.international_fee_amount ??
+          offering?.fee_amount ??
+          0
+      )
+    : Number(offering?.fee_amount_local ?? offering?.local_fee_amount ?? offering?.fee_amount ?? 0);
+
+  return {
+    amount: Number.isFinite(resolvedAmount) ? resolvedAmount : 0,
+    currency_code: isInternational
+      ? financeDefaults.default_international_currency
+      : financeDefaults.default_local_currency,
+    student_category: studentCategory,
+  };
+};
+
+const buildAutoInvoicePayload = ({ institutionId, student, profile, progress, settings }) => {
+  if (!progress?.current_group_id || !progress?.current_period_id) {
+    return null;
+  }
+
+  const currentGroup = (settings.academics?.groups || []).find(
+    (item) => item.id === progress.current_group_id
+  );
+  const currentPeriod = (settings.academics?.periods || []).find(
+    (item) => item.id === progress.current_period_id
+  );
+  if (!currentGroup || !currentPeriod) {
+    return null;
+  }
+
+  const currentCourses = (settings.academics?.offerings || []).filter(
+    (item) => item.group_id === currentGroup.id && item.period_id === currentPeriod.id
+  );
+  const pricedCourses = currentCourses.map((course) => {
+    const fee = resolveOfferingFee({ offering: course, profile, settings });
+    return {
+      ...course,
+      fee_amount: fee.amount,
+      currency_code: fee.currency_code,
+    };
+  });
+  const courseTotal = pricedCourses.reduce((sum, item) => sum + Number(item.fee_amount || 0), 0);
+  const baseFeeAmount = Number(currentPeriod.base_fee_amount || 0);
+  const totalAmount = baseFeeAmount + courseTotal;
+  if (totalAmount <= 0) {
+    return null;
+  }
+
+  return {
+    institution_id: institutionId,
+    student_id: student.id,
+    student_name: profile.full_name,
+    class_name: profile.group_name || currentGroup.name,
+    invoice_number: createSequence('INV', new Date(), Number(student.id || 1), 3),
+    total_amount: totalAmount,
+    paid_amount: 0,
+    balance: totalAmount,
+    status: 'pending',
+    due_date: currentPeriod.start_date || student.enrollment_date || new Date().toISOString().slice(0, 10),
+    items: [
+      ...(baseFeeAmount > 0
+        ? [{ name: `${currentPeriod.name} base fee`, amount: baseFeeAmount }]
+        : []),
+      ...pricedCourses.map((course) => ({
+        name: `${course.code} ${course.name}`.trim(),
+        amount: Number(course.fee_amount || 0),
+      })),
+    ],
+    term_id: currentPeriod.term_semester_id || null,
+    period_id: currentPeriod.id,
+  };
+};
+
+const createAutoSemesterInvoiceIfNeeded = async ({
+  institutionId,
+  transaction,
+  student,
+  profile,
+  progress,
+  settings,
+}) => {
+  const invoicePayload = buildAutoInvoicePayload({
+    institutionId,
+    student,
+    profile,
+    progress,
+    settings,
+  });
+  if (!invoicePayload) {
+    return null;
+  }
+
+  if (models.StudentInvoice) {
+    const existing = await models.StudentInvoice.findOne({
+      where: {
+        institution_id: institutionId,
+        student_id: student.id,
+        term_id: invoicePayload.term_id,
+      },
+      transaction,
+    });
+    if (existing) {
+      return existing;
+    }
+
+    let academicYearId = null;
+    if (models.AcademicYear) {
+      const currentYear = await models.AcademicYear.findOne({
+        where: { institution_id: institutionId, is_current: true },
+        transaction,
+      });
+      academicYearId = currentYear?.id || null;
+    }
+
+    return models.StudentInvoice.create(
+      {
+        institution_id: institutionId,
+        student_id: student.id,
+        academic_year_id: academicYearId,
+        term_id: invoicePayload.term_id,
+        invoice_number: invoicePayload.invoice_number,
+        total_amount: invoicePayload.total_amount,
+        paid_amount: 0,
+        balance: invoicePayload.balance,
+        status: 'pending',
+        due_date: invoicePayload.due_date,
+        items: invoicePayload.items,
+      },
+      { transaction }
+    );
+  }
+
+  const existsInRuntime = store.finance.invoices.some(
+    (item) =>
+      item.institution_id === institutionId &&
+      String(item.student_id) === String(student.id) &&
+      String(item.period_id || '') === String(invoicePayload.period_id || '')
+  );
+  if (!existsInRuntime) {
+    store.finance.invoices.push({
+      id: `inv-${(store.finance.invoices.length || 0) + 1}`,
+      ...invoicePayload,
+    });
+  }
+
+  return invoicePayload;
 };
 
 const getStudentCreditBalance = ({ settings, studentId }) => {
@@ -514,6 +696,14 @@ const updateStudentInDatabase = async ({ institutionId, studentId, payload, acto
     currentProfile.guardian_name = payload.guardian_name ?? currentProfile.guardian_name ?? null;
     currentProfile.guardian_phone = payload.guardian_phone ?? currentProfile.guardian_phone ?? null;
     currentProfile.medical_notes = payload.medical_notes ?? currentProfile.medical_notes ?? null;
+    if (payload.student_category !== undefined) {
+      currentProfile.student_category =
+        String(payload.student_category || 'local').trim().toLowerCase() === 'international'
+          ? 'international'
+          : 'local';
+      currentProfile.tertiary = currentProfile.tertiary || {};
+      currentProfile.tertiary.student_category = currentProfile.student_category;
+    }
 
     if (profileIndex >= 0) settings.admissions.student_profiles[profileIndex] = currentProfile;
     else settings.admissions.student_profiles.push(currentProfile);
@@ -747,12 +937,25 @@ const createStudentInDatabase = async ({ institutionId, payload, actorId, ip }) 
               department_id: payload.department_id || null,
               program_id: payload.program_id || null,
               qualification: payload.qualification || null,
+              student_category:
+                String(payload.student_category || payload.studentCategory || 'local')
+                  .trim()
+                  .toLowerCase() === 'international'
+                  ? 'international'
+                  : 'local',
             }
           : null,
+      student_category:
+        String(payload.student_category || payload.studentCategory || 'local')
+          .trim()
+          .toLowerCase() === 'international'
+          ? 'international'
+          : 'local',
     };
 
     settings.admissions.student_profiles.push(profile);
 
+    let tertiaryProgress = null;
     if (levelCode === 'TR' && selectedGroup) {
       const groupPeriods = settings.academics.periods
         .filter((item) => item.group_id === selectedGroup.id)
@@ -763,7 +966,7 @@ const createStudentInDatabase = async ({ institutionId, payload, actorId, ip }) 
         groupPeriods[0] ||
         null;
 
-      settings.tertiary.student_progress.push({
+      tertiaryProgress = {
         student_id: student.id,
         institution_id: institutionId,
         current_group_id: selectedGroup.id,
@@ -775,8 +978,18 @@ const createStudentInDatabase = async ({ institutionId, payload, actorId, ip }) 
         faculty_id: payload.faculty_id || null,
         department_id: payload.department_id || null,
         program_id: payload.program_id || null,
-      });
+      };
+      settings.tertiary.student_progress.push(tertiaryProgress);
     }
+
+    await createAutoSemesterInvoiceIfNeeded({
+      institutionId,
+      transaction,
+      student,
+      profile,
+      progress: tertiaryProgress,
+      settings,
+    });
 
     await institution.update({ settings }, { transaction });
     await transaction.commit();
@@ -812,24 +1025,60 @@ const createStudentInDatabase = async ({ institutionId, payload, actorId, ip }) 
 
 const createStudentInRuntime = async ({ institutionId, payload }) => {
   const nextId = `stu-${String(store.students.profiles.length + 1).padStart(3, '0')}`;
+  const fullName = `${payload.first_name || payload.firstName || ''} ${payload.last_name || payload.lastName || ''}`.trim();
   const student = {
     id: nextId,
     institution_id: institutionId,
     parent_id: payload.parent_id || null,
     student_number:
       payload.student_number || `EDU-${new Date().getFullYear()}-${String(store.students.profiles.length + 1).padStart(4, '0')}`,
-    first_name: payload.first_name,
-    last_name: payload.last_name,
-    full_name: `${payload.first_name} ${payload.last_name}`.trim(),
+    first_name: payload.first_name || payload.firstName,
+    last_name: payload.last_name || payload.lastName,
+    full_name: fullName,
     class_id: payload.class_id,
-    class_name: payload.class_name,
-    level_code: payload.level_code,
+    class_name: payload.class_name || payload.assignedClass || null,
+    level_code: payload.level_code || payload.level,
     photo_url: payload.photo_url || null,
     attendance_percent: 0,
     balance_due: 0,
     next_exam: null,
   };
   store.students.profiles.push(student);
+  if (String(payload.level_code || payload.level || '').toUpperCase() === 'TR') {
+    const selectedGroup =
+      store.academics.structure.groups.find((item) => item.id === payload.group_id) || null;
+    const groupPeriods = store.academics.structure.periods
+      .filter((item) => item.group_id === selectedGroup?.id)
+      .sort((a, b) => Number(a.sequence || 0) - Number(b.sequence || 0));
+    const activePeriod =
+      groupPeriods.find((item) => item.status === 'active') ||
+      groupPeriods.find((item) => item.registration_open) ||
+      groupPeriods[0] ||
+      null;
+    const profile = {
+      student_id: student.id,
+      full_name: fullName,
+      group_name: selectedGroup?.name || student.class_name || null,
+    };
+    const progress =
+      selectedGroup && activePeriod
+        ? {
+            student_id: student.id,
+            current_group_id: selectedGroup.id,
+            current_period_id: activePeriod.id,
+          }
+        : null;
+    await createAutoSemesterInvoiceIfNeeded({
+      institutionId,
+      transaction: null,
+      student,
+      profile,
+      progress,
+      settings: {
+        academics: store.academics.structure,
+      },
+    });
+  }
   return student;
 };
 

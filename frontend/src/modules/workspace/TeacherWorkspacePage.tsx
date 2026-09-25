@@ -7,9 +7,11 @@ import { eduovaApi } from '../../api/eduovaApi';
 import Alert from '../../components/ui/Alert';
 import Badge from '../../components/ui/Badge';
 import Card from '../../components/ui/Card';
+import EmptyState from '../../components/ui/EmptyState';
 import PageLoader from '../../components/ui/PageLoader';
 import PageHeader from '../shared/PageHeader';
 import { useAuthStore } from '../../store/authStore';
+import { isTertiaryInstitution } from '../../lib/institution';
 
 interface AssessmentRow {
   id: string;
@@ -38,6 +40,7 @@ interface TimetableRow {
 
 const TeacherWorkspacePage = () => {
   const user = useAuthStore((state) => state.user);
+  const institution = useAuthStore((state) => state.tenantContext || state.institution);
   const { data: assessments = [], isLoading: loadingAssessments } = useQuery<AssessmentRow[]>({
     queryKey: ['teacher-assessments'],
     queryFn: eduovaApi.academics.assessments,
@@ -61,7 +64,7 @@ const TeacherWorkspacePage = () => {
     return [
       {
         label: 'Class Groups',
-        value: `${classCoverage || 1}`,
+        value: `${classCoverage}`,
         helper: 'Distinct class groups assigned this session.',
         icon: Users2,
       },
@@ -79,8 +82,8 @@ const TeacherWorkspacePage = () => {
       },
       {
         label: 'Open Channels',
-        value: '4',
-        helper: 'Homeroom, guardians, department, and announcements.',
+        value: '0',
+        helper: 'Communication channels open for this lecturer account.',
         icon: MessageSquare,
       },
     ];
@@ -93,8 +96,8 @@ const TeacherWorkspacePage = () => {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Teacher Workspace"
-        description={`Welcome ${user?.first_name || 'Teacher'}. Use this workspace to manage class teaching, attendance, grading, and parent communication.`}
+        title={isTertiaryInstitution(institution) ? 'Lecturer Workspace' : 'Teacher Workspace'}
+        description={`Welcome ${user?.first_name || (isTertiaryInstitution(institution) ? 'Lecturer' : 'Teacher')}. Use this workspace to manage teaching, attendance, grading, and course-related follow-up.`}
       />
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -120,20 +123,27 @@ const TeacherWorkspacePage = () => {
       <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
         <Card title="Assessment Queue" description="Scoring and publishing work ready for action.">
           <div className="space-y-3">
-            {assessments.map((item: AssessmentRow) => (
-              <div
-                key={item.id}
-                className="flex items-center justify-between rounded-2xl border border-slate-200 px-4 py-3"
-              >
-                <div>
-                  <p className="font-semibold text-brand-navy">{item.subject}</p>
-                  <p className="text-sm text-slate-500">
-                    {item.className} · {item.term} · {item.assessment}
-                  </p>
+            {assessments.length ? (
+              assessments.map((item: AssessmentRow) => (
+                <div
+                  key={item.id}
+                  className="flex items-center justify-between rounded-2xl border border-slate-200 px-4 py-3"
+                >
+                  <div>
+                    <p className="font-semibold text-brand-navy">{item.subject}</p>
+                    <p className="text-sm text-slate-500">
+                      {item.className} · {item.term} · {item.assessment}
+                    </p>
+                  </div>
+                  <Badge variant="info">{item.max_score} marks</Badge>
                 </div>
-                <Badge variant="pending">{item.max_score} marks</Badge>
-              </div>
-            ))}
+              ))
+            ) : (
+              <EmptyState
+                title="No assessment queue yet"
+                message="Scored coursework and moderation items will appear here when this lecturer is assigned active classes."
+              />
+            )}
           </div>
         </Card>
 
@@ -170,35 +180,49 @@ const TeacherWorkspacePage = () => {
       <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
         <Card title="Today&apos;s Timetable" description="Current teaching periods and spaces.">
           <div className="space-y-3">
-            {timetable.map((item: TimetableRow, index: number) => (
-              <div
-                key={`${item.day}-${item.period}-${index}`}
-                className="rounded-2xl border border-slate-200 px-4 py-3"
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="font-semibold text-brand-navy">{item.subject}</p>
-                    <p className="text-sm text-slate-500">
-                      {item.day} at {item.period} · {item.room}
-                    </p>
+            {timetable.length ? (
+              timetable.map((item: TimetableRow, index: number) => (
+                <div
+                  key={`${item.day}-${item.period}-${index}`}
+                  className="rounded-2xl border border-slate-200 px-4 py-3"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="font-semibold text-brand-navy">{item.subject}</p>
+                      <p className="text-sm text-slate-500">
+                        {item.day} at {item.period} · {item.room}
+                      </p>
+                    </div>
+                    <Badge variant="info">{item.teacher}</Badge>
                   </div>
-                  <Badge variant="info">{item.teacher}</Badge>
                 </div>
-              </div>
-            ))}
+              ))
+            ) : (
+              <EmptyState
+                title="No timetable assigned"
+                message="This lecturer does not have any mapped teaching periods yet."
+              />
+            )}
           </div>
         </Card>
 
         <Card title="Attendance Risks" description="Students who need early intervention.">
           <div className="space-y-3">
-            {attendance.slice(0, 4).map((item: AttendanceRow) => (
-              <Alert
-                key={item.id}
-                title={item.student}
-                message={`${item.present}/${item.days} present days with ${item.rate}% attendance.`}
-                variant={item.rate < 75 ? 'warning' : 'info'}
+            {attendance.length ? (
+              attendance.slice(0, 4).map((item: AttendanceRow) => (
+                <Alert
+                  key={item.id}
+                  title={item.student}
+                  message={`${item.present}/${item.days} present days with ${item.rate}% attendance.`}
+                  variant={item.rate < 75 ? 'warning' : 'info'}
+                />
+              ))
+            ) : (
+              <EmptyState
+                title="No attendance risks"
+                message="Attendance alerts will show here when student sessions have been recorded."
               />
-            ))}
+            )}
           </div>
         </Card>
       </div>

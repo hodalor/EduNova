@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
-import { ShieldCheck, UserCog, Users2, UserPlus } from 'lucide-react';
+import { Pencil, ShieldCheck, Trash2, UserCog, Users2, UserPlus } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { z } from 'zod';
 
@@ -52,6 +52,8 @@ interface ManagedUserRow {
   staff_number: string;
   department: string;
   designation: string;
+  qualification?: string | null;
+  specialization?: string | null;
   employment_type: 'full_time' | 'part_time' | 'contract';
   date_joined: string;
   status: string;
@@ -77,12 +79,38 @@ const defaultValues: UserFormValues = {
 
 const UserManagementPage = () => {
   const createStaffUser = useCreateStaffUser();
+  const queryClient = useQueryClient();
   const [showCreate, setShowCreate] = useState(false);
+  const [editingUser, setEditingUser] = useState<ManagedUserRow | null>(null);
   const { data, isLoading } = useQuery({
     queryKey: ['user-management-users'],
     queryFn: eduovaApi.users.list,
   });
   const users = (data || []) as ManagedUserRow[];
+
+  const refreshUsers = () => queryClient.invalidateQueries({ queryKey: ['user-management-users'] });
+
+  const updateUser = useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: Record<string, unknown> }) =>
+      eduovaApi.users.update(id, payload),
+    onSuccess: async () => {
+      toast.success('User updated.');
+      setEditingUser(null);
+      setShowCreate(false);
+      await refreshUsers();
+    },
+    onError: () => toast.error('Unable to update this user.'),
+  });
+
+  const deleteUser = useMutation({
+    mutationFn: (id: string) => eduovaApi.users.delete(id),
+    onSuccess: async () => {
+      toast.success('User deleted.');
+      setEditingUser(null);
+      await refreshUsers();
+    },
+    onError: () => toast.error('Unable to delete this user.'),
+  });
 
   const {
     register,
@@ -99,13 +127,39 @@ const UserManagementPage = () => {
 
   const onSubmit = handleSubmit(async (payload) => {
     try {
-      await createStaffUser.mutateAsync(payload);
+      if (editingUser) {
+        await updateUser.mutateAsync({ id: editingUser.id, payload });
+      } else {
+        await createStaffUser.mutateAsync(payload);
+      }
       reset(defaultValues);
       setShowCreate(false);
+      setEditingUser(null);
     } catch (_error) {
       toast.error('Please correct the highlighted fields and try again.');
     }
   });
+
+  const openEdit = (user: ManagedUserRow) => {
+    setEditingUser(user);
+    reset({
+      role: user.role,
+      first_name: user.first_name,
+      last_name: user.last_name,
+      email: user.email,
+      phone: user.phone,
+      staff_number: user.staff_number,
+      department: user.department,
+      designation: user.designation,
+      qualification: user.qualification || '',
+      specialization: user.specialization || '',
+      employment_type: user.employment_type,
+      date_joined: user.date_joined?.slice(0, 10) || '',
+      temporary_password: 'temporary123',
+      custom_permissions: user.custom_permissions || [],
+    });
+    setShowCreate(true);
+  };
 
   if (isLoading) {
     return <PageLoader />;
@@ -185,6 +239,37 @@ const UserManagementPage = () => {
               </Badge>
             ),
           },
+          {
+            header: 'Actions',
+            cell: ({ row }) => (
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  leftIcon={<Pencil className="h-4 w-4" />}
+                  onClick={() => openEdit(row.original)}
+                >
+                  Edit
+                </Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  leftIcon={<Trash2 className="h-4 w-4" />}
+                  onClick={() => {
+                    if (
+                      window.confirm(
+                        `Delete ${row.original.first_name} ${row.original.last_name}?`
+                      )
+                    ) {
+                      deleteUser.mutate(row.original.id);
+                    }
+                  }}
+                >
+                  Delete
+                </Button>
+              </div>
+            ),
+          },
         ]}
       />
 
@@ -193,11 +278,12 @@ const UserManagementPage = () => {
         onOpenChange={(open) => {
           if (!open) {
             reset(defaultValues);
+            setEditingUser(null);
           }
           setShowCreate(open);
         }}
         size="xl"
-        title="Create User"
+        title={editingUser ? 'Edit User' : 'Create User'}
       >
         <form className="space-y-5" onSubmit={onSubmit}>
           <div className="grid gap-4 md:grid-cols-2">
@@ -250,13 +336,15 @@ const UserManagementPage = () => {
                 </label>
               </div>
             </div>
-            <div className="md:col-span-2">
-              <Input
-                label="Temporary Password"
-                error={errors.temporary_password?.message}
-                {...register('temporary_password')}
-              />
-            </div>
+            {!editingUser ? (
+              <div className="md:col-span-2">
+                <Input
+                  label="Temporary Password"
+                  error={errors.temporary_password?.message}
+                  {...register('temporary_password')}
+                />
+              </div>
+            ) : null}
           </div>
 
           <Alert
@@ -273,8 +361,13 @@ const UserManagementPage = () => {
             <Button type="button" variant="secondary" onClick={() => { reset(defaultValues); setShowCreate(false); }}>
               Cancel
             </Button>
-            <Button type="submit" variant="primary" loading={createStaffUser.isPending} leftIcon={<UserPlus className="h-4 w-4" />}>
-              Create User Account
+            <Button
+              type="submit"
+              variant="primary"
+              loading={createStaffUser.isPending || updateUser.isPending}
+              leftIcon={<UserPlus className="h-4 w-4" />}
+            >
+              {editingUser ? 'Save Changes' : 'Create User Account'}
             </Button>
           </div>
         </form>

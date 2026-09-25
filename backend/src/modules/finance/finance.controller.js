@@ -7,6 +7,20 @@ const wrap = (handler) => async (req, res) =>
   });
 
 module.exports = {
+  getFinanceSettings: wrap((req) =>
+    financeService.getFinanceSettings({
+      institutionId: req.institutionId,
+    })
+  ),
+  updateFinanceSettings: async (req, res) => {
+    const data = await financeService.updateFinanceSettings({
+      institutionId: req.institutionId,
+      userId: req.user.id,
+      payload: req.body,
+      ip: req.ip,
+    });
+    res.status(200).json({ success: true, data });
+  },
   listInvoices: wrap((req) =>
     financeService.listInvoices({
       institutionId: req.institutionId,

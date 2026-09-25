@@ -156,7 +156,10 @@ const AppRouter = () => {
             <Route
               path="/academics/results-entry"
               element={
-                <ProtectedRoute allowedRoles={['institution_admin', 'teacher']}>
+                <ProtectedRoute
+                  allowedRoles={['institution_admin', 'teacher']}
+                  allowedPermissions={['academics:write']}
+                >
                   <ResultsEntryPage />
                 </ProtectedRoute>
               }
@@ -164,7 +167,10 @@ const AppRouter = () => {
             <Route
               path="/academics/report-cards"
               element={
-                <ProtectedRoute allowedRoles={['institution_admin', 'teacher']}>
+                <ProtectedRoute
+                  allowedRoles={['institution_admin', 'teacher']}
+                  allowedPermissions={['academics:write']}
+                >
                   <ReportCardsPage />
                 </ProtectedRoute>
               }
@@ -172,7 +178,10 @@ const AppRouter = () => {
             <Route
               path="/academics/gradebook"
               element={
-                <ProtectedRoute allowedRoles={['institution_admin', 'teacher']}>
+                <ProtectedRoute
+                  allowedRoles={['institution_admin', 'teacher']}
+                  allowedPermissions={['academics:write']}
+                >
                   <GradebookPage />
                 </ProtectedRoute>
               }
@@ -180,7 +189,10 @@ const AppRouter = () => {
             <Route
               path="/attendance/taking"
               element={
-                <ProtectedRoute allowedRoles={['institution_admin', 'teacher']}>
+                <ProtectedRoute
+                  allowedRoles={['institution_admin', 'teacher']}
+                  allowedPermissions={['attendance:write']}
+                >
                   <AttendanceTakingPage />
                 </ProtectedRoute>
               }
@@ -188,7 +200,10 @@ const AppRouter = () => {
             <Route
               path="/attendance/report"
               element={
-                <ProtectedRoute allowedRoles={['institution_admin', 'teacher']}>
+                <ProtectedRoute
+                  allowedRoles={['institution_admin', 'teacher']}
+                  allowedPermissions={['attendance:read']}
+                >
                   <AttendanceReportPage />
                 </ProtectedRoute>
               }
@@ -196,7 +211,10 @@ const AppRouter = () => {
             <Route
               path="/finance"
               element={
-                <ProtectedRoute allowedRoles={['institution_admin', 'accountant', 'teacher']}>
+                <ProtectedRoute
+                  allowedRoles={['institution_admin', 'accountant', 'teacher']}
+                  allowedPermissions={['finance:read', 'finance_approve_director', 'finance_approve_accountant']}
+                >
                   <FinanceDashboardPage />
                 </ProtectedRoute>
               }
@@ -204,7 +222,10 @@ const AppRouter = () => {
             <Route
               path="/finance/invoices"
               element={
-                <ProtectedRoute allowedRoles={['institution_admin', 'accountant', 'teacher']}>
+                <ProtectedRoute
+                  allowedRoles={['institution_admin', 'accountant', 'teacher']}
+                  allowedPermissions={['finance:read', 'finance_approve_director', 'finance_approve_accountant']}
+                >
                   <InvoicesPage />
                 </ProtectedRoute>
               }
@@ -212,7 +233,10 @@ const AppRouter = () => {
             <Route
               path="/finance/payments"
               element={
-                <ProtectedRoute allowedRoles={['institution_admin', 'accountant', 'teacher']}>
+                <ProtectedRoute
+                  allowedRoles={['institution_admin', 'accountant', 'teacher']}
+                  allowedPermissions={['finance:read', 'finance_approve_director', 'finance_approve_accountant']}
+                >
                   <PaymentFormPage />
                 </ProtectedRoute>
               }
@@ -220,7 +244,10 @@ const AppRouter = () => {
             <Route
               path="/finance/defaulters"
               element={
-                <ProtectedRoute allowedRoles={['institution_admin', 'accountant', 'teacher']}>
+                <ProtectedRoute
+                  allowedRoles={['institution_admin', 'accountant', 'teacher']}
+                  allowedPermissions={['finance:read', 'finance_approve_director', 'finance_approve_accountant']}
+                >
                   <DefaultersPage />
                 </ProtectedRoute>
               }
@@ -228,7 +255,10 @@ const AppRouter = () => {
             <Route
               path="/finance/expenses"
               element={
-                <ProtectedRoute allowedRoles={['institution_admin', 'accountant', 'teacher']}>
+                <ProtectedRoute
+                  allowedRoles={['institution_admin', 'accountant', 'teacher']}
+                  allowedPermissions={['finance:read', 'finance_approve_director', 'finance_approve_accountant']}
+                >
                   <ExpensesPage />
                 </ProtectedRoute>
               }
@@ -236,7 +266,10 @@ const AppRouter = () => {
             <Route
               path="/finance/fee-structures"
               element={
-                <ProtectedRoute allowedRoles={['institution_admin', 'accountant', 'teacher']}>
+                <ProtectedRoute
+                  allowedRoles={['institution_admin', 'accountant', 'teacher']}
+                  allowedPermissions={['finance:read', 'finance_approve_director', 'finance_approve_accountant']}
+                >
                   <FeeStructurePage />
                 </ProtectedRoute>
               }
@@ -417,7 +450,7 @@ const AppRouter = () => {
             <Route
               path="/tertiary"
               element={
-                <ProtectedRoute allowedRoles={['institution_admin', 'teacher']}>
+                <ProtectedRoute allowedRoles={['institution_admin']}>
                   <TertiaryManagementPage />
                 </ProtectedRoute>
               }

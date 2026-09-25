@@ -201,9 +201,9 @@ const login = async ({ email, identity, password, institution_id, institution_co
   await clearLoginLock(loginIdentity, institutionId);
   await user.update({ last_login: new Date() });
 
-  const access_token = signAccessToken(user);
-  const refresh_token = await signRefreshToken(user);
   const profile = await buildProfile(user);
+  const access_token = signAccessToken(user, profile.permissions);
+  const refresh_token = await signRefreshToken(user);
 
   logger.info('User logged in', { user_id: user.id, institution_id: user.institution_id });
 
@@ -338,9 +338,9 @@ const refresh = async ({ refresh_token }) => {
       throw Object.assign(new Error('User account is inactive.'), { status: 401 });
     }
 
-    const access_token = signAccessToken(user);
-    const rotated_refresh_token = await rotateRefreshToken(refresh_token, user);
     const profile = await buildProfile(user);
+    const access_token = signAccessToken(user, profile.permissions);
+    const rotated_refresh_token = await rotateRefreshToken(refresh_token, user);
     // #region debug-point D:refresh-success
     (() => {
       const fs = require('fs');
