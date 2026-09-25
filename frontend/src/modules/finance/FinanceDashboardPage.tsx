@@ -27,6 +27,7 @@ import Modal from '../../components/ui/Modal';
 import PageLoader from '../../components/ui/PageLoader';
 import SearchInput from '../../components/ui/SearchInput';
 import Select from '../../components/ui/Select';
+import { ConfirmDialog } from '../../components/ui/core';
 import {
   Tabs,
   TabsContent,
@@ -84,6 +85,8 @@ interface InvoiceRow {
   student_name?: string;
   student_number?: string;
   class_name?: string;
+  student_category?: 'local' | 'international' | string;
+  currency_code?: string;
   total_amount: number | string;
   paid_amount: number | string;
   balance: number | string;
@@ -129,6 +132,8 @@ interface DebtorRow {
   student_id: string;
   student_name?: string;
   class_name?: string;
+  student_category?: 'local' | 'international' | string;
+  currency_code?: string;
   total_owing: number | string;
   invoice_count: number;
   invoices: Array<{
@@ -193,16 +198,43 @@ interface StudentLookupRow {
   level?: string;
 }
 
+interface FinanceSettings {
+  default_local_currency: string;
+  default_international_currency: string;
+}
+
+const resolveApiErrorMessage = (error: unknown, fallback: string) => {
+  if (error && typeof error === 'object') {
+    const response = (error as { response?: { data?: { message?: string } } }).response;
+    if (response?.data?.message) {
+      return response.data.message;
+    }
+    const message = (error as { message?: string }).message;
+    if (message) {
+      return message;
+    }
+  }
+
+  return fallback;
+};
+
 const currency = (value: number | string | null | undefined) => {
   const num = Number(value || 0);
   return num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
+
+const formatMoney = (currencyCode: string | null | undefined, value: number | string | null | undefined) =>
+  `${currencyCode || ''} ${currency(value)}`.trim();
 
 const approvalLabel = (status: PaymentApprovalRow['status']) =>
   String(status || '').replaceAll('_', ' ');
 
 const FinanceDashboardPage = () => {
   const queryClient = useQueryClient();
+  const user = useAuthStore((state) => state.user);
+  const institution = useAuthStore((state) => state.institution);
+  const tenantContext = useAuthStore((state) => state.tenantContext);
+  const activeInstitutionId = (tenantContext || institution)?.id || null;
   const permissions = useAuthStore((state) => state.permissions);
   const canDirectorApprove = permissions.includes('finance_approve_director');
   const canAccountantApprove = permissions.includes('finance_approve_accountant');
@@ -212,6 +244,15 @@ const FinanceDashboardPage = () => {
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [termOpen, setTermOpen] = useState(false);
   const [editingTerm, setEditingTerm] = useState<PaymentTermRow | null>(null);
+  const [deleteTermState, setDeleteTermState] = useState<{
+    open: boolean;
+    termId: string | null;
+    termName: string;
+  }>({
+    open: false,
+    termId: null,
+    termName: '',
+  });
 
   const [searchInvoice, setSearchInvoice] = useState('');
   const [searchPayment, setSearchPayment] = useState('');
@@ -231,18 +272,19 @@ const FinanceDashboardPage = () => {
   const [gatewayReference, setGatewayReference] = useState('');
 
   const invalidateFinance = () => {
-    queryClient.invalidateQueries({ queryKey: ['finance-invoices'] });
-    queryClient.invalidateQueries({ queryKey: ['finance-payments'] });
-    queryClient.invalidateQueries({ queryKey: ['finance-payment-approvals'] });
-    queryClient.invalidateQueries({ queryKey: ['finance-debtors'] });
-    queryClient.invalidateQueries({ queryKey: ['finance-payment-terms'] });
-    queryClient.invalidateQueries({ queryKey: ['finance-payment-gateway-requests'] });
-    queryClient.invalidateQueries({ queryKey: ['finance-dashboard'] });
+    queryClient.invalidateQueries({ queryKey: ['finance-invoices', activeInstitutionId] });
+    queryClient.invalidateQueries({ queryKey: ['finance-payments', activeInstitutionId] });
+    queryClient.invalidateQueries({ queryKey: ['finance-payment-approvals', activeInstitutionId] });
+    queryClient.invalidateQueries({ queryKey: ['finance-debtors', activeInstitutionId] });
+    queryClient.invalidateQueries({ queryKey: ['finance-payment-terms', activeInstitutionId] });
+    queryClient.invalidateQueries({ queryKey: ['finance-payment-gateway-requests', activeInstitutionId] });
+    queryClient.invalidateQueries({ queryKey: ['finance-dashboard', activeInstitutionId] });
   };
 
   const invoicesQuery = useQuery<InvoiceRow[]>({
-    queryKey: ['finance-invoices'],
+    queryKey: ['finance-invoices', activeInstitutionId],
     queryFn: eduovaApi.finance.invoices,
+    enabled: Boolean(activeInstitutionId),
   });
   const invoices = useMemo<InvoiceRow[]>(() => invoicesQuery.data ?? [], [invoicesQuery.data]);
   const invoicesLoading = invoicesQuery.isLoading;
@@ -250,15 +292,17 @@ const FinanceDashboardPage = () => {
   const refetchInvoices = invoicesQuery.refetch;
 
   const paymentsQuery = useQuery<PaymentRow[]>({
-    queryKey: ['finance-payments'],
+    queryKey: ['finance-payments', activeInstitutionId],
     queryFn: eduovaApi.finance.payments,
+    enabled: Boolean(activeInstitutionId),
   });
   const payments = useMemo<PaymentRow[]>(() => paymentsQuery.data ?? [], [paymentsQuery.data]);
   const paymentsLoading = paymentsQuery.isLoading;
 
   const approvalsQuery = useQuery<PaymentApprovalRow[]>({
-    queryKey: ['finance-payment-approvals'],
+    queryKey: ['finance-payment-approvals', activeInstitutionId],
     queryFn: eduovaApi.finance.paymentApprovals,
+    enabled: Boolean(activeInstitutionId),
   });
   const approvals = useMemo<PaymentApprovalRow[]>(
     () => approvalsQuery.data ?? [],
@@ -266,8 +310,9 @@ const FinanceDashboardPage = () => {
   );
 
   const gatewayRequestsQuery = useQuery<PaymentGatewayRequestRow[]>({
-    queryKey: ['finance-payment-gateway-requests'],
+    queryKey: ['finance-payment-gateway-requests', activeInstitutionId],
     queryFn: eduovaApi.finance.paymentGatewayRequests,
+    enabled: Boolean(activeInstitutionId),
   });
   const gatewayRequests = useMemo<PaymentGatewayRequestRow[]>(
     () => gatewayRequestsQuery.data ?? [],
@@ -275,15 +320,17 @@ const FinanceDashboardPage = () => {
   );
 
   const debtorsQuery = useQuery<DebtorRow[]>({
-    queryKey: ['finance-debtors'],
+    queryKey: ['finance-debtors', activeInstitutionId],
     queryFn: eduovaApi.finance.debtors,
+    enabled: Boolean(activeInstitutionId),
   });
   const debtors = useMemo<DebtorRow[]>(() => debtorsQuery.data ?? [], [debtorsQuery.data]);
   const debtorsLoading = debtorsQuery.isLoading;
 
   const termsQuery = useQuery<PaymentTermRow[]>({
-    queryKey: ['finance-payment-terms'],
+    queryKey: ['finance-payment-terms', activeInstitutionId],
     queryFn: eduovaApi.finance.paymentTerms,
+    enabled: Boolean(activeInstitutionId),
   });
   const paymentTerms = useMemo<PaymentTermRow[]>(
     () => termsQuery.data ?? [],
@@ -292,8 +339,14 @@ const FinanceDashboardPage = () => {
   const termsLoading = termsQuery.isLoading;
 
   const studentsQuery = useQuery<StudentLookupRow[]>({
-    queryKey: ['finance-student-lookup'],
+    queryKey: ['finance-student-lookup', activeInstitutionId],
     queryFn: eduovaApi.students.list,
+    enabled: Boolean(activeInstitutionId),
+  });
+  const financeSettingsQuery = useQuery<FinanceSettings>({
+    queryKey: ['finance-settings', activeInstitutionId],
+    queryFn: eduovaApi.finance.settings,
+    enabled: Boolean(activeInstitutionId),
   });
   const students = useMemo<StudentLookupRow[]>(
     () =>
@@ -319,7 +372,7 @@ const FinanceDashboardPage = () => {
         matchedInvoice ? String(Number(matchedInvoice.net_balance ?? matchedInvoice.balance ?? 0)) : ''
       );
     },
-    onError: () => toast.error('Unable to confirm that student ID.'),
+    onError: (error: unknown) => toast.error(resolveApiErrorMessage(error, 'Unable to confirm that student ID.')),
   });
 
   const invoiceForm = useForm<InvoiceValues>({
@@ -378,7 +431,7 @@ const FinanceDashboardPage = () => {
       setStudentLookupOpen(false);
       invalidateFinance();
     },
-    onError: () => toast.error('Unable to create invoice. Please try again.'),
+    onError: (error: unknown) => toast.error(resolveApiErrorMessage(error, 'Unable to create invoice. Please try again.')),
   });
 
   const recordPayment = useMutation({
@@ -408,7 +461,7 @@ const FinanceDashboardPage = () => {
       paymentForm.reset();
       invalidateFinance();
     },
-    onError: () => toast.error('Unable to save payment request. Please try again.'),
+    onError: (error: unknown) => toast.error(resolveApiErrorMessage(error, 'Unable to save payment request. Please try again.')),
   });
 
   const approvePaymentApproval = useMutation({
@@ -418,7 +471,8 @@ const FinanceDashboardPage = () => {
       toast.success('Approval updated.');
       invalidateFinance();
     },
-    onError: () => toast.error('Unable to update finance approval.'),
+    onError: (error: unknown) =>
+      toast.error(resolveApiErrorMessage(error, 'Unable to update finance approval.')),
   });
 
   const initiateGatewayPayment = useMutation({
@@ -433,10 +487,11 @@ const FinanceDashboardPage = () => {
     onSuccess: (request: PaymentGatewayRequestRow) => {
       toast.success('Gateway request created.');
       setGatewayReference(request.gateway_reference);
-      queryClient.invalidateQueries({ queryKey: ['finance-payment-gateway-requests'] });
+      queryClient.invalidateQueries({ queryKey: ['finance-payment-gateway-requests', activeInstitutionId] });
       invalidateFinance();
     },
-    onError: () => toast.error('Unable to start the gateway payment skeleton.'),
+    onError: (error: unknown) =>
+      toast.error(resolveApiErrorMessage(error, 'Unable to start the gateway payment skeleton.')),
   });
 
   const handleGatewayCallback = useMutation({
@@ -449,7 +504,8 @@ const FinanceDashboardPage = () => {
       toast.success('Gateway callback processed.');
       invalidateFinance();
     },
-    onError: () => toast.error('Unable to process the gateway callback.'),
+    onError: (error: unknown) =>
+      toast.error(resolveApiErrorMessage(error, 'Unable to process the gateway callback.')),
   });
 
   const savePaymentTerm = useMutation({
@@ -487,7 +543,7 @@ const FinanceDashboardPage = () => {
       termForm.reset();
       invalidateFinance();
     },
-    onError: () => toast.error('Unable to save payment term.'),
+    onError: (error: unknown) => toast.error(resolveApiErrorMessage(error, 'Unable to save payment term.')),
   });
 
   const deletePaymentTerm = useMutation({
@@ -496,31 +552,49 @@ const FinanceDashboardPage = () => {
       toast.success('Payment term removed.');
       invalidateFinance();
     },
-    onError: () => toast.error('Unable to delete payment term.'),
+    onError: (error: unknown) => toast.error(resolveApiErrorMessage(error, 'Unable to delete payment term.')),
   });
 
   const summary = useMemo(() => {
-    const totalBilled = invoices.reduce(
-      (sum, inv) => sum + Number(inv.total_amount || 0),
-      0
-    );
-    const totalPaid = invoices.reduce(
-      (sum, inv) => sum + Number(inv.paid_amount || 0),
-      0
-    );
-    const totalOutstanding = invoices.reduce(
-      (sum, inv) => sum + Number(inv.balance || 0),
-      0
-    );
+    const defaultLocalCurrency = financeSettingsQuery.data?.default_local_currency || 'GHS';
+    const defaultInternationalCurrency =
+      financeSettingsQuery.data?.default_international_currency || 'USD';
+    const base = {
+      local: {
+        billed: 0,
+        paid: 0,
+        outstanding: 0,
+        currencyCode: defaultLocalCurrency,
+      },
+      international: {
+        billed: 0,
+        paid: 0,
+        outstanding: 0,
+        currencyCode: defaultInternationalCurrency,
+      },
+    };
+
+    invoices.forEach((inv) => {
+      const category =
+        String(inv.student_category || 'local').trim().toLowerCase() === 'international'
+          ? 'international'
+          : 'local';
+      const bucket = base[category];
+      bucket.currencyCode = inv.currency_code || bucket.currencyCode;
+      bucket.billed += Number(inv.total_amount || 0);
+      bucket.paid += Number(inv.paid_amount || 0);
+      bucket.outstanding += Number(inv.net_balance ?? inv.balance ?? 0);
+    });
+
     const overdueCount = invoices.filter(
       (inv) =>
         (inv.status === 'overdue' ||
           (inv.due_date &&
-            Number(inv.balance || 0) > 0 &&
+            Number(inv.net_balance ?? inv.balance ?? 0) > 0 &&
             inv.due_date.slice(0, 10) < new Date().toISOString().slice(0, 10)))
     ).length;
-    return { totalBilled, totalPaid, totalOutstanding, overdueCount };
-  }, [invoices]);
+    return { ...base, overdueCount };
+  }, [financeSettingsQuery.data?.default_international_currency, financeSettingsQuery.data?.default_local_currency, invoices]);
 
   const filteredInvoices = useMemo(() => {
     const q = searchInvoice.trim().toLowerCase();
@@ -745,29 +819,41 @@ const FinanceDashboardPage = () => {
         }
       />
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {[
           {
-            label: 'Total Billed',
-            value: currency(summary.totalBilled),
+            label: `Local Billed (${summary.local.currencyCode})`,
+            value: formatMoney(summary.local.currencyCode, summary.local.billed),
             icon: FileSpreadsheet,
             tone: 'slate',
           },
           {
-            label: 'Total Collected',
-            value: currency(summary.totalPaid),
+            label: `Local Collected (${summary.local.currencyCode})`,
+            value: formatMoney(summary.local.currencyCode, summary.local.paid),
             icon: BadgeCheck,
             tone: 'emerald',
           },
           {
-            label: 'Outstanding Balance',
-            value: currency(summary.totalOutstanding),
+            label: `Local Outstanding (${summary.local.currencyCode})`,
+            value: formatMoney(summary.local.currencyCode, summary.local.outstanding),
             icon: ShieldAlert,
             tone: 'amber',
           },
           {
-            label: 'Overdue Invoices',
-            value: String(summary.overdueCount),
+            label: `Intl Billed (${summary.international.currencyCode})`,
+            value: formatMoney(summary.international.currencyCode, summary.international.billed),
+            icon: FileSpreadsheet,
+            tone: 'slate',
+          },
+          {
+            label: `Intl Collected (${summary.international.currencyCode})`,
+            value: formatMoney(summary.international.currencyCode, summary.international.paid),
+            icon: BadgeCheck,
+            tone: 'emerald',
+          },
+          {
+            label: `Intl Outstanding (${summary.international.currencyCode})`,
+            value: formatMoney(summary.international.currencyCode, summary.international.outstanding),
             icon: Receipt,
             tone: 'rose',
           },
@@ -791,6 +877,10 @@ const FinanceDashboardPage = () => {
             </Card>
           );
         })}
+      </div>
+
+      <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        {summary.overdueCount} overdue invoice{summary.overdueCount === 1 ? '' : 's'} need follow-up.
       </div>
 
       {invoicesError ? (
@@ -856,6 +946,7 @@ const FinanceDashboardPage = () => {
                       <th className="px-5 py-3">Invoice</th>
                       <th className="px-5 py-3">Student</th>
                       <th className="px-5 py-3">Class</th>
+                      <th className="px-5 py-3">Category</th>
                       <th className="px-5 py-3 text-right">Total</th>
                       <th className="px-5 py-3 text-right">Paid</th>
                       <th className="px-5 py-3 text-right">Balance</th>
@@ -876,11 +967,28 @@ const FinanceDashboardPage = () => {
                         <td className="px-5 py-4 text-slate-500">
                           {inv.class_name || '—'}
                         </td>
+                        <td className="px-5 py-4">
+                          <div className="flex flex-col gap-1">
+                            <Badge
+                              variant={
+                                String(inv.student_category || 'local').trim().toLowerCase() ===
+                                'international'
+                                  ? 'inactive'
+                                  : 'info'
+                              }
+                            >
+                              {String(inv.student_category || 'local')}
+                            </Badge>
+                            <span className="text-[11px] font-medium text-slate-500">
+                              {inv.currency_code || 'GHS'}
+                            </span>
+                          </div>
+                        </td>
                         <td className="px-5 py-4 text-right font-medium text-slate-700">
-                          {currency(inv.total_amount)}
+                          {formatMoney(inv.currency_code, inv.total_amount)}
                         </td>
                         <td className="px-5 py-4 text-right font-medium text-emerald-700">
-                          {currency(inv.paid_amount)}
+                          {formatMoney(inv.currency_code, inv.paid_amount)}
                         </td>
                         <td
                           className={`px-5 py-4 text-right font-semibold ${
@@ -891,10 +999,10 @@ const FinanceDashboardPage = () => {
                                 : 'text-brand-navy'
                           }`}
                         >
-                          {currency(inv.net_balance ?? inv.balance)}
+                          {formatMoney(inv.currency_code, inv.net_balance ?? inv.balance)}
                           {Number(inv.credit_balance || 0) > 0 ? (
                             <div className="text-[11px] font-medium text-emerald-600">
-                              Credit {currency(inv.credit_balance)}
+                              Credit {formatMoney(inv.currency_code, inv.credit_balance)}
                             </div>
                           ) : null}
                         </td>
@@ -1053,43 +1161,53 @@ const FinanceDashboardPage = () => {
             <Card title="Accountant Queue" description="Second approval posts the payment to the student account.">
               <div className="space-y-3">
                 {accountantQueue.length ? (
-                  accountantQueue.map((item) => (
-                    <div key={item.id} className="rounded-2xl border border-slate-200 p-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="font-semibold text-brand-navy">
-                            {item.student_name || 'Student'} · {item.invoice_number || item.invoice_id}
-                          </p>
-                          <p className="mt-1 text-sm text-slate-500">
-                            {String(item.payment_method).replace('_', ' ')} · {currency(item.amount)}
-                          </p>
-                          <p className="mt-1 text-xs text-slate-400">
-                            Director approved on {String(item.director_approval?.approved_at || '').slice(0, 10) || '—'}
-                          </p>
+                  accountantQueue.map((item) => {
+                    const isSameApprover =
+                      Boolean(item.director_approval?.approved_by) &&
+                      String(item.director_approval?.approved_by) === String(user?.id || '');
+                    return (
+                      <div key={item.id} className="rounded-2xl border border-slate-200 p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="font-semibold text-brand-navy">
+                              {item.student_name || 'Student'} · {item.invoice_number || item.invoice_id}
+                            </p>
+                            <p className="mt-1 text-sm text-slate-500">
+                              {String(item.payment_method).replace('_', ' ')} · {currency(item.amount)}
+                            </p>
+                            <p className="mt-1 text-xs text-slate-400">
+                              Director approved on {String(item.director_approval?.approved_at || '').slice(0, 10) || '—'}
+                            </p>
+                            {isSameApprover ? (
+                              <p className="mt-2 text-xs font-medium text-amber-700">
+                                Final approval must be completed by a different user with accountant approval access.
+                              </p>
+                            ) : null}
+                          </div>
+                          <Badge variant="info">{approvalLabel(item.status)}</Badge>
                         </div>
-                        <Badge variant="info">{approvalLabel(item.status)}</Badge>
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          <Button
+                            size="sm"
+                            onClick={() => approvePaymentApproval.mutate({ id: item.id, action: 'approve' })}
+                            loading={approvePaymentApproval.isPending}
+                            disabled={!canAccountantApprove || isSameApprover}
+                          >
+                            Final Approve
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => approvePaymentApproval.mutate({ id: item.id, action: 'reject' })}
+                            loading={approvePaymentApproval.isPending}
+                            disabled={!canAccountantApprove || isSameApprover}
+                          >
+                            Reject
+                          </Button>
+                        </div>
                       </div>
-                      <div className="mt-4 flex flex-wrap gap-2">
-                        <Button
-                          size="sm"
-                          onClick={() => approvePaymentApproval.mutate({ id: item.id, action: 'approve' })}
-                          loading={approvePaymentApproval.isPending}
-                          disabled={!canAccountantApprove}
-                        >
-                          Final Approve
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          onClick={() => approvePaymentApproval.mutate({ id: item.id, action: 'reject' })}
-                          loading={approvePaymentApproval.isPending}
-                          disabled={!canAccountantApprove}
-                        >
-                          Reject
-                        </Button>
-                      </div>
-                    </div>
-                  ))
+                    );
+                  })
                 ) : (
                   <EmptyState
                     icon={<BadgeCheck className="h-6 w-6" />}
@@ -1346,6 +1464,7 @@ const FinanceDashboardPage = () => {
                     <tr>
                       <th className="px-5 py-3">Student</th>
                       <th className="px-5 py-3">Class</th>
+                      <th className="px-5 py-3">Category</th>
                       <th className="px-5 py-3 text-right">Owing</th>
                       <th className="px-5 py-3">Open Invoices</th>
                     </tr>
@@ -1357,8 +1476,25 @@ const FinanceDashboardPage = () => {
                           {d.student_name || d.student_id}
                         </td>
                         <td className="px-5 py-4 text-slate-500">{d.class_name || '—'}</td>
+                        <td className="px-5 py-4">
+                          <div className="flex flex-col gap-1">
+                            <Badge
+                              variant={
+                                String(d.student_category || 'local').trim().toLowerCase() ===
+                                'international'
+                                  ? 'inactive'
+                                  : 'info'
+                              }
+                            >
+                              {String(d.student_category || 'local')}
+                            </Badge>
+                            <span className="text-[11px] font-medium text-slate-500">
+                              {d.currency_code || 'GHS'}
+                            </span>
+                          </div>
+                        </td>
                         <td className="px-5 py-4 text-right font-semibold text-rose-700">
-                          {currency(d.total_owing)}
+                          {formatMoney(d.currency_code, d.total_owing)}
                         </td>
                         <td className="px-5 py-4">
                           <div className="flex flex-col gap-1.5">
@@ -1376,7 +1512,7 @@ const FinanceDashboardPage = () => {
                                   </p>
                                 </div>
                                 <p className="text-xs font-semibold text-rose-700">
-                                  {currency(inv.balance)}
+                                  {formatMoney(d.currency_code, inv.balance)}
                                 </p>
                               </div>
                             ))}
@@ -1484,11 +1620,13 @@ const FinanceDashboardPage = () => {
                         variant="ghost"
                         size="sm"
                         leftIcon={<Trash2 className="h-4 w-4 text-rose-600" />}
-                        onClick={() => {
-                          if (window.confirm(`Delete payment term "${term.name}"?`)) {
-                            deletePaymentTerm.mutate(term.id);
-                          }
-                        }}
+                        onClick={() =>
+                          setDeleteTermState({
+                            open: true,
+                            termId: term.id,
+                            termName: term.name,
+                          })
+                        }
                         loading={deletePaymentTerm.isPending}
                       >
                         Delete
@@ -1825,6 +1963,24 @@ const FinanceDashboardPage = () => {
           </div>
         </form>
       </Modal>
+
+      <ConfirmDialog
+        open={deleteTermState.open}
+        onOpenChange={(open) =>
+          setDeleteTermState((current) => ({
+            ...current,
+            open,
+          }))
+        }
+        title="Delete Payment Term"
+        description={`Delete payment term "${deleteTermState.termName}"? Existing invoices will keep their saved balances, but this payment template will no longer be available.`}
+        onConfirm={() => {
+          if (deleteTermState.termId) {
+            deletePaymentTerm.mutate(deleteTermState.termId);
+          }
+        }}
+        confirmLabel="Delete Term"
+      />
     </div>
   );
 };

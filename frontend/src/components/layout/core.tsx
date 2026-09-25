@@ -17,6 +17,7 @@ import {
   Bell,
   ChevronRight,
   ShieldCheck,
+  Trash2,
 } from 'lucide-react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 
@@ -67,6 +68,12 @@ const institutionNavGroups: NavGroup[] = [
         icon: GraduationCap,
         roles: ['institution_admin', 'teacher', 'librarian'],
         permissions: ['academics:read'],
+      },
+      {
+        name: 'Student Bin',
+        to: '/students/bin',
+        icon: Trash2,
+        roles: ['institution_admin'],
       },
       {
         name: 'Staff Access',

@@ -86,6 +86,60 @@ const ensureCurrentAcademicYear = async ({ institutionId, transaction }) => {
   );
 };
 
+const ensureSharedTermSemester = async ({
+  academicYearId,
+  name,
+  type,
+  startDate,
+  endDate,
+  isCurrent,
+  transaction,
+}) => {
+  const existing = await models.TermSemester.findOne({
+    where: {
+      academic_year_id: academicYearId,
+      name,
+      type,
+    },
+    paranoid: false,
+    transaction,
+  });
+
+  if (existing) {
+    if (existing.deletedAt) {
+      await existing.restore({ transaction });
+    }
+
+    const nextValues = {};
+    if (startDate && String(existing.start_date || '') !== String(startDate)) {
+      nextValues.start_date = startDate;
+    }
+    if (endDate && String(existing.end_date || '') !== String(endDate)) {
+      nextValues.end_date = endDate;
+    }
+    if (isCurrent && !existing.is_current) {
+      nextValues.is_current = true;
+    }
+
+    if (Object.keys(nextValues).length) {
+      await existing.update(nextValues, { transaction });
+    }
+    return existing;
+  }
+
+  return models.TermSemester.create(
+    {
+      academic_year_id: academicYearId,
+      name,
+      type,
+      start_date: startDate,
+      end_date: endDate,
+      is_current: isCurrent,
+    },
+    { transaction }
+  );
+};
+
 const normalizeCode = (value) =>
   String(value || '')
     .trim()
@@ -122,6 +176,19 @@ const normalizeOfferingFees = (payload = {}, current = {}) => {
     fee_amount_local: localFee,
     fee_amount_international: internationalFee,
   };
+};
+
+const normalizeProgramId = (value) => {
+  const nextValue = String(value || '').trim();
+  return nextValue || null;
+};
+
+const resolveOfferingProgramId = ({ payload = {}, current = {}, group = null }) => {
+  if (String(group?.level_code || current?.level_code || '').toUpperCase() !== 'TR') {
+    return null;
+  }
+
+  return normalizeProgramId(payload.program_id ?? current.program_id);
 };
 
 const destroyIfExists = async (model, id, options = {}) => {
@@ -654,17 +721,15 @@ const createAcademicPeriodFromDatabase = async ({ institutionId, userId, payload
         );
       }
 
-      const record = await models.TermSemester.create(
-        {
-          academic_year_id: academicYear.id,
-          name: period.name,
-          type,
-          start_date: period.start_date || academicYear.start_date,
-          end_date: period.end_date || academicYear.end_date,
-          is_current: period.status === 'active',
-        },
-        { transaction }
-      );
+      const record = await ensureSharedTermSemester({
+        academicYearId: academicYear.id,
+        name: period.name,
+        type,
+        startDate: period.start_date || academicYear.start_date,
+        endDate: period.end_date || academicYear.end_date,
+        isCurrent: period.status === 'active',
+        transaction,
+      });
       period.term_semester_id = record.id;
       period.academic_year_id = academicYear.id;
     }
@@ -933,7 +998,16 @@ const deleteAcademicPeriodFromDatabase = async ({ institutionId, periodId, userI
     for (const offering of removedOfferings) {
       await destroyIfExists(models.Subject, offering.subject_id, { transaction });
     }
-    await destroyIfExists(models.TermSemester, period.term_semester_id, { transaction });
+    const otherPeriodsUsingSameTerm = settings.academics.periods.some(
+      (item) => item.id !== periodId && item.term_semester_id && item.term_semester_id === period.term_semester_id
+    );
+    if (!otherPeriodsUsingSameTerm) {
+      try {
+        await destroyIfExists(models.TermSemester, period.term_semester_id, { transaction });
+      } catch (_error) {
+        // Keep the shared term/semester record when historical finance or academic records still reference it.
+      }
+    }
 
     await institution.update({ settings }, { transaction });
     await transaction.commit();
@@ -1014,10 +1088,17 @@ const createAcademicOfferingFromDatabase = async ({ institutionId, userId, paylo
     }
 
     const normalizedCode = normalizeCode(payload.code);
+    const programId = resolveOfferingProgramId({ payload, group });
+    if (group.level_code === 'TR' && !programId) {
+      throw Object.assign(new Error('Select the tertiary program for this course.'), {
+        statusCode: 400,
+      });
+    }
     const duplicate = settings.academics.offerings.find(
       (item) =>
         item.group_id === payload.group_id &&
         item.period_id === payload.period_id &&
+        normalizeProgramId(item.program_id) === programId &&
         item.code === normalizedCode
     );
     if (duplicate) {
@@ -1071,6 +1152,7 @@ const createAcademicOfferingFromDatabase = async ({ institutionId, userId, paylo
       institution_id: institutionId,
       group_id: payload.group_id,
       period_id: payload.period_id,
+      program_id: programId,
       type: payload.type || 'subject',
       code: normalizedCode,
       name: payload.name,
@@ -1125,6 +1207,27 @@ const createAcademicOfferingFromRuntime = async ({ institutionId, userId, payloa
       statusCode: 404,
     });
   }
+  const programId = resolveOfferingProgramId({ payload, group });
+  if (group.level_code === 'TR' && !programId) {
+    throw Object.assign(new Error('Select the tertiary program for this course.'), {
+      statusCode: 400,
+    });
+  }
+  const normalizedCode = normalizeCode(payload.code);
+  const duplicate = store.academics.structure.offerings.find(
+    (item) =>
+      item.institution_id === institutionId &&
+      item.group_id === payload.group_id &&
+      item.period_id === payload.period_id &&
+      normalizeProgramId(item.program_id) === programId &&
+      normalizeCode(item.code) === normalizedCode
+  );
+  if (duplicate) {
+    throw Object.assign(
+      new Error('A subject or course with this code already exists in the selected period.'),
+      { statusCode: 409 }
+    );
+  }
 
   const offeringFees = normalizeOfferingFees(payload);
   const offering = {
@@ -1132,8 +1235,9 @@ const createAcademicOfferingFromRuntime = async ({ institutionId, userId, payloa
     institution_id: institutionId,
     group_id: payload.group_id,
     period_id: payload.period_id,
+    program_id: programId,
     type: payload.type || 'subject',
-    code: payload.code,
+    code: normalizedCode,
     name: payload.name,
     credit_hours:
       payload.credit_hours === '' || payload.credit_hours === null || payload.credit_hours === undefined
@@ -1188,13 +1292,24 @@ const updateAcademicOfferingFromDatabase = async ({
     }
 
     const current = settings.academics.offerings[offeringIndex];
+    const group = settings.academics.groups.find((item) => item.id === current.group_id);
+    if (!group) {
+      throw Object.assign(new Error('Academic group not found for this course.'), { statusCode: 404 });
+    }
     const nextCode = normalizeCode(payload.code ?? current.code);
+    const nextProgramId = resolveOfferingProgramId({ payload, current, group });
+    if (group.level_code === 'TR' && !nextProgramId) {
+      throw Object.assign(new Error('Select the tertiary program for this course.'), {
+        statusCode: 400,
+      });
+    }
     if (
       settings.academics.offerings.some(
         (item, index) =>
           index !== offeringIndex &&
           item.group_id === current.group_id &&
           item.period_id === current.period_id &&
+          normalizeProgramId(item.program_id) === nextProgramId &&
           normalizeCode(item.code) === nextCode
       )
     ) {
@@ -1207,6 +1322,7 @@ const updateAcademicOfferingFromDatabase = async ({
     const offeringFees = normalizeOfferingFees(payload, current);
     const updated = {
       ...current,
+      program_id: nextProgramId,
       code: nextCode,
       name: payload.name || current.name,
       credit_hours:
@@ -1271,10 +1387,36 @@ const updateAcademicOfferingFromRuntime = async ({
   }
 
   const current = store.academics.structure.offerings[offeringIndex];
+  const group = store.academics.structure.groups.find(
+    (item) => item.id === current.group_id && item.institution_id === institutionId
+  );
+  const programId = resolveOfferingProgramId({ payload, current, group });
+  if (String(group?.level_code || '').toUpperCase() === 'TR' && !programId) {
+    throw Object.assign(new Error('Select the tertiary program for this course.'), {
+      statusCode: 400,
+    });
+  }
+  const nextCode = normalizeCode(payload.code ?? current.code);
+  const duplicate = store.academics.structure.offerings.find(
+    (item, index) =>
+      index !== offeringIndex &&
+      item.institution_id === institutionId &&
+      item.group_id === current.group_id &&
+      item.period_id === current.period_id &&
+      normalizeProgramId(item.program_id) === programId &&
+      normalizeCode(item.code) === nextCode
+  );
+  if (duplicate) {
+    throw Object.assign(
+      new Error('A subject or course with this code already exists in the selected period.'),
+      { statusCode: 409 }
+    );
+  }
   const offeringFees = normalizeOfferingFees(payload, current);
   const updated = {
     ...current,
-    code: normalizeCode(payload.code ?? current.code),
+    program_id: programId,
+    code: nextCode,
     name: payload.name || current.name,
     credit_hours:
       payload.credit_hours === '' || payload.credit_hours === undefined

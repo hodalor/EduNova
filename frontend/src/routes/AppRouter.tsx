@@ -23,6 +23,7 @@ const AttendanceAnalyticsPage = lazy(() => import('../modules/analytics/Attendan
 const EnrollmentAnalyticsPage = lazy(() => import('../modules/analytics/EnrollmentAnalyticsPage'));
 const AlertsPage = lazy(() => import('../modules/analytics/AlertsPage'));
 const StudentsListPage = lazy(() => import('../modules/students/StudentsListPage'));
+const StudentRecycleBinPage = lazy(() => import('../modules/students/StudentRecycleBinPage'));
 const StudentDetailPage = lazy(() => import('../modules/students/StudentDetailPage'));
 const StudentEnrollmentForm = lazy(() => import('../modules/students/StudentEnrollmentForm'));
 const StudentIDCard = lazy(() => import('../modules/students/StudentIDCard'));
@@ -102,6 +103,14 @@ const AppRouter = () => {
               element={
                 <ProtectedRoute allowedRoles={['institution_admin', 'teacher', 'librarian']}>
                   <StudentsListPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/students/bin"
+              element={
+                <ProtectedRoute allowedRoles={['institution_admin']}>
+                  <StudentRecycleBinPage />
                 </ProtectedRoute>
               }
             />

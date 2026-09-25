@@ -16,6 +16,7 @@ import { eduovaApi } from '../../api/eduovaApi';
 import Badge from '../../components/ui/Badge';
 import Button from '../../components/ui/Button';
 import Card from '../../components/ui/Card';
+import { ConfirmDialog } from '../../components/ui/core';
 import Input from '../../components/ui/Input';
 import Modal from '../../components/ui/Modal';
 import PageLoader from '../../components/ui/PageLoader';
@@ -101,12 +102,14 @@ interface TertiaryOverview {
 }
 
 interface AcademicStructureResponse {
-  groups: Array<{
-    id: string;
-    name: string;
-    code: string;
-    level_code: string;
-  }>;
+  groups: RoadmapGroup[];
+}
+
+interface RoadmapGroup {
+  id: string;
+  name: string;
+  code: string;
+  level_code: string;
 }
 
 type TertiaryTab = 'faculties' | 'departments' | 'programs';
@@ -152,6 +155,17 @@ const TertiaryManagementPage = () => {
   const [facultyForm, setFacultyForm] = useState(emptyFacultyForm);
   const [departmentForm, setDepartmentForm] = useState(emptyDepartmentForm);
   const [programForm, setProgramForm] = useState(emptyProgramForm);
+  const [confirmDeleteState, setConfirmDeleteState] = useState<{
+    open: boolean;
+    title: string;
+    description: string;
+    action: null | (() => void);
+  }>({
+    open: false,
+    title: '',
+    description: '',
+    action: null,
+  });
   const [progressionPolicyForm, setProgressionPolicyForm] = useState({
     allow_carry_over_progression: false,
     max_carry_over_courses: '0',
@@ -176,41 +190,41 @@ const TertiaryManagementPage = () => {
     enabled: Boolean(activeInstitutionId && isTertiaryInstitution(activeInstitution)),
   });
 
-  const faculties = useMemo(() => data?.faculties || [], [data?.faculties]);
-  const departments = useMemo(() => data?.departments || [], [data?.departments]);
-  const programs = useMemo(() => data?.programs || [], [data?.programs]);
+  const faculties = useMemo<FacultyRow[]>(() => data?.faculties || [], [data?.faculties]);
+  const departments = useMemo<DepartmentRow[]>(() => data?.departments || [], [data?.departments]);
+  const programs = useMemo<ProgramRow[]>(() => data?.programs || [], [data?.programs]);
   const roadmapGroups = useMemo(
-    () => (structure?.groups || []).filter((item) => item.level_code === 'TR'),
+    () => (structure?.groups || []).filter((item: RoadmapGroup) => item.level_code === 'TR'),
     [structure?.groups]
   );
-  const credentials = data?.credentials || activeInstitution?.settings?.tertiary?.credentials || [];
+  const credentials: string[] = data?.credentials || activeInstitution?.settings?.tertiary?.credentials || [];
   const idFormat = data?.id_format || activeInstitution?.settings?.tertiary?.id_format || 'FAC/DEPT/YEAR/SEQ';
   const calendarModel = getAcademicStructureLabel(activeInstitution);
 
   const detailFaculty =
     detailModal?.tab === 'faculties'
-      ? faculties.find((faculty) => faculty.id === detailModal.id) || null
+      ? faculties.find((faculty: FacultyRow) => faculty.id === detailModal.id) || null
       : null;
   const detailDepartment =
     detailModal?.tab === 'departments'
-      ? departments.find((department) => department.id === detailModal.id) || null
+      ? departments.find((department: DepartmentRow) => department.id === detailModal.id) || null
       : null;
   const detailProgram =
     detailModal?.tab === 'programs'
-      ? programs.find((program) => program.id === detailModal.id) || null
+      ? programs.find((program: ProgramRow) => program.id === detailModal.id) || null
       : null;
 
   const facultyDepartments = useMemo(
     () =>
       detailFaculty
-        ? departments.filter((department) => department.faculty_id === detailFaculty.id)
+        ? departments.filter((department: DepartmentRow) => department.faculty_id === detailFaculty.id)
         : [],
     [departments, detailFaculty]
   );
   const departmentPrograms = useMemo(
     () =>
       detailDepartment
-        ? programs.filter((program) => program.department_id === detailDepartment.id)
+        ? programs.filter((program: ProgramRow) => program.department_id === detailDepartment.id)
         : [],
     [programs, detailDepartment]
   );
@@ -467,11 +481,21 @@ const TertiaryManagementPage = () => {
     setProgramModalOpen(true);
   };
 
-  const confirmDelete = (message: string, action: () => void) => {
-    if (window.confirm(message)) {
-      action();
-    }
-  };
+  const confirmDelete = ({
+    title,
+    description,
+    action,
+  }: {
+    title: string;
+    description: string;
+    action: () => void;
+  }) =>
+    setConfirmDeleteState({
+      open: true,
+      title,
+      description,
+      action,
+    });
 
   const renderEmptyRow = (message: string, colSpan: number) => (
     <tr>
@@ -740,7 +764,7 @@ const TertiaryManagementPage = () => {
               </thead>
               <tbody className="divide-y divide-slate-100 bg-white">
                 {faculties.length
-                  ? faculties.map((faculty) => (
+                  ? faculties.map((faculty: FacultyRow) => (
                       <tr
                         key={faculty.id}
                         className="cursor-pointer hover:bg-slate-50"
@@ -750,7 +774,7 @@ const TertiaryManagementPage = () => {
                         <td className="px-4 py-3">{faculty.code}</td>
                         <td className="px-4 py-3">{faculty.dean || 'Not assigned'}</td>
                         <td className="px-4 py-3">
-                          {departments.filter((department) => department.faculty_id === faculty.id).length}
+                          {departments.filter((department: DepartmentRow) => department.faculty_id === faculty.id).length}
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex flex-wrap gap-2">
@@ -782,10 +806,11 @@ const TertiaryManagementPage = () => {
                               leftIcon={<Trash2 className="h-4 w-4" />}
                               onClick={(event) => {
                                 event.stopPropagation();
-                                confirmDelete(
-                                  `Delete ${faculty.name}? Remove linked departments first.`,
-                                  () => deleteFaculty.mutate(faculty.id)
-                                );
+                                confirmDelete({
+                                  title: 'Delete Faculty',
+                                  description: `Delete ${faculty.name}? Remove linked departments first.`,
+                                  action: () => deleteFaculty.mutate(faculty.id),
+                                });
                               }}
                             >
                               Delete
@@ -815,7 +840,7 @@ const TertiaryManagementPage = () => {
               </thead>
               <tbody className="divide-y divide-slate-100 bg-white">
                 {departments.length
-                  ? departments.map((department) => (
+                  ? departments.map((department: DepartmentRow) => (
                       <tr
                         key={department.id}
                         className="cursor-pointer hover:bg-slate-50"
@@ -825,7 +850,7 @@ const TertiaryManagementPage = () => {
                         <td className="px-4 py-3">{department.code}</td>
                         <td className="px-4 py-3">{department.faculty}</td>
                         <td className="px-4 py-3">
-                          {programs.filter((program) => program.department_id === department.id).length}
+                          {programs.filter((program: ProgramRow) => program.department_id === department.id).length}
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex flex-wrap gap-2">
@@ -857,10 +882,11 @@ const TertiaryManagementPage = () => {
                               leftIcon={<Trash2 className="h-4 w-4" />}
                               onClick={(event) => {
                                 event.stopPropagation();
-                                confirmDelete(
-                                  `Delete ${department.name}? Remove linked programs first.`,
-                                  () => deleteDepartment.mutate(department.id)
-                                );
+                                confirmDelete({
+                                  title: 'Delete Department',
+                                  description: `Delete ${department.name}? Remove linked programs first.`,
+                                  action: () => deleteDepartment.mutate(department.id),
+                                });
                               }}
                             >
                               Delete
@@ -892,7 +918,7 @@ const TertiaryManagementPage = () => {
               </thead>
               <tbody className="divide-y divide-slate-100 bg-white">
                 {programs.length
-                  ? programs.map((program) => (
+                  ? programs.map((program: ProgramRow) => (
                       <tr
                         key={program.id}
                         className="cursor-pointer hover:bg-slate-50"
@@ -936,9 +962,11 @@ const TertiaryManagementPage = () => {
                               leftIcon={<Trash2 className="h-4 w-4" />}
                               onClick={(event) => {
                                 event.stopPropagation();
-                                confirmDelete(`Delete ${program.name}?`, () =>
-                                  deleteProgram.mutate(program.id)
-                                );
+                                confirmDelete({
+                                  title: 'Delete Program',
+                                  description: `Delete ${program.name}? This removes the program roadmap and linked setup references.`,
+                                  action: () => deleteProgram.mutate(program.id),
+                                });
                               }}
                             >
                               Delete
@@ -1004,10 +1032,11 @@ const TertiaryManagementPage = () => {
                   variant="secondary"
                   leftIcon={<Trash2 className="h-4 w-4" />}
                   onClick={() =>
-                    confirmDelete(
-                      `Delete ${detailFaculty.name}? Remove linked departments first.`,
-                      () => deleteFaculty.mutate(detailFaculty.id)
-                    )
+                    confirmDelete({
+                      title: 'Delete Faculty',
+                      description: `Delete ${detailFaculty.name}? Remove linked departments first.`,
+                      action: () => deleteFaculty.mutate(detailFaculty.id),
+                    })
                   }
                 >
                   Delete
@@ -1021,7 +1050,7 @@ const TertiaryManagementPage = () => {
               </p>
               <div className="mt-3 space-y-3">
                 {facultyDepartments.length ? (
-                  facultyDepartments.map((department) => (
+                  facultyDepartments.map((department: DepartmentRow) => (
                     <div
                       key={department.id}
                       className="rounded-2xl bg-white px-4 py-3 shadow-sm"
@@ -1063,10 +1092,11 @@ const TertiaryManagementPage = () => {
                   variant="secondary"
                   leftIcon={<Trash2 className="h-4 w-4" />}
                   onClick={() =>
-                    confirmDelete(
-                      `Delete ${detailDepartment.name}? Remove linked programs first.`,
-                      () => deleteDepartment.mutate(detailDepartment.id)
-                    )
+                    confirmDelete({
+                      title: 'Delete Department',
+                      description: `Delete ${detailDepartment.name}? Remove linked programs first.`,
+                      action: () => deleteDepartment.mutate(detailDepartment.id),
+                    })
                   }
                 >
                   Delete
@@ -1080,7 +1110,7 @@ const TertiaryManagementPage = () => {
               </p>
               <div className="mt-3 space-y-3">
                 {departmentPrograms.length ? (
-                  departmentPrograms.map((program) => (
+                  departmentPrograms.map((program: ProgramRow) => (
                     <div key={program.id} className="rounded-2xl bg-white px-4 py-3 shadow-sm">
                       <div className="flex items-center justify-between gap-3">
                         <div>
@@ -1130,9 +1160,11 @@ const TertiaryManagementPage = () => {
                   variant="secondary"
                   leftIcon={<Trash2 className="h-4 w-4" />}
                   onClick={() =>
-                    confirmDelete(`Delete ${detailProgram.name}?`, () =>
-                      deleteProgram.mutate(detailProgram.id)
-                    )
+                    confirmDelete({
+                      title: 'Delete Program',
+                      description: `Delete ${detailProgram.name}? This removes the program roadmap and linked setup references.`,
+                      action: () => deleteProgram.mutate(detailProgram.id),
+                    })
                   }
                 >
                   Delete
@@ -1162,7 +1194,7 @@ const TertiaryManagementPage = () => {
 
             <div className="space-y-3">
               {detailProgram.roadmap?.levels?.length ? (
-                detailProgram.roadmap.levels.map((level) => (
+                detailProgram.roadmap.levels.map((level: ProgramRoadmapLevel) => (
                   <div key={level.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                     <div className="flex items-center justify-between gap-3">
                       <div>
@@ -1170,15 +1202,20 @@ const TertiaryManagementPage = () => {
                         <p className="text-sm text-slate-500">{level.code}</p>
                       </div>
                       <Badge variant="inactive">
-                        {level.periods.reduce((sum, period) => sum + period.courses.length, 0)} courses
+                        {level.periods.reduce(
+                          (sum: number, period: ProgramRoadmapPeriod) => sum + period.courses.length,
+                          0
+                        )} courses
                       </Badge>
                     </div>
                     <div className="mt-3 space-y-2">
-                      {level.periods.map((period) => (
+                      {level.periods.map((period: ProgramRoadmapPeriod) => (
                         <div key={period.id} className="rounded-2xl bg-white px-3 py-2">
                           <p className="text-sm font-semibold text-brand-navy">{period.name}</p>
                           <p className="text-xs text-slate-500">
-                            {period.courses.map((course) => course.code).join(', ') || 'No courses mapped'}
+                            {period.courses
+                              .map((course: ProgramRoadmapCourse) => course.code)
+                              .join(', ') || 'No courses mapped'}
                           </p>
                         </div>
                       ))}
@@ -1293,7 +1330,7 @@ const TertiaryManagementPage = () => {
             }
           >
             <option value="">Select faculty</option>
-            {faculties.map((faculty) => (
+            {faculties.map((faculty: FacultyRow) => (
               <option key={faculty.id} value={faculty.id}>
                 {faculty.name}
               </option>
@@ -1362,7 +1399,7 @@ const TertiaryManagementPage = () => {
             }
           >
             <option value="">Select department</option>
-            {departments.map((department) => (
+            {departments.map((department: DepartmentRow) => (
               <option key={department.id} value={department.id}>
                 {department.name} ({department.faculty})
               </option>
@@ -1416,7 +1453,7 @@ const TertiaryManagementPage = () => {
             </label>
             <div className="max-h-48 space-y-2 overflow-y-auto rounded-2xl border border-slate-200 bg-slate-50 p-3">
               {roadmapGroups.length ? (
-                roadmapGroups.map((group) => {
+                roadmapGroups.map((group: RoadmapGroup) => {
                   const checked = programForm.roadmap_group_ids.includes(group.id);
                   return (
                     <label
@@ -1431,7 +1468,7 @@ const TertiaryManagementPage = () => {
                             ...current,
                             roadmap_group_ids: event.target.checked
                               ? [...current.roadmap_group_ids, group.id]
-                              : current.roadmap_group_ids.filter((item) => item !== group.id),
+                              : current.roadmap_group_ids.filter((item: string) => item !== group.id),
                           }))
                         }
                       />
@@ -1459,10 +1496,24 @@ const TertiaryManagementPage = () => {
         </form>
       </Modal>
 
+      <ConfirmDialog
+        open={confirmDeleteState.open}
+        onOpenChange={(open) =>
+          setConfirmDeleteState((current) => ({
+            ...current,
+            open,
+          }))
+        }
+        title={confirmDeleteState.title}
+        description={confirmDeleteState.description}
+        onConfirm={() => confirmDeleteState.action?.()}
+        confirmLabel="Delete"
+      />
+
       {!detailProgram && activeTab === 'programs' && credentials.length ? (
         <Card title="Supported Credentials">
           <div className="flex flex-wrap gap-2">
-            {credentials.map((credential) => (
+            {credentials.map((credential: string) => (
               <Badge key={credential} variant="info">
                 {credential}
               </Badge>

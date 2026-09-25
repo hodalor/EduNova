@@ -152,6 +152,29 @@ const applyOfferingPricing = ({ offerings = [], profile, settings }) =>
     };
   });
 
+const normalizeProgramId = (value) => String(value || '').trim();
+
+const offeringMatchesProgram = ({ offering, programId, group }) => {
+  const normalizedProgramId = normalizeProgramId(programId);
+  if (!normalizedProgramId) {
+    return true;
+  }
+
+  const directProgramId = normalizeProgramId(offering?.program_id);
+  if (directProgramId) {
+    return directProgramId === normalizedProgramId;
+  }
+
+  const legacyGroupPrograms = Array.isArray(group?.program_ids)
+    ? group.program_ids.map((item) => String(item || '').trim()).filter(Boolean)
+    : [];
+  if (legacyGroupPrograms.length) {
+    return legacyGroupPrograms.includes(normalizedProgramId);
+  }
+
+  return true;
+};
+
 const getAcademicStructureFromSettings = (settings) => {
   const groups = (settings.academics?.groups || []).filter((item) => item.level_code === 'TR');
   const groupIds = new Set(groups.map((item) => item.id));
@@ -173,12 +196,34 @@ const sortBySequence = (items = []) =>
   });
 
 const resolveProgramGroupIds = ({ program, settings }) => {
+  const sharedGroups = sortBySequence(
+    (settings.academics?.groups || []).filter((item) => item.level_code === 'TR')
+  );
+  const durationMatch = String(program?.duration || '').match(/\d+/);
+  const durationCount = Number(durationMatch?.[0] || 0);
+  if (sharedGroups.length) {
+    const scopedSharedGroups =
+      durationCount > 0 ? sharedGroups.slice(0, durationCount) : sharedGroups;
+    return scopedSharedGroups.map((item) => item.id);
+  }
+
   const directGroupIds = program.roadmap_group_ids || [];
+  if (directGroupIds.length) {
+    return Array.from(new Set(directGroupIds));
+  }
   const linkedGroupIds = (settings.academics?.groups || [])
     .filter((item) => item.level_code === 'TR' && (item.program_ids || []).includes(program.id))
     .map((item) => item.id);
 
-  return Array.from(new Set([...directGroupIds, ...linkedGroupIds]));
+  if (linkedGroupIds.length) {
+    return Array.from(new Set(linkedGroupIds));
+  }
+
+  const sharedGroupIds = (settings.academics?.groups || [])
+    .filter((item) => item.level_code === 'TR')
+    .map((item) => item.id);
+
+  return Array.from(new Set(sharedGroupIds));
 };
 
 const buildProgramRoadmap = ({ program, settings }) => {
@@ -191,7 +236,14 @@ const buildProgramRoadmap = ({ program, settings }) => {
 
   return {
     level_count: scopedGroups.length,
-    total_courses: offerings.filter((item) => scopedGroupIds.has(item.group_id)).length,
+    total_courses: offerings.filter((item) => {
+      const group = scopedGroups.find((entry) => entry.id === item.group_id);
+      return scopedGroupIds.has(item.group_id) && offeringMatchesProgram({
+        offering: item,
+        programId: program.id,
+        group,
+      });
+    }).length,
     levels: scopedGroups.map((group) => {
       const levelPeriods = sortBySequence(periods.filter((item) => item.group_id === group.id));
       return {
@@ -208,7 +260,16 @@ const buildProgramRoadmap = ({ program, settings }) => {
           late_registration_penalty: Number(period.late_registration_penalty || 0),
           penalty_deadline: period.penalty_deadline || null,
           courses: offerings
-            .filter((item) => item.group_id === group.id && item.period_id === period.id)
+            .filter(
+              (item) =>
+                item.group_id === group.id &&
+                item.period_id === period.id &&
+                offeringMatchesProgram({
+                  offering: item,
+                  programId: program.id,
+                  group,
+                })
+            )
             .map((offering) => ({
               id: offering.id,
               code: offering.code,
@@ -1245,6 +1306,8 @@ const getRegistrationStateFromSettings = async ({ institutionId, studentId }) =>
   if (!progress) {
     throw Object.assign(new Error('Student registration profile not found.'), { statusCode: 404 });
   }
+  const studentProgramId =
+    progress?.program_id || studentProfile?.tertiary?.program_id || studentProfile?.program_id || null;
 
   const { groups, periods, offerings } = getAcademicStructureFromSettings(settings);
   const currentGroup = groups.find((item) => item.id === progress.current_group_id);
@@ -1255,7 +1318,14 @@ const getRegistrationStateFromSettings = async ({ institutionId, studentId }) =>
 
   const pricedOfferings = applyOfferingPricing({ offerings, profile: studentProfile, settings });
   const currentOfferings = pricedOfferings.filter(
-    (item) => item.group_id === currentGroup.id && item.period_id === currentPeriod.id
+    (item) =>
+      item.group_id === currentGroup.id &&
+      item.period_id === currentPeriod.id &&
+      offeringMatchesProgram({
+        offering: item,
+        programId: studentProgramId,
+        group: currentGroup,
+      })
   );
   const eligibleCurrentCourses = currentOfferings.filter((item) =>
     (item.prerequisite_codes || []).every((code) =>
@@ -1293,7 +1363,16 @@ const getRegistrationStateFromSettings = async ({ institutionId, studentId }) =>
       Number(item.sequence || 0) === Number(currentPeriod.sequence || 0) + 1
   );
   const nextTermPreview = nextPeriod && carryOverSummary.effective_can_progress
-    ? pricedOfferings.filter((item) => item.group_id === currentGroup.id && item.period_id === nextPeriod.id)
+    ? pricedOfferings.filter(
+        (item) =>
+          item.group_id === currentGroup.id &&
+          item.period_id === nextPeriod.id &&
+          offeringMatchesProgram({
+            offering: item,
+            programId: studentProgramId,
+            group: currentGroup,
+          })
+      )
     : [];
 
   const alreadyRegistered = settings.tertiary.registrations.filter(
@@ -1393,6 +1472,8 @@ const getStudentRegistrationState = async ({ institutionId, studentId }) => {
   if (!progress) {
     throw Object.assign(new Error('Student registration profile not found.'), { statusCode: 404 });
   }
+  const studentProgramId =
+    progress?.program_id || studentProfile?.tertiary?.program_id || studentProfile?.program_id || null;
 
   const { groups, periods, offerings } = getAcademicStructureForInstitution({ institutionId });
   const currentGroup = groups.find((item) => item.id === progress.current_group_id);
@@ -1412,7 +1493,14 @@ const getStudentRegistrationState = async ({ institutionId, studentId }) => {
     settings: settingsForPricing,
   });
   const currentOfferings = pricedOfferings.filter(
-    (item) => item.group_id === currentGroup.id && item.period_id === currentPeriod.id
+    (item) =>
+      item.group_id === currentGroup.id &&
+      item.period_id === currentPeriod.id &&
+      offeringMatchesProgram({
+        offering: item,
+        programId: studentProgramId,
+        group: currentGroup,
+      })
   );
   const eligibleCurrentCourses = currentOfferings.filter((item) =>
     item.prerequisite_codes.every((code) => progress.passed_offering_codes.includes(code))
@@ -1448,7 +1536,16 @@ const getStudentRegistrationState = async ({ institutionId, studentId }) => {
       item.sequence === Number(currentPeriod.sequence || 0) + 1
   );
   const nextTermPreview = nextPeriod && carryOverSummary.effective_can_progress
-    ? pricedOfferings.filter((item) => item.group_id === currentGroup.id && item.period_id === nextPeriod.id)
+    ? pricedOfferings.filter(
+        (item) =>
+          item.group_id === currentGroup.id &&
+          item.period_id === nextPeriod.id &&
+          offeringMatchesProgram({
+            offering: item,
+            programId: studentProgramId,
+            group: currentGroup,
+          })
+      )
     : [];
 
   const alreadyRegistered = store.tertiary.registrations.filter(

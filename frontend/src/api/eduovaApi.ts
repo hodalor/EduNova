@@ -157,6 +157,16 @@ export const eduovaApi = {
         throw error;
       }
     },
+    deleted: async () => {
+      try {
+        return (await axiosInstance.get('/students/deleted')).data.data;
+      } catch (error) {
+        if (axios.isAxiosError(error) && error.response?.status === 404) {
+          return (await axiosInstance.get('/v1/students/deleted')).data.data;
+        }
+        throw error;
+      }
+    },
     detail: async (id: string) => {
       try {
         return (await axiosInstance.get(`/students/${id}`)).data.data;
@@ -184,6 +194,36 @@ export const eduovaApi = {
       } catch (error) {
         if (axios.isAxiosError(error) && error.response?.status === 404) {
           return (await axiosInstance.patch(`/v1/students/${studentId}`, body)).data.data;
+        }
+        throw error;
+      }
+    },
+    delete: async (id: string) => {
+      try {
+        return (await axiosInstance.delete(`/students/${id}`)).data.data;
+      } catch (error) {
+        if (axios.isAxiosError(error) && error.response?.status === 404) {
+          return (await axiosInstance.delete(`/v1/students/${id}`)).data.data;
+        }
+        throw error;
+      }
+    },
+    restore: async (id: string) => {
+      try {
+        return (await axiosInstance.post(`/students/${id}/restore`)).data.data;
+      } catch (error) {
+        if (axios.isAxiosError(error) && error.response?.status === 404) {
+          return (await axiosInstance.post(`/v1/students/${id}/restore`)).data.data;
+        }
+        throw error;
+      }
+    },
+    deletePermanent: async (id: string) => {
+      try {
+        return (await axiosInstance.delete(`/students/${id}/permanent`)).data.data;
+      } catch (error) {
+        if (axios.isAxiosError(error) && error.response?.status === 404) {
+          return (await axiosInstance.delete(`/v1/students/${id}/permanent`)).data.data;
         }
         throw error;
       }

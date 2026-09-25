@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { eduovaApi } from '../../../api/eduovaApi';
+import { useAuthStore } from '../../../store/authStore';
 
 export interface StudentsFilters {
   level?: string;
@@ -22,7 +23,11 @@ export interface StudentListItem {
 
 export const useStudents = (filters: StudentsFilters) =>
   useQuery({
-    queryKey: ['students', filters],
+    queryKey: [
+      'students',
+      useAuthStore.getState().tenantContext?.id || useAuthStore.getState().institution?.id || null,
+      filters,
+    ],
     queryFn: async () => {
       const rows = (await eduovaApi.students.list()) as StudentListItem[];
       return rows.filter((row) => {

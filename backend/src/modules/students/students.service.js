@@ -1,4 +1,5 @@
 const { models, sequelize } = require('../../config/database');
+const { Op } = require('sequelize');
 const { createSequence } = require('../../shared/helpers/common');
 const { hashPassword } = require('../../shared/helpers/auth');
 const { logAudit } = require('../../shared/services/audit-log.service');
@@ -83,6 +84,29 @@ const resolveOfferingFee = ({ offering, profile, settings }) => {
   };
 };
 
+const normalizeProgramId = (value) => String(value || '').trim();
+
+const offeringMatchesProgram = ({ offering, programId, group }) => {
+  const normalizedProgramId = normalizeProgramId(programId);
+  if (!normalizedProgramId) {
+    return true;
+  }
+
+  const directProgramId = normalizeProgramId(offering?.program_id);
+  if (directProgramId) {
+    return directProgramId === normalizedProgramId;
+  }
+
+  const legacyGroupPrograms = Array.isArray(group?.program_ids)
+    ? group.program_ids.map((item) => String(item || '').trim()).filter(Boolean)
+    : [];
+  if (legacyGroupPrograms.length) {
+    return legacyGroupPrograms.includes(normalizedProgramId);
+  }
+
+  return true;
+};
+
 const buildAutoInvoicePayload = ({ institutionId, student, profile, progress, settings }) => {
   if (!progress?.current_group_id || !progress?.current_period_id) {
     return null;
@@ -98,8 +122,18 @@ const buildAutoInvoicePayload = ({ institutionId, student, profile, progress, se
     return null;
   }
 
+  const studentProgramId =
+    progress?.program_id || profile?.tertiary?.program_id || profile?.program_id || null;
+
   const currentCourses = (settings.academics?.offerings || []).filter(
-    (item) => item.group_id === currentGroup.id && item.period_id === currentPeriod.id
+    (item) =>
+      item.group_id === currentGroup.id &&
+      item.period_id === currentPeriod.id &&
+      offeringMatchesProgram({
+        offering: item,
+        programId: studentProgramId,
+        group: currentGroup,
+      })
   );
   const pricedCourses = currentCourses.map((course) => {
     const fee = resolveOfferingFee({ offering: course, profile, settings });
@@ -417,6 +451,37 @@ const serializeStudentListItem = ({ student, profile }) => {
   };
 };
 
+const serializeDeletedStudentListItem = ({ student, profile }) => {
+  const fullName = `${student.user?.first_name || ''} ${student.user?.last_name || ''}`.trim();
+  return {
+    id: student.id,
+    name: fullName || profile?.full_name || 'Student',
+    student_number: student.student_number,
+    className:
+      student.class?.name || profile?.group_name || profile?.class_name || profile?.assigned_class || 'Unassigned',
+    level: student.level?.level_code || profile?.level_code || '',
+    status: student.status,
+    deleted_at:
+      student.deletedAt ||
+      student.deleted_at ||
+      student.user?.deletedAt ||
+      student.user?.deleted_at ||
+      profile?.deleted_at ||
+      null,
+    photo: student.user?.profile_photo || student.photo_url || null,
+    guardian: profile?.guardian_name || 'No guardian linked',
+  };
+};
+
+const assertStudentAdmin = (actor) => {
+  const role = String(actor?.role || '');
+  if (role !== 'institution_admin') {
+    throw Object.assign(new Error('Only institution admins can manage student deletion.'), {
+      statusCode: 403,
+    });
+  }
+};
+
 const listStudentsFromDatabase = async ({ institutionId, parentId }) => {
   const where = { institution_id: institutionId };
 
@@ -468,6 +533,44 @@ const listStudents = async (context) => {
     return listStudentsFromDatabase(context);
   }
   return listStudentsFromRuntime(context);
+};
+
+const listDeletedStudentsFromDatabase = async ({ institutionId }) => {
+  const students = await models.Student.findAll({
+    where: {
+      institution_id: institutionId,
+      deletedAt: { [Op.ne]: null },
+    },
+    paranoid: false,
+    include: [
+      { model: models.User, as: 'user', paranoid: false, required: false },
+      { model: models.Class, as: 'class', required: false },
+      { model: models.EducationLevel, as: 'level', required: false },
+    ],
+    order: [['deleted_at', 'DESC']],
+  });
+
+  const institution = await models.Institution.findByPk(institutionId);
+  const settings = ensureAdmissionsSettings(institution?.settings);
+  const profileMap = new Map(
+    settings.admissions.student_profiles.map((item) => [item.student_id, item])
+  );
+
+  return students.map((student) =>
+    serializeDeletedStudentListItem({ student, profile: profileMap.get(student.id) })
+  );
+};
+
+const listDeletedStudentsFromRuntime = async ({ institutionId }) =>
+  (store.students.profiles || []).filter(
+    (student) => student.institution_id === institutionId && student.deleted_at
+  );
+
+const listDeletedStudents = async (context) => {
+  if (databaseReady()) {
+    return listDeletedStudentsFromDatabase(context);
+  }
+  return listDeletedStudentsFromRuntime(context);
 };
 
 const getStudentFromDatabase = async ({ institutionId, studentId }) => {
@@ -1096,10 +1199,297 @@ const updateStudent = async (context) => {
   return updateStudentInRuntime(context);
 };
 
+const markStudentDeletedInSettings = ({ settings, studentId, deletedAt, actorId }) => {
+  const profile = settings.admissions.student_profiles.find((item) => item.student_id === studentId);
+  if (profile) {
+    profile.deleted_at = deletedAt;
+    profile.deleted_by = actorId;
+  }
+};
+
+const clearStudentDeletedInSettings = ({ settings, studentId }) => {
+  const profile = settings.admissions.student_profiles.find((item) => item.student_id === studentId);
+  if (profile) {
+    delete profile.deleted_at;
+    delete profile.deleted_by;
+  }
+};
+
+const purgeStudentFromSettings = ({ settings, studentId }) => {
+  settings.admissions.student_profiles = (settings.admissions.student_profiles || []).filter(
+    (item) => item.student_id !== studentId
+  );
+  settings.tertiary.student_progress = (settings.tertiary.student_progress || []).filter(
+    (item) => item.student_id !== studentId
+  );
+  settings.tertiary.registrations = (settings.tertiary.registrations || []).filter(
+    (item) => item.student_id !== studentId
+  );
+  settings.tertiary.transcripts = (settings.tertiary.transcripts || []).filter(
+    (item) => item.student_id !== studentId
+  );
+  settings.finance.student_credits = (settings.finance.student_credits || []).filter(
+    (item) => item.student_id !== studentId
+  );
+};
+
+const deleteStudentInDatabase = async ({ institutionId, studentId, actor, ip }) => {
+  assertStudentAdmin(actor);
+  const transaction = await sequelize.transaction();
+
+  try {
+    const student = await models.Student.findOne({
+      where: { id: studentId, institution_id: institutionId },
+      include: [{ model: models.User, as: 'user' }],
+      transaction,
+    });
+    if (!student) {
+      throw Object.assign(new Error('Student not found.'), { statusCode: 404 });
+    }
+
+    const institution = await models.Institution.findByPk(institutionId, { transaction });
+    const settings = ensureAdmissionsSettings(institution?.settings);
+    const deletedAt = new Date().toISOString();
+
+    await student.destroy({ transaction });
+    if (student.user) {
+      await student.user.update({ is_active: false }, { transaction });
+      await student.user.destroy({ transaction });
+    }
+
+    markStudentDeletedInSettings({
+      settings,
+      studentId,
+      deletedAt,
+      actorId: actor.id,
+    });
+    await institution?.update({ settings }, { transaction });
+    await transaction.commit();
+
+    await logAudit({
+      userId: actor.id,
+      action: 'DELETE',
+      resourceType: 'student_profile',
+      resourceId: studentId,
+      previousValues: { deleted_at: deletedAt },
+      ip,
+    });
+
+    return { id: studentId, deleted: true, deleted_at: deletedAt };
+  } catch (error) {
+    await transaction.rollback();
+    throw error;
+  }
+};
+
+const deleteStudentInRuntime = async ({ institutionId, studentId, actor, ip }) => {
+  assertStudentAdmin(actor);
+  const student = (store.students.profiles || []).find(
+    (item) => item.id === studentId && item.institution_id === institutionId && !item.deleted_at
+  );
+  if (!student) {
+    throw Object.assign(new Error('Student not found.'), { statusCode: 404 });
+  }
+  student.deleted_at = new Date().toISOString();
+  student.deleted_by = actor.id;
+
+  await logAudit({
+    userId: actor.id,
+    action: 'DELETE',
+    resourceType: 'student_profile',
+    resourceId: studentId,
+    previousValues: { deleted_at: student.deleted_at },
+    ip,
+  });
+
+  return { id: studentId, deleted: true, deleted_at: student.deleted_at };
+};
+
+const deleteStudent = async (context) => {
+  if (databaseReady()) {
+    return deleteStudentInDatabase(context);
+  }
+  return deleteStudentInRuntime(context);
+};
+
+const restoreStudentInDatabase = async ({ institutionId, studentId, actor, ip }) => {
+  assertStudentAdmin(actor);
+  const transaction = await sequelize.transaction();
+
+  try {
+    const student = await models.Student.findOne({
+      where: { id: studentId, institution_id: institutionId },
+      paranoid: false,
+      include: [{ model: models.User, as: 'user', paranoid: false, required: false }],
+      transaction,
+    });
+    if (!student || !student.deletedAt) {
+      throw Object.assign(new Error('Deleted student not found.'), { statusCode: 404 });
+    }
+
+    const institution = await models.Institution.findByPk(institutionId, { transaction });
+    const settings = ensureAdmissionsSettings(institution?.settings);
+
+    if (student.user?.deletedAt) {
+      await student.user.restore({ transaction });
+    }
+    if (student.user) {
+      await student.user.update({ is_active: true }, { transaction });
+    }
+    await student.restore({ transaction });
+    clearStudentDeletedInSettings({ settings, studentId });
+    await institution?.update({ settings }, { transaction });
+    await transaction.commit();
+
+    await logAudit({
+      userId: actor.id,
+      action: 'RESTORE',
+      resourceType: 'student_profile',
+      resourceId: studentId,
+      newValues: { restored: true },
+      ip,
+    });
+
+    return getStudentFromDatabase({ institutionId, studentId });
+  } catch (error) {
+    await transaction.rollback();
+    throw error;
+  }
+};
+
+const restoreStudentInRuntime = async ({ institutionId, studentId, actor, ip }) => {
+  assertStudentAdmin(actor);
+  const student = (store.students.profiles || []).find(
+    (item) => item.id === studentId && item.institution_id === institutionId && item.deleted_at
+  );
+  if (!student) {
+    throw Object.assign(new Error('Deleted student not found.'), { statusCode: 404 });
+  }
+  delete student.deleted_at;
+  delete student.deleted_by;
+
+  await logAudit({
+    userId: actor.id,
+    action: 'RESTORE',
+    resourceType: 'student_profile',
+    resourceId: studentId,
+    newValues: { restored: true },
+    ip,
+  });
+
+  return student;
+};
+
+const restoreStudent = async (context) => {
+  if (databaseReady()) {
+    return restoreStudentInDatabase(context);
+  }
+  return restoreStudentInRuntime(context);
+};
+
+const permanentlyDeleteStudentInDatabase = async ({ institutionId, studentId, actor, ip }) => {
+  assertStudentAdmin(actor);
+  const transaction = await sequelize.transaction();
+
+  try {
+    const student = await models.Student.findOne({
+      where: { id: studentId, institution_id: institutionId },
+      paranoid: false,
+      include: [{ model: models.User, as: 'user', paranoid: false, required: false }],
+      transaction,
+    });
+    if (!student || !student.deletedAt) {
+      throw Object.assign(new Error('Deleted student not found.'), { statusCode: 404 });
+    }
+
+    const blockingChecks = await Promise.all([
+      models.StudentInvoice ? models.StudentInvoice.count({ where: { student_id: studentId }, transaction }) : 0,
+      models.Payment ? models.Payment.count({ where: { student_id: studentId }, transaction }) : 0,
+      models.AttendanceRecord ? models.AttendanceRecord.count({ where: { student_id: studentId }, transaction }) : 0,
+      models.AssessmentScore ? models.AssessmentScore.count({ where: { student_id: studentId }, transaction }) : 0,
+      models.ReportCard ? models.ReportCard.count({ where: { student_id: studentId }, transaction }) : 0,
+      models.DisciplineIncident ? models.DisciplineIncident.count({ where: { student_id: studentId }, transaction }) : 0,
+    ]);
+
+    if (blockingChecks.some((count) => Number(count) > 0)) {
+      throw Object.assign(
+        new Error('This student still has linked finance or academic records and cannot be permanently deleted.'),
+        { statusCode: 400 }
+      );
+    }
+
+    const institution = await models.Institution.findByPk(institutionId, { transaction });
+    const settings = ensureAdmissionsSettings(institution?.settings);
+
+    if (models.StudentMedical) {
+      await models.StudentMedical.destroy({ where: { student_id: studentId }, force: true, transaction });
+    }
+    if (models.StudentGuardian) {
+      await models.StudentGuardian.destroy({ where: { student_id: studentId }, force: true, transaction });
+    }
+
+    await student.destroy({ force: true, transaction });
+    if (student.user) {
+      await student.user.destroy({ force: true, transaction });
+    }
+
+    purgeStudentFromSettings({ settings, studentId });
+    await institution?.update({ settings }, { transaction });
+    await transaction.commit();
+
+    await logAudit({
+      userId: actor.id,
+      action: 'PURGE',
+      resourceType: 'student_profile',
+      resourceId: studentId,
+      newValues: { purged: true },
+      ip,
+    });
+
+    return { id: studentId, purged: true };
+  } catch (error) {
+    await transaction.rollback();
+    throw error;
+  }
+};
+
+const permanentlyDeleteStudentInRuntime = async ({ institutionId, studentId, actor, ip }) => {
+  assertStudentAdmin(actor);
+  const index = (store.students.profiles || []).findIndex(
+    (item) => item.id === studentId && item.institution_id === institutionId && item.deleted_at
+  );
+  if (index < 0) {
+    throw Object.assign(new Error('Deleted student not found.'), { statusCode: 404 });
+  }
+  store.students.profiles.splice(index, 1);
+
+  await logAudit({
+    userId: actor.id,
+    action: 'PURGE',
+    resourceType: 'student_profile',
+    resourceId: studentId,
+    newValues: { purged: true },
+    ip,
+  });
+
+  return { id: studentId, purged: true };
+};
+
+const permanentlyDeleteStudent = async (context) => {
+  if (databaseReady()) {
+    return permanentlyDeleteStudentInDatabase(context);
+  }
+  return permanentlyDeleteStudentInRuntime(context);
+};
+
 module.exports = {
   listStudents,
+  listDeletedStudents,
   getStudent,
   getRoster,
   createStudent,
   updateStudent,
+  deleteStudent,
+  restoreStudent,
+  permanentlyDeleteStudent,
 };

@@ -22,8 +22,12 @@ router.use(
 
 router.get('/roster', controller.getRoster);
 router.post('/', enforceStudentPlanLimit, controller.createStudent);
+router.get('/deleted', controller.listDeletedStudents);
 router.get('/', controller.listStudents);
+router.delete('/:studentId/permanent', controller.permanentlyDeleteStudent);
+router.post('/:studentId/restore', controller.restoreStudent);
 router.patch('/:studentId', controller.updateStudent);
+router.delete('/:studentId', controller.deleteStudent);
 router.get('/:studentId', controller.getStudent);
 
 module.exports = router;

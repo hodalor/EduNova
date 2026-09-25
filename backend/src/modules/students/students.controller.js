@@ -13,6 +13,11 @@ module.exports = {
       parentId: req.user.role === 'parent' ? req.query.parent_id || req.user.id : req.query.parent_id,
     })
   ),
+  listDeletedStudents: wrap((req) =>
+    studentsService.listDeletedStudents({
+      institutionId: req.institutionId,
+    })
+  ),
   getStudent: wrap((req) =>
     studentsService.getStudent({
       institutionId: req.institutionId,
@@ -25,6 +30,30 @@ module.exports = {
       studentId: req.params.studentId,
       payload: req.body,
       actorId: req.user.id,
+      ip: req.ip,
+    })
+  ),
+  deleteStudent: wrap((req) =>
+    studentsService.deleteStudent({
+      institutionId: req.institutionId,
+      studentId: req.params.studentId,
+      actor: req.user,
+      ip: req.ip,
+    })
+  ),
+  restoreStudent: wrap((req) =>
+    studentsService.restoreStudent({
+      institutionId: req.institutionId,
+      studentId: req.params.studentId,
+      actor: req.user,
+      ip: req.ip,
+    })
+  ),
+  permanentlyDeleteStudent: wrap((req) =>
+    studentsService.permanentlyDeleteStudent({
+      institutionId: req.institutionId,
+      studentId: req.params.studentId,
+      actor: req.user,
       ip: req.ip,
     })
   ),

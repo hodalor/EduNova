@@ -64,11 +64,11 @@ const SettingsWorkspacePage = () => {
   ]);
 
   const currencyOptions = useMemo(() => {
-    const parsed = currencyInput
+    const parsed: string[] = currencyInput
       .split(',')
-      .map((item) => item.trim().toUpperCase())
+      .map((item: string) => item.trim().toUpperCase())
       .filter(Boolean);
-    return Array.from(new Set(parsed.length ? parsed : fallbackFinanceSettings.currencies));
+    return Array.from<string>(new Set(parsed.length ? parsed : fallbackFinanceSettings.currencies));
   }, [currencyInput]);
 
   useEffect(() => {
@@ -77,7 +77,7 @@ const SettingsWorkspacePage = () => {
     }
     if (!currencyOptions.includes(defaultInternationalCurrency)) {
       setDefaultInternationalCurrency(
-        currencyOptions.find((item) => item !== (currencyOptions[0] || '')) ||
+        currencyOptions.find((item: string) => item !== (currencyOptions[0] || '')) ||
           currencyOptions[0] ||
           fallbackFinanceSettings.default_international_currency
       );

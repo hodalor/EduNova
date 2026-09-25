@@ -11,6 +11,7 @@ import Alert from '../../components/ui/Alert';
 import Badge from '../../components/ui/Badge';
 import Button from '../../components/ui/Button';
 import Card from '../../components/ui/Card';
+import { ConfirmDialog } from '../../components/ui/core';
 import Input from '../../components/ui/Input';
 import Modal from '../../components/ui/Modal';
 import PageLoader from '../../components/ui/PageLoader';
@@ -82,6 +83,7 @@ const UserManagementPage = () => {
   const queryClient = useQueryClient();
   const [showCreate, setShowCreate] = useState(false);
   const [editingUser, setEditingUser] = useState<ManagedUserRow | null>(null);
+  const [confirmDeleteUser, setConfirmDeleteUser] = useState<ManagedUserRow | null>(null);
   const { data, isLoading } = useQuery({
     queryKey: ['user-management-users'],
     queryFn: eduovaApi.users.list,
@@ -255,15 +257,7 @@ const UserManagementPage = () => {
                   size="sm"
                   variant="secondary"
                   leftIcon={<Trash2 className="h-4 w-4" />}
-                  onClick={() => {
-                    if (
-                      window.confirm(
-                        `Delete ${row.original.first_name} ${row.original.last_name}?`
-                      )
-                    ) {
-                      deleteUser.mutate(row.original.id);
-                    }
-                  }}
+                  onClick={() => setConfirmDeleteUser(row.original)}
                 >
                   Delete
                 </Button>
@@ -372,6 +366,23 @@ const UserManagementPage = () => {
           </div>
         </form>
       </Modal>
+
+      <ConfirmDialog
+        open={Boolean(confirmDeleteUser)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setConfirmDeleteUser(null);
+          }
+        }}
+        title="Delete User"
+        description={`Delete ${confirmDeleteUser?.first_name || ''} ${confirmDeleteUser?.last_name || ''}?`}
+        onConfirm={() => {
+          if (confirmDeleteUser) {
+            deleteUser.mutate(confirmDeleteUser.id);
+          }
+        }}
+        confirmLabel="Delete User"
+      />
     </div>
   );
 };

@@ -1,8 +1,8 @@
-const { Op } = require('sequelize');
-
 const { createSequence } = require('../../shared/helpers/common');
 const { logAudit } = require('../../shared/services/audit-log.service');
 const { store } = require('../../shared/store/runtime-store');
+const { Op } = require('sequelize');
+
 const { models, sequelize } = require('../../config/database');
 const analyticsService = require('../analytics/analytics.service');
 
@@ -118,6 +118,26 @@ const setRuntimeStudentCreditBalance = (studentId, amount) => {
   }
 
   return nextAmount;
+};
+
+const resolveStudentCategory = (profile = {}) =>
+  String(profile.student_category || profile.studentCategory || 'local').trim().toLowerCase() ===
+  'international'
+    ? 'international'
+    : 'local';
+
+const resolveInvoiceFinanceMeta = ({ settings, profile = {}, invoice = {} }) => {
+  const financeSettings = ensureFinanceSettings(settings);
+  const studentCategory = resolveStudentCategory(profile);
+
+  return {
+    student_category: studentCategory,
+    currency_code:
+      invoice.currency_code ||
+      (studentCategory === 'international'
+        ? financeSettings.finance.default_international_currency
+        : financeSettings.finance.default_local_currency),
+  };
 };
 
 const ensureCurrentAcademicYear = async ({ institutionId, transaction }) => {
@@ -385,6 +405,7 @@ const listInvoices = async ({ institutionId, query }) => {
         const profile = profileMap.get(invoice.student_id) || {};
         const fullName = `${invoice.student?.user?.first_name || ''} ${invoice.student?.user?.last_name || ''}`.trim();
         const creditBalance = getStudentCreditBalance({ settings, studentId: invoice.student_id });
+        const financeMeta = resolveInvoiceFinanceMeta({ settings, profile, invoice });
 
         return {
           ...invoice,
@@ -397,6 +418,8 @@ const listInvoices = async ({ institutionId, query }) => {
             null,
           student_number: invoice.student?.student_number || profile.student_number || null,
           level_code: invoice.student?.level?.level_code || profile.level_code || null,
+          student_category: financeMeta.student_category,
+          currency_code: financeMeta.currency_code,
           credit_balance: creditBalance,
           net_balance: Math.max(Number(invoice.balance || 0) - creditBalance, 0),
         };
@@ -410,9 +433,13 @@ const listInvoices = async ({ institutionId, query }) => {
       });
 
       const enriched = merged.map((invoice) => {
+        const profile = profileMap.get(invoice.student_id) || {};
         const creditBalance = getStudentCreditBalance({ settings, studentId: invoice.student_id });
+        const financeMeta = resolveInvoiceFinanceMeta({ settings, profile, invoice });
         return {
           ...invoice,
+          student_category: invoice.student_category || financeMeta.student_category,
+          currency_code: invoice.currency_code || financeMeta.currency_code,
           credit_balance: creditBalance,
           net_balance: Math.max(Number(invoice.balance || 0) - creditBalance, 0),
         };
@@ -427,6 +454,11 @@ const listInvoices = async ({ institutionId, query }) => {
     const creditBalance = getRuntimeStudentCreditBalance(invoice.student_id);
     return {
       ...invoice,
+      student_category:
+        String(invoice.student_category || 'local').trim().toLowerCase() === 'international'
+          ? 'international'
+          : 'local',
+      currency_code: invoice.currency_code || 'GHS',
       credit_balance: creditBalance,
       net_balance: Math.max(Number(invoice.balance || 0) - creditBalance, 0),
     };
@@ -521,89 +553,95 @@ const recordPayment = async ({ institutionId, userId, payload, ip }) => {
   const amount = Number(payload.amount || 0);
   let invoice;
   let invoiceModel;
+  const invoiceIdentifier = String(payload.invoice_id || '').trim();
+  const invoiceNumber = String(payload.invoice_number || '').trim();
 
   if (models.StudentInvoice && models.Payment && sequelize?.transaction) {
+    const tx = await sequelize.transaction();
     try {
-      const tx = await sequelize.transaction();
-      try {
-        invoiceModel = await models.StudentInvoice.findOne({
-          where: { id: payload.invoice_id, institution_id: institutionId },
-          transaction: tx,
-        });
-        if (!invoiceModel) {
-          await tx.rollback();
-          throw Object.assign(new Error('Invoice not found.'), { statusCode: 404 });
-        }
-        const institution = models.Institution
-          ? await models.Institution.findByPk(institutionId, {
-              attributes: ['id', 'settings'],
-              transaction: tx,
-            }).catch(() => null)
-          : null;
-        const settings = ensureFinanceSettings(ensureAdmissionsSettings(institution?.settings));
-        const paymentState = applyInvoicePaymentState({ invoice: invoiceModel, amount });
-        await invoiceModel.save({ transaction: tx });
-        if (paymentState.excess_amount > 0) {
-          const existingCredit = getStudentCreditBalance({
-            settings,
-            studentId: invoiceModel.student_id,
-          });
-          setStudentCreditBalance({
-            settings,
-            studentId: invoiceModel.student_id,
-            amount: existingCredit + paymentState.excess_amount,
-          });
-          if (institution) {
-            await institution.update({ settings }, { transaction: tx });
-          }
-        }
-
-        const payment = await models.Payment.create(
-          {
-            invoice_id: invoiceModel.id,
-            student_id: invoiceModel.student_id,
-            amount,
-            payment_method: payload.payment_method || 'cash',
-            transaction_ref: payload.transaction_ref || null,
-            receipt_number: payload.receipt_number || createSequence('RCT', new Date(), (store.finance.payments.length || 0) + 1, 3),
-            paid_at: payload.paid_at || new Date().toISOString(),
-            received_by: userId,
-            notes:
-              paymentState.excess_amount > 0
-                ? [payload.notes || null, `Excess credited: ${paymentState.excess_amount}`]
-                    .filter(Boolean)
-                    .join(' | ')
-                : payload.notes || null,
-            is_verified: true,
-          },
-          { transaction: tx }
-        );
-        await tx.commit();
-        invoice = invoiceModel.toJSON();
-        const paymentJson = payment.toJSON();
-
-        await logAudit({
-          userId,
-          action: 'UPDATE',
-          resourceType: 'invoice_payment',
-          resourceId: payment.id,
-          newValues: paymentJson,
-          ip,
-        });
-        await analyticsService.invalidateAnalyticsCache(institutionId);
-        return { invoice, payment: paymentJson };
-      } catch (error) {
-        await tx.rollback();
-        throw error;
+      invoiceModel = await models.StudentInvoice.findOne({
+        where: {
+          institution_id: institutionId,
+          [Op.or]: [
+            ...(invoiceIdentifier ? [{ id: invoiceIdentifier }] : []),
+            ...(invoiceNumber ? [{ invoice_number: invoiceNumber }] : []),
+          ],
+        },
+        transaction: tx,
+      });
+      if (!invoiceModel) {
+        throw Object.assign(new Error('Invoice not found.'), { statusCode: 404 });
       }
-    } catch (_error) {
-      if (_error.statusCode === 404) throw _error;
-      // fall through to runtime
+      const institution = models.Institution
+        ? await models.Institution.findByPk(institutionId, {
+            attributes: ['id', 'settings'],
+            transaction: tx,
+          }).catch(() => null)
+        : null;
+      const settings = ensureFinanceSettings(ensureAdmissionsSettings(institution?.settings));
+      const paymentState = applyInvoicePaymentState({ invoice: invoiceModel, amount });
+      await invoiceModel.save({ transaction: tx });
+      if (paymentState.excess_amount > 0) {
+        const existingCredit = getStudentCreditBalance({
+          settings,
+          studentId: invoiceModel.student_id,
+        });
+        setStudentCreditBalance({
+          settings,
+          studentId: invoiceModel.student_id,
+          amount: existingCredit + paymentState.excess_amount,
+        });
+        if (institution) {
+          await institution.update({ settings }, { transaction: tx });
+        }
+      }
+
+      const payment = await models.Payment.create(
+        {
+          invoice_id: invoiceModel.id,
+          student_id: invoiceModel.student_id,
+          amount,
+          payment_method: payload.payment_method || 'cash',
+          transaction_ref: payload.transaction_ref || null,
+          receipt_number:
+            payload.receipt_number || createSequence('RCT', new Date(), (store.finance.payments.length || 0) + 1, 3),
+          paid_at: payload.paid_at || new Date().toISOString(),
+          received_by: userId,
+          notes:
+            paymentState.excess_amount > 0
+              ? [payload.notes || null, `Excess credited: ${paymentState.excess_amount}`]
+                  .filter(Boolean)
+                  .join(' | ')
+              : payload.notes || null,
+          is_verified: true,
+        },
+        { transaction: tx }
+      );
+      await tx.commit();
+      invoice = invoiceModel.toJSON();
+      const paymentJson = payment.toJSON();
+
+      await logAudit({
+        userId,
+        action: 'UPDATE',
+        resourceType: 'invoice_payment',
+        resourceId: payment.id,
+        newValues: paymentJson,
+        ip,
+      });
+      await analyticsService.invalidateAnalyticsCache(institutionId);
+      return { invoice, payment: paymentJson };
+    } catch (error) {
+      await tx.rollback();
+      throw error;
     }
   }
 
   invoice = store.finance.invoices.find(
-    (item) => item.id === payload.invoice_id && item.institution_id === institutionId
+    (item) =>
+      item.institution_id === institutionId &&
+      (String(item.id) === invoiceIdentifier ||
+        (invoiceNumber && String(item.invoice_number) === invoiceNumber))
   );
   if (!invoice) {
     throw Object.assign(new Error('Invoice not found.'), { statusCode: 404 });
@@ -994,6 +1032,7 @@ const approvePaymentApproval = async ({ institutionId, approvalId, payload, user
           userId,
           payload: {
             invoice_id: current.invoice_id,
+            invoice_number: current.invoice_number,
             amount: current.amount,
             payment_method: current.payment_method,
             transaction_ref: current.transaction_ref,
@@ -1065,6 +1104,7 @@ const approvePaymentApproval = async ({ institutionId, approvalId, payload, user
         userId,
         payload: {
           invoice_id: current.invoice_id,
+          invoice_number: current.invoice_number,
           amount: current.amount,
           payment_method: current.payment_method,
           transaction_ref: current.transaction_ref,
@@ -1133,6 +1173,8 @@ const listDebtors = async ({ institutionId }) => {
         student_id: studentId,
         student_name: inv.student_name,
         class_name: inv.class_name,
+        student_category: inv.student_category || 'local',
+        currency_code: inv.currency_code || 'GHS',
         total_owing: 0,
         invoice_count: 0,
         invoices: [],

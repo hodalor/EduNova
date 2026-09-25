@@ -7,6 +7,7 @@ import { eduovaApi } from '../../api/eduovaApi';
 import Badge from '../../components/ui/Badge';
 import Button from '../../components/ui/Button';
 import Card from '../../components/ui/Card';
+import { ConfirmDialog } from '../../components/ui/core';
 import Input from '../../components/ui/Input';
 import Modal from '../../components/ui/Modal';
 import PageLoader from '../../components/ui/PageLoader';
@@ -46,6 +47,7 @@ interface AcademicOffering {
   id: string;
   group_id: string;
   period_id: string;
+  program_id?: string | null;
   type: 'subject' | 'course';
   code: string;
   name: string;
@@ -60,13 +62,20 @@ interface AcademicOffering {
 }
 
 interface TertiaryOverview {
-  programs: Array<{ id: string; name: string; code?: string; credential?: string }>;
+  programs: TertiaryProgramOption[];
 }
 
 interface FinanceSettings {
   currencies: string[];
   default_local_currency: string;
   default_international_currency: string;
+}
+
+interface TertiaryProgramOption {
+  id: string;
+  name: string;
+  code?: string;
+  credential?: string;
 }
 
 interface StructureResponse {
@@ -196,6 +205,7 @@ const initialPeriodForm = {
 const initialOfferingForm = {
   group_id: '',
   period_id: '',
+  program_id: '',
   type: 'course' as 'subject' | 'course',
   code: '',
   name: '',
@@ -231,6 +241,19 @@ const AcademicStructurePage = () => {
   const [groupForm, setGroupForm] = useState(initialGroupForm);
   const [periodForm, setPeriodForm] = useState(initialPeriodForm);
   const [offeringForm, setOfferingForm] = useState(initialOfferingForm);
+  const [confirmDeleteState, setConfirmDeleteState] = useState<{
+    open: boolean;
+    title: string;
+    description: string;
+    action: null | (() => void);
+    confirmLabel: string;
+  }>({
+    open: false,
+    title: '',
+    description: '',
+    action: null,
+    confirmLabel: 'Delete',
+  });
   const allowedLevels = useMemo(() => getInstitutionLevels(activeInstitution), [activeInstitution]);
 
   const { data, isLoading } = useQuery<StructureResponse>({
@@ -276,21 +299,7 @@ const AcademicStructurePage = () => {
       ),
     [allowedLevels, data?.groups]
   );
-  const groups = useMemo(
-    () =>
-      baseGroups.filter((group) => {
-        if (!selectedProgramId) {
-          return true;
-        }
-
-        if (group.level_code !== 'TR') {
-          return true;
-        }
-
-        return (group.program_ids || []).includes(selectedProgramId);
-      }),
-    [baseGroups, selectedProgramId]
-  );
+  const groups = useMemo(() => baseGroups, [baseGroups]);
   const visibleGroupIds = useMemo(() => new Set(groups.map((group) => group.id)), [groups]);
   const basePeriods = useMemo(
     () =>
@@ -314,17 +323,35 @@ const AcademicStructurePage = () => {
     () => baseOfferings.filter((offering) => visibleGroupIds.has(offering.group_id)),
     [baseOfferings, visibleGroupIds]
   );
+  const tertiaryProgramMap = useMemo(
+    () =>
+      new Map<string, string>(
+        (tertiaryOverview?.programs || []).map((program: TertiaryProgramOption) => [
+          program.id,
+          program.name,
+        ])
+      ),
+    [tertiaryOverview?.programs]
+  );
 
   const groupCounts = useMemo(
     () =>
       groups.reduce<Record<string, { periods: number; offerings: number }>>((accumulator, group) => {
         accumulator[group.id] = {
           periods: periods.filter((period) => period.group_id === group.id).length,
-          offerings: offerings.filter((offering) => offering.group_id === group.id).length,
+          offerings: offerings.filter((offering) => {
+            if (offering.group_id !== group.id) {
+              return false;
+            }
+            if (!selectedProgramId || group.level_code !== 'TR') {
+              return true;
+            }
+            return String(offering.program_id || '') === String(selectedProgramId);
+          }).length,
         };
         return accumulator;
       }, {}),
-    [groups, offerings, periods]
+    [groups, offerings, periods, selectedProgramId]
   );
 
   const filteredPeriods = useMemo(
@@ -334,9 +361,20 @@ const AcademicStructurePage = () => {
   const filteredOfferings = useMemo(
     () =>
       selectedGroupId
-        ? offerings.filter((offering) => offering.group_id === selectedGroupId)
-        : offerings,
-    [offerings, selectedGroupId]
+        ? offerings.filter(
+            (offering) =>
+              offering.group_id === selectedGroupId &&
+              (!selectedProgramId ||
+                String(offering.program_id || '') === String(selectedProgramId) ||
+                (groups.find((group) => group.id === offering.group_id)?.level_code || '') !== 'TR')
+          )
+        : offerings.filter(
+            (offering) =>
+              !selectedProgramId ||
+              String(offering.program_id || '') === String(selectedProgramId) ||
+              (groups.find((group) => group.id === offering.group_id)?.level_code || '') !== 'TR'
+          ),
+    [groups, offerings, selectedGroupId, selectedProgramId]
   );
   const tertiaryPrograms = useMemo(() => tertiaryOverview?.programs || [], [tertiaryOverview?.programs]);
   const activeOfferingGroup = useMemo(
@@ -347,28 +385,24 @@ const AcademicStructurePage = () => {
     if (!offeringForm.group_id) {
       return [];
     }
+    if (activeOfferingGroup?.level_code === 'TR' && !offeringForm.program_id) {
+      return [];
+    }
 
-    const relatedGroupIds =
-      activeOfferingGroup?.level_code === 'TR' && (activeOfferingGroup.program_ids || []).length
-        ? baseGroups
-            .filter(
-              (group) =>
-                group.level_code === 'TR' &&
-                (group.program_ids || []).some((programId) =>
-                  (activeOfferingGroup.program_ids || []).includes(programId)
-                )
-            )
-            .map((group) => group.id)
-        : [offeringForm.group_id];
+    const relatedGroupIds = [offeringForm.group_id];
 
     return baseOfferings
       .filter(
         (offering) =>
           relatedGroupIds.includes(offering.group_id) &&
+          (
+            activeOfferingGroup?.level_code !== 'TR' ||
+            String(offering.program_id || '') === String(offeringForm.program_id || '')
+          ) &&
           offering.id !== editingOfferingId
       )
       .sort((a, b) => a.code.localeCompare(b.code));
-  }, [activeOfferingGroup, baseGroups, baseOfferings, editingOfferingId, offeringForm.group_id]);
+  }, [activeOfferingGroup, baseOfferings, editingOfferingId, offeringForm.group_id, offeringForm.program_id]);
 
   const detailGroup =
     detailState?.type === 'groups'
@@ -495,10 +529,15 @@ const AcademicStructurePage = () => {
 
   const resetOfferingForm = (groupId = '') => {
     const sourcePeriods = periods.filter((period) => period.group_id === groupId);
+    const sourceGroup = groups.find((group) => group.id === groupId);
     setOfferingForm({
       ...initialOfferingForm,
       group_id: groupId,
       period_id: sourcePeriods[0]?.id || '',
+      program_id:
+        sourceGroup?.level_code === 'TR'
+          ? selectedProgramId || tertiaryPrograms[0]?.id || ''
+          : '',
       type: showCourseOption ? 'course' : 'subject',
     });
     setEditingOfferingId('');
@@ -688,7 +727,7 @@ const AcademicStructurePage = () => {
       group_type: group.group_type,
       level_code: group.level_code,
       calendar_type: group.calendar_type,
-      program_ids: group.program_ids || [],
+      program_ids: [],
     });
     setGroupModalOpen(true);
   };
@@ -721,6 +760,7 @@ const AcademicStructurePage = () => {
     setOfferingForm({
       group_id: offering.group_id,
       period_id: offering.period_id,
+      program_id: offering.program_id || '',
       type: offering.type,
       code: offering.code,
       name: offering.name,
@@ -737,26 +777,32 @@ const AcademicStructurePage = () => {
   };
 
   const handleDelete = (type: StructureTab, id: string, label: string) => {
-    if (!window.confirm(`Delete ${label}? This will remove linked setup records from the current structure.`)) {
-      return;
-    }
+    setConfirmDeleteState({
+      open: true,
+      title: `Delete ${label}`,
+      description: `Delete ${label}? This removes it from the current structure and clears linked setup records from this workspace.`,
+      action: () => {
+        if (type === 'groups') {
+          deleteGroup.mutate(id);
+          return;
+        }
 
-    if (type === 'groups') {
-      deleteGroup.mutate(id);
-      return;
-    }
+        if (type === 'periods') {
+          deletePeriod.mutate(id);
+          return;
+        }
 
-    if (type === 'periods') {
-      deletePeriod.mutate(id);
-      return;
-    }
-
-    deleteOffering.mutate(id);
+        deleteOffering.mutate(id);
+      },
+      confirmLabel: `Delete ${label}`,
+    });
   };
 
   const activeOfferingPeriods = periods
     .filter((period) => period.group_id === offeringForm.group_id)
     .sort((a, b) => a.sequence - b.sequence);
+  const activeOfferingGroupLevelCode =
+    groups.find((group) => group.id === offeringForm.group_id)?.level_code || '';
 
   return (
     <div className="space-y-6">
@@ -814,7 +860,6 @@ const AcademicStructurePage = () => {
                   label="Program Focus"
                   value={selectedProgramId}
                   onChange={(event) => setSelectedProgramId(event.target.value)}
-                  helperText="Use one reusable level setup, then focus the view by program."
                 >
                   <option value="">All tertiary programs</option>
                   {tertiaryPrograms.map((program: { id: string; name: string }) => (
@@ -835,7 +880,6 @@ const AcademicStructurePage = () => {
                   label="Program Focus"
                   value={selectedProgramId}
                   onChange={(event) => setSelectedProgramId(event.target.value)}
-                  helperText="Levels are reusable. Filter by program to see the right roadmap chain."
                 >
                   <option value="">All tertiary programs</option>
                   {tertiaryPrograms.map((program: { id: string; name: string }) => (
@@ -962,6 +1006,7 @@ const AcademicStructurePage = () => {
                     {[
                       groupLabel,
                       periodLabel,
+                      ...(allowedLevels.includes('TR') ? ['Program'] : []),
                       'Code',
                       'Name',
                       'Type',
@@ -991,6 +1036,11 @@ const AcademicStructurePage = () => {
                       >
                         <td className="px-4 py-3">{group?.name || '-'}</td>
                         <td className="px-4 py-3">{period?.name || '-'}</td>
+                        {allowedLevels.includes('TR') ? (
+                          <td className="px-4 py-3">
+                            {tertiaryProgramMap.get(String(offering.program_id || '')) || '-'}
+                          </td>
+                        ) : null}
                         <td className="px-4 py-3 font-semibold text-brand-navy">{offering.code}</td>
                         <td className="px-4 py-3">{offering.name}</td>
                         <td className="px-4 py-3 capitalize">{offering.type}</td>
@@ -1076,23 +1126,11 @@ const AcademicStructurePage = () => {
             </div>
             {detailGroup.level_code === 'TR' ? (
               <div className="rounded-2xl border border-slate-200 p-4">
-                <p className="text-sm text-slate-500">Linked programs</p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {(detailGroup.program_ids || []).length ? (
-                    (detailGroup.program_ids || []).map((programId) => {
-                      const program = tertiaryPrograms.find(
-                        (item: { id: string; name: string }) => item.id === programId
-                      );
-                      return (
-                        <Badge key={programId} variant="info">
-                          {program?.name || programId}
-                        </Badge>
-                      );
-                    })
-                  ) : (
-                    <span className="text-sm text-slate-500">No programs linked yet.</span>
-                  )}
-                </div>
+                <p className="text-sm text-slate-500">Tertiary reuse</p>
+                <p className="mt-2 text-sm text-slate-600">
+                  This level is shared across tertiary programs. Program-specific differences start at the
+                  course layer.
+                </p>
               </div>
             ) : null}
             <div className="flex flex-wrap justify-end gap-3">
@@ -1200,6 +1238,14 @@ const AcademicStructurePage = () => {
                   {periods.find((period) => period.id === detailOffering.period_id)?.name || '-'}
                 </p>
               </div>
+              {allowedLevels.includes('TR') ? (
+                <div className="rounded-2xl bg-slate-50 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Program</p>
+                  <p className="mt-2 text-lg font-semibold text-brand-navy">
+                    {tertiaryProgramMap.get(String(detailOffering.program_id || '')) || '-'}
+                  </p>
+                </div>
+              ) : null}
               <div className="rounded-2xl bg-slate-50 p-4">
                 <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Credits</p>
                 <p className="mt-2 text-lg font-semibold text-brand-navy">{detailOffering.credit_hours ?? '-'}</p>
@@ -1276,7 +1322,11 @@ const AcademicStructurePage = () => {
           className="space-y-4"
           onSubmit={(event) => {
             event.preventDefault();
-            const payload = { ...groupForm, code: groupForm.code.toUpperCase() };
+            const payload = {
+              ...groupForm,
+              code: groupForm.code.toUpperCase(),
+              program_ids: groupForm.level_code === 'TR' ? [] : groupForm.program_ids,
+            };
             if (groupModalMode === 'create') {
               createGroup.mutate(payload);
               return;
@@ -1315,7 +1365,7 @@ const AcademicStructurePage = () => {
                 ...current,
                 level_code: event.target.value,
                 calendar_type: getDefaultCalendarForLevel(event.target.value),
-                program_ids: event.target.value === 'TR' ? current.program_ids : [],
+                program_ids: [],
               }))
             }
           >
@@ -1341,34 +1391,9 @@ const AcademicStructurePage = () => {
             <option value="block">Block</option>
           </Select>
           {groupForm.level_code === 'TR' ? (
-            <div className="space-y-2">
-              <label className="text-sm font-semibold text-slate-700">Linked Programs</label>
-              <div className="max-h-56 space-y-2 overflow-y-auto rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                {tertiaryPrograms.length ? (
-                  tertiaryPrograms.map((program: { id: string; name: string }) => {
-                    const checked = groupForm.program_ids.includes(program.id);
-                    return (
-                      <label key={program.id} className="flex items-center gap-3 rounded-2xl bg-white px-3 py-2 text-sm text-slate-700">
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={(event) =>
-                            setGroupForm((current) => ({
-                              ...current,
-                              program_ids: event.target.checked
-                                ? Array.from(new Set([...current.program_ids, program.id]))
-                                : current.program_ids.filter((item) => item !== program.id),
-                            }))
-                          }
-                        />
-                        <span>{program.name}</span>
-                      </label>
-                    );
-                  })
-                ) : (
-                  <p className="text-sm text-slate-500">Create tertiary programs first, then link this level to them.</p>
-                )}
-              </div>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+              Tertiary levels and semesters are shared across programs. Create them once, then select the
+              correct program when adding courses under each semester.
             </div>
           ) : null}
           <div className="flex justify-end gap-3">
@@ -1392,7 +1417,7 @@ const AcademicStructurePage = () => {
           }
         }}
         title={`${periodModalMode === 'create' ? 'Add' : 'Edit'} ${periodLabel}`}
-        description={`Attach a ${periodLabel.toLowerCase()} to the correct ${groupLabel.toLowerCase()} and manage it from the same workflow.`}
+        description={`Attach a ${periodLabel.toLowerCase()} to the correct ${groupLabel.toLowerCase()} and manage deadlines from the same workflow.`}
       >
         <form
           className="space-y-4"
@@ -1449,18 +1474,27 @@ const AcademicStructurePage = () => {
             value={periodForm.sequence}
             onChange={(event) => setPeriodForm((current) => ({ ...current, sequence: event.target.value }))}
           />
-          <Input
-            label="Start Date"
-            type="date"
-            value={periodForm.start_date}
-            onChange={(event) => setPeriodForm((current) => ({ ...current, start_date: event.target.value }))}
-          />
-          <Input
-            label="End Date"
-            type="date"
-            value={periodForm.end_date}
-            onChange={(event) => setPeriodForm((current) => ({ ...current, end_date: event.target.value }))}
-          />
+          {groups.find((group) => group.id === periodForm.group_id)?.level_code === 'TR' ? (
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+              Tertiary semesters are shared across programs and reuse the institution academic window. Set the
+              registration threshold, penalty, and deadline here.
+            </div>
+          ) : (
+            <>
+              <Input
+                label="Start Date"
+                type="date"
+                value={periodForm.start_date}
+                onChange={(event) => setPeriodForm((current) => ({ ...current, start_date: event.target.value }))}
+              />
+              <Input
+                label="End Date"
+                type="date"
+                value={periodForm.end_date}
+                onChange={(event) => setPeriodForm((current) => ({ ...current, end_date: event.target.value }))}
+              />
+            </>
+          )}
           <Input
             label={`Semester Base Fee (${localCurrency})`}
             type="number"
@@ -1551,6 +1585,7 @@ const AcademicStructurePage = () => {
               ...offeringForm,
               code: offeringForm.code.toUpperCase(),
               credit_hours: offeringForm.credit_hours ? Number(offeringForm.credit_hours) : null,
+              program_id: offeringForm.program_id || undefined,
               fee_amount: Number(offeringForm.fee_amount_local || 0),
               fee_amount_local: Number(offeringForm.fee_amount_local || 0),
               fee_amount_international: Number(offeringForm.fee_amount_international || 0),
@@ -1577,6 +1612,12 @@ const AcademicStructurePage = () => {
                 ...current,
                 group_id: event.target.value,
                 period_id: '',
+                program_id:
+                  groups.find((group) => group.id === event.target.value)?.level_code === 'TR'
+                    ? selectedProgramId || tertiaryPrograms[0]?.id || ''
+                    : '',
+                prerequisite_codes: [],
+                next_offering_codes: [],
               }))
             }
             disabled={offeringModalMode === 'edit'}
@@ -1588,6 +1629,27 @@ const AcademicStructurePage = () => {
               </option>
             ))}
           </Select>
+          {activeOfferingGroupLevelCode === 'TR' ? (
+            <Select
+              label="Program"
+              value={offeringForm.program_id}
+              onChange={(event) =>
+                setOfferingForm((current) => ({
+                  ...current,
+                  program_id: event.target.value,
+                  prerequisite_codes: [],
+                  next_offering_codes: [],
+                }))
+              }
+            >
+              <option value="">Select program</option>
+              {tertiaryPrograms.map((program: TertiaryProgramOption) => (
+                <option key={program.id} value={program.id}>
+                  {program.name}
+                </option>
+              ))}
+            </Select>
+          ) : null}
           <Select
             label={periodLabel}
             value={offeringForm.period_id}
@@ -1688,7 +1750,7 @@ const AcademicStructurePage = () => {
                 })
               ) : (
                 <p className="text-sm text-slate-500">
-                  Pick a program-linked level and semester first to select prerequisites.
+                  Pick a level, program, and semester first to select prerequisites.
                 </p>
               )}
             </div>
@@ -1729,7 +1791,7 @@ const AcademicStructurePage = () => {
               )}
             </div>
             <p className="text-xs text-slate-500">
-              These options stay inside the same program-linked roadmap so the dependency chain is clean.
+              These options stay inside the same program so the dependency chain is clean.
             </p>
           </div>
           <div className="flex justify-end gap-3">
@@ -1742,6 +1804,20 @@ const AcademicStructurePage = () => {
           </div>
         </form>
       </Modal>
+
+      <ConfirmDialog
+        open={confirmDeleteState.open}
+        onOpenChange={(open) =>
+          setConfirmDeleteState((current) => ({
+            ...current,
+            open,
+          }))
+        }
+        title={confirmDeleteState.title}
+        description={confirmDeleteState.description}
+        onConfirm={() => confirmDeleteState.action?.()}
+        confirmLabel={confirmDeleteState.confirmLabel}
+      />
     </div>
   );
 };
