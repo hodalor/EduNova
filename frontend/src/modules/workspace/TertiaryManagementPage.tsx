@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Building2, GraduationCap, PlusCircle, ScanLine } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { Link } from 'react-router-dom';
 
@@ -53,6 +53,12 @@ interface TertiaryOverview {
     };
   }>;
   progression: string[];
+  progression_policy: {
+    allow_carry_over_progression: boolean;
+    max_carry_over_courses: number;
+    max_carry_over_credits: number;
+    allow_manual_overrides: boolean;
+  };
   credentials: string[];
   id_format: string;
 }
@@ -94,6 +100,12 @@ const TertiaryManagementPage = () => {
   const [programModalOpen, setProgramModalOpen] = useState(false);
   const [facultyForm, setFacultyForm] = useState({ name: '', code: '', dean: '' });
   const [departmentForm, setDepartmentForm] = useState({ faculty_id: '', name: '', code: '' });
+  const [progressionPolicyForm, setProgressionPolicyForm] = useState({
+    allow_carry_over_progression: false,
+    max_carry_over_courses: '0',
+    max_carry_over_credits: '0',
+    allow_manual_overrides: true,
+  });
   const [programForm, setProgramForm] = useState({
     department_id: '',
     name: '',
@@ -174,6 +186,29 @@ const TertiaryManagementPage = () => {
     },
     onError: (error: unknown) => toast.error(resolveApiErrorMessage(error, 'Unable to create program.')),
   });
+
+  const updateProgressionPolicy = useMutation({
+    mutationFn: eduovaApi.tertiary.updateProgressionPolicy,
+    onSuccess: () => {
+      toast.success('Progression policy updated.');
+      void refreshOverview();
+    },
+    onError: (error: unknown) =>
+      toast.error(resolveApiErrorMessage(error, 'Unable to update progression policy.')),
+  });
+
+  useEffect(() => {
+    if (!data?.progression_policy) {
+      return;
+    }
+
+    setProgressionPolicyForm({
+      allow_carry_over_progression: Boolean(data.progression_policy.allow_carry_over_progression),
+      max_carry_over_courses: String(data.progression_policy.max_carry_over_courses ?? 0),
+      max_carry_over_credits: String(data.progression_policy.max_carry_over_credits ?? 0),
+      allow_manual_overrides: Boolean(data.progression_policy.allow_manual_overrides),
+    });
+  }, [data?.progression_policy]);
 
   if (isLoading) {
     return <PageLoader />;
@@ -273,6 +308,81 @@ const TertiaryManagementPage = () => {
           );
         })}
       </div>
+
+      <Card
+        title="Progression Policy"
+        description="Control how many failed courses a tertiary student may carry forward before the system blocks next-semester registration."
+        action={
+          <Button
+            onClick={() =>
+              updateProgressionPolicy.mutate({
+                allow_carry_over_progression: progressionPolicyForm.allow_carry_over_progression,
+                max_carry_over_courses: Number(progressionPolicyForm.max_carry_over_courses || 0),
+                max_carry_over_credits: Number(progressionPolicyForm.max_carry_over_credits || 0),
+                allow_manual_overrides: progressionPolicyForm.allow_manual_overrides,
+              })
+            }
+            loading={updateProgressionPolicy.isPending}
+          >
+            Save Policy
+          </Button>
+        }
+      >
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+            <input
+              type="checkbox"
+              checked={progressionPolicyForm.allow_carry_over_progression}
+              onChange={(event) =>
+                setProgressionPolicyForm((current) => ({
+                  ...current,
+                  allow_carry_over_progression: event.target.checked,
+                }))
+              }
+            />
+            <span>Allow next semester progression with carry-over courses</span>
+          </label>
+          <Input
+            label="Maximum Carry-over Courses"
+            type="number"
+            min="0"
+            value={progressionPolicyForm.max_carry_over_courses}
+            onChange={(event) =>
+              setProgressionPolicyForm((current) => ({
+                ...current,
+                max_carry_over_courses: event.target.value,
+              }))
+            }
+            helperText="Set `0` to require a full clear before progression."
+          />
+          <Input
+            label="Maximum Carry-over Credits"
+            type="number"
+            min="0"
+            value={progressionPolicyForm.max_carry_over_credits}
+            onChange={(event) =>
+              setProgressionPolicyForm((current) => ({
+                ...current,
+                max_carry_over_credits: event.target.value,
+              }))
+            }
+            helperText="Use this when credit load matters more than course count."
+          />
+          <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+            <input
+              type="checkbox"
+              checked={progressionPolicyForm.allow_manual_overrides}
+              onChange={(event) =>
+                setProgressionPolicyForm((current) => ({
+                  ...current,
+                  allow_manual_overrides: event.target.checked,
+                }))
+              }
+            />
+            <span>Allow admin manual progression overrides for special cases</span>
+          </label>
+        </div>
+      </Card>
 
       <Card>
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-4">

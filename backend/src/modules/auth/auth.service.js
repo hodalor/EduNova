@@ -59,9 +59,18 @@ const buildProfile = async (user) => {
   }
 
   const institution = user.institution || (await models.Institution.findByPk(user.institution_id));
+  const linkedStudent =
+    user.role === 'student' && models.Student
+      ? await models.Student.findOne({
+          where: { user_id: user.id },
+          attributes: ['id', 'student_number'],
+        }).catch(() => null)
+      : null;
 
   return {
     id: user.id,
+    student_id: linkedStudent?.id || null,
+    student_number: linkedStudent?.student_number || null,
     institution_id: user.institution_id,
     email: user.email,
     phone: user.phone,

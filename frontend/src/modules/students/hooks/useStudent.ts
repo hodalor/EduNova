@@ -80,6 +80,10 @@ export interface StudentDetail {
           name: string;
           sequence: number;
           status: string;
+          total_courses?: number;
+          completed_courses?: number;
+          completion_percent?: number;
+          is_completed?: boolean;
           courses: Array<{
             id: string;
             code: string;
@@ -87,6 +91,8 @@ export interface StudentDetail {
             credit_hours: number | null;
             is_core: boolean;
             prerequisite_codes: string[];
+            completed?: boolean;
+            outstanding?: boolean;
           }>;
         }>;
       }>;

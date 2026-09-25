@@ -271,6 +271,10 @@ export const eduovaApi = {
       (await axiosInstance.post('/v1/tertiary/departments', payload)).data.data,
     createProgram: async (payload: Record<string, unknown>) =>
       (await axiosInstance.post('/v1/tertiary/programs', payload)).data.data,
+    updateProgressionPolicy: async (payload: Record<string, unknown>) =>
+      (await axiosInstance.patch('/v1/tertiary/progression-policy', payload)).data.data,
+    updateStudentProgress: async (studentId: string, payload: Record<string, unknown>) =>
+      (await axiosInstance.patch(`/v1/tertiary/student-progress/${studentId}`, payload)).data.data,
     studentRegistration: async (studentId: string) =>
       (await axiosInstance.get(`/v1/tertiary/student-registration/${studentId}`)).data.data,
     registerCourses: async (payload: Record<string, unknown>) =>

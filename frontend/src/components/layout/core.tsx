@@ -111,6 +111,13 @@ const institutionNavGroups: NavGroup[] = [
         visible: supportsAcademics,
       },
       {
+        name: 'Course Registration',
+        to: '/tertiary/course-registration',
+        icon: Layers3,
+        roles: ['institution_admin', 'teacher'],
+        visible: isTertiaryInstitution,
+      },
+      {
         name: 'Attendance',
         to: '/attendance/taking',
         icon: ClipboardCheck,

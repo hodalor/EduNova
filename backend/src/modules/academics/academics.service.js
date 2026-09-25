@@ -249,6 +249,10 @@ const createAcademicGroupFromDatabase = async ({ institutionId, userId, payload,
       group_type: payload.group_type || 'level',
       level_code: levelCode,
       calendar_type: payload.calendar_type || 'term',
+      program_ids:
+        levelCode === 'TR' && Array.isArray(payload.program_ids)
+          ? payload.program_ids.filter(Boolean)
+          : [],
       level_record_id: levelRecord.id,
     };
 
@@ -301,6 +305,10 @@ const createAcademicGroupFromRuntime = async ({ institutionId, userId, payload, 
     group_type: payload.group_type || 'level',
     level_code: String(payload.level_code || '').toUpperCase(),
     calendar_type: payload.calendar_type || 'term',
+    program_ids:
+      String(payload.level_code || '').toUpperCase() === 'TR' && Array.isArray(payload.program_ids)
+        ? payload.program_ids.filter(Boolean)
+        : [],
   };
 
   requireLevelConfig(group.level_code);
@@ -362,6 +370,12 @@ const updateAcademicGroupFromDatabase = async ({ institutionId, groupId, userId,
       code: nextCode,
       level_code: nextLevelCode,
       calendar_type: payload.calendar_type || current.calendar_type,
+      program_ids:
+        nextLevelCode === 'TR'
+          ? Array.isArray(payload.program_ids)
+            ? payload.program_ids.filter(Boolean)
+            : current.program_ids || []
+          : [],
       level_record_id: levelRecord.id,
     };
 
@@ -417,6 +431,12 @@ const updateAcademicGroupFromRuntime = async ({ institutionId, groupId, userId, 
     code: normalizeCode(payload.code ?? current.code),
     level_code: String(payload.level_code || current.level_code || '').toUpperCase(),
     calendar_type: payload.calendar_type || current.calendar_type,
+    program_ids:
+      String(payload.level_code || current.level_code || '').toUpperCase() === 'TR'
+        ? Array.isArray(payload.program_ids)
+          ? payload.program_ids.filter(Boolean)
+          : current.program_ids || []
+        : [],
   };
   requireLevelConfig(updated.level_code);
 
@@ -571,6 +591,23 @@ const createAcademicPeriodFromDatabase = async ({ institutionId, userId, payload
       registration_open: Boolean(payload.registration_open),
       start_date: payload.start_date || null,
       end_date: payload.end_date || null,
+      base_fee_amount:
+        payload.base_fee_amount === '' || payload.base_fee_amount === null || payload.base_fee_amount === undefined
+          ? 0
+          : Number(payload.base_fee_amount),
+      minimum_payment_percent:
+        payload.minimum_payment_percent === '' ||
+        payload.minimum_payment_percent === null ||
+        payload.minimum_payment_percent === undefined
+          ? 0
+          : Number(payload.minimum_payment_percent),
+      late_registration_penalty:
+        payload.late_registration_penalty === '' ||
+        payload.late_registration_penalty === null ||
+        payload.late_registration_penalty === undefined
+          ? 0
+          : Number(payload.late_registration_penalty),
+      penalty_deadline: payload.penalty_deadline || null,
     };
 
     if (['term', 'semester'].includes(period.calendar_type)) {
@@ -638,6 +675,23 @@ const createAcademicPeriodFromRuntime = async ({ institutionId, userId, payload,
     registration_open: Boolean(payload.registration_open),
     start_date: payload.start_date || null,
     end_date: payload.end_date || null,
+    base_fee_amount:
+      payload.base_fee_amount === '' || payload.base_fee_amount === null || payload.base_fee_amount === undefined
+        ? 0
+        : Number(payload.base_fee_amount),
+    minimum_payment_percent:
+      payload.minimum_payment_percent === '' ||
+      payload.minimum_payment_percent === null ||
+      payload.minimum_payment_percent === undefined
+        ? 0
+        : Number(payload.minimum_payment_percent),
+    late_registration_penalty:
+      payload.late_registration_penalty === '' ||
+      payload.late_registration_penalty === null ||
+      payload.late_registration_penalty === undefined
+        ? 0
+        : Number(payload.late_registration_penalty),
+    penalty_deadline: payload.penalty_deadline || null,
   };
 
   store.academics.structure.periods.push(period);
@@ -697,6 +751,25 @@ const updateAcademicPeriodFromDatabase = async ({
           : Boolean(payload.registration_open),
       start_date: payload.start_date ?? current.start_date ?? null,
       end_date: payload.end_date ?? current.end_date ?? null,
+      base_fee_amount:
+        payload.base_fee_amount === '' || payload.base_fee_amount === undefined
+          ? current.base_fee_amount || 0
+          : payload.base_fee_amount === null
+            ? 0
+            : Number(payload.base_fee_amount),
+      minimum_payment_percent:
+        payload.minimum_payment_percent === '' || payload.minimum_payment_percent === undefined
+          ? current.minimum_payment_percent || 0
+          : payload.minimum_payment_percent === null
+            ? 0
+            : Number(payload.minimum_payment_percent),
+      late_registration_penalty:
+        payload.late_registration_penalty === '' || payload.late_registration_penalty === undefined
+          ? current.late_registration_penalty || 0
+          : payload.late_registration_penalty === null
+            ? 0
+            : Number(payload.late_registration_penalty),
+      penalty_deadline: payload.penalty_deadline ?? current.penalty_deadline ?? null,
     };
 
     if (models.TermSemester && current.term_semester_id) {
@@ -763,6 +836,25 @@ const updateAcademicPeriodFromRuntime = async ({ institutionId, periodId, userId
         : Boolean(payload.registration_open),
     start_date: payload.start_date ?? current.start_date ?? null,
     end_date: payload.end_date ?? current.end_date ?? null,
+    base_fee_amount:
+      payload.base_fee_amount === '' || payload.base_fee_amount === undefined
+        ? current.base_fee_amount || 0
+        : payload.base_fee_amount === null
+          ? 0
+          : Number(payload.base_fee_amount),
+    minimum_payment_percent:
+      payload.minimum_payment_percent === '' || payload.minimum_payment_percent === undefined
+        ? current.minimum_payment_percent || 0
+        : payload.minimum_payment_percent === null
+          ? 0
+          : Number(payload.minimum_payment_percent),
+    late_registration_penalty:
+      payload.late_registration_penalty === '' || payload.late_registration_penalty === undefined
+        ? current.late_registration_penalty || 0
+        : payload.late_registration_penalty === null
+          ? 0
+          : Number(payload.late_registration_penalty),
+    penalty_deadline: payload.penalty_deadline ?? current.penalty_deadline ?? null,
   };
 
   store.academics.structure.periods[periodIndex] = updated;
@@ -952,6 +1044,10 @@ const createAcademicOfferingFromDatabase = async ({ institutionId, userId, paylo
         payload.credit_hours === '' || payload.credit_hours === null || payload.credit_hours === undefined
           ? null
           : Number(payload.credit_hours),
+      fee_amount:
+        payload.fee_amount === '' || payload.fee_amount === null || payload.fee_amount === undefined
+          ? 0
+          : Number(payload.fee_amount),
       is_core: payload.is_core !== false,
       prerequisite_codes: payload.prerequisite_codes || [],
       next_offering_codes: payload.next_offering_codes || [],
@@ -1011,6 +1107,10 @@ const createAcademicOfferingFromRuntime = async ({ institutionId, userId, payloa
       payload.credit_hours === '' || payload.credit_hours === null || payload.credit_hours === undefined
         ? null
         : Number(payload.credit_hours),
+    fee_amount:
+      payload.fee_amount === '' || payload.fee_amount === null || payload.fee_amount === undefined
+        ? 0
+        : Number(payload.fee_amount),
     is_core: payload.is_core !== false,
     prerequisite_codes: payload.prerequisite_codes || [],
     next_offering_codes: payload.next_offering_codes || [],
@@ -1085,6 +1185,12 @@ const updateAcademicOfferingFromDatabase = async ({
           : payload.credit_hours === null
             ? null
             : Number(payload.credit_hours),
+      fee_amount:
+        payload.fee_amount === '' || payload.fee_amount === undefined
+          ? current.fee_amount || 0
+          : payload.fee_amount === null
+            ? 0
+            : Number(payload.fee_amount),
       is_core: payload.is_core === undefined ? current.is_core : payload.is_core !== false,
       prerequisite_codes: payload.prerequisite_codes || current.prerequisite_codes || [],
       next_offering_codes: payload.next_offering_codes || current.next_offering_codes || [],
@@ -1150,6 +1256,12 @@ const updateAcademicOfferingFromRuntime = async ({
         : payload.credit_hours === null
           ? null
           : Number(payload.credit_hours),
+    fee_amount:
+      payload.fee_amount === '' || payload.fee_amount === undefined
+        ? current.fee_amount || 0
+        : payload.fee_amount === null
+          ? 0
+          : Number(payload.fee_amount),
     is_core: payload.is_core === undefined ? current.is_core : payload.is_core !== false,
     prerequisite_codes: payload.prerequisite_codes || current.prerequisite_codes || [],
     next_offering_codes: payload.next_offering_codes || current.next_offering_codes || [],

@@ -53,6 +53,8 @@ export interface InstitutionSummary {
 
 export interface AuthUser {
   id: string;
+  student_id?: string | null;
+  student_number?: string | null;
   first_name: string;
   last_name: string;
   email: string;

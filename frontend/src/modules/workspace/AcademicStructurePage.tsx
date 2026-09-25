@@ -23,6 +23,7 @@ interface AcademicGroup {
   group_type: 'class' | 'level';
   level_code: string;
   calendar_type: 'term' | 'semester' | 'trimester' | 'block';
+  program_ids?: string[];
 }
 
 interface AcademicPeriod {
@@ -35,6 +36,10 @@ interface AcademicPeriod {
   registration_open: boolean;
   start_date?: string | null;
   end_date?: string | null;
+  base_fee_amount?: number;
+  minimum_payment_percent?: number;
+  late_registration_penalty?: number;
+  penalty_deadline?: string | null;
 }
 
 interface AcademicOffering {
@@ -45,9 +50,14 @@ interface AcademicOffering {
   code: string;
   name: string;
   credit_hours: number | null;
+  fee_amount?: number;
   is_core: boolean;
   prerequisite_codes: string[];
   next_offering_codes: string[];
+}
+
+interface TertiaryOverview {
+  programs: Array<{ id: string; name: string; code?: string; credential?: string }>;
 }
 
 interface StructureResponse {
@@ -156,6 +166,7 @@ const initialGroupForm = {
   group_type: 'class' as 'class' | 'level',
   level_code: 'PR',
   calendar_type: 'term' as 'term' | 'semester' | 'trimester' | 'block',
+  program_ids: [] as string[],
 };
 
 const initialPeriodForm = {
@@ -167,6 +178,10 @@ const initialPeriodForm = {
   registration_open: 'false',
   start_date: '',
   end_date: '',
+  base_fee_amount: '0',
+  minimum_payment_percent: '0',
+  late_registration_penalty: '0',
+  penalty_deadline: '',
 };
 
 const initialOfferingForm = {
@@ -176,9 +191,10 @@ const initialOfferingForm = {
   code: '',
   name: '',
   credit_hours: '3',
+  fee_amount: '0',
   is_core: 'true',
-  prerequisite_codes: '',
-  next_offering_codes: '',
+  prerequisite_codes: [] as string[],
+  next_offering_codes: [] as string[],
 };
 
 const AcademicStructurePage = () => {
@@ -191,24 +207,32 @@ const AcademicStructurePage = () => {
 
   const [activeTab, setActiveTab] = useState<StructureTab>('groups');
   const [selectedGroupId, setSelectedGroupId] = useState('');
+  const [selectedProgramId, setSelectedProgramId] = useState('');
   const [detailState, setDetailState] = useState<DetailState>(null);
   const [groupModalMode, setGroupModalMode] = useState<ModalMode>('create');
   const [periodModalMode, setPeriodModalMode] = useState<ModalMode>('create');
   const [offeringModalMode, setOfferingModalMode] = useState<ModalMode>('create');
+  const [editingGroupId, setEditingGroupId] = useState('');
+  const [editingPeriodId, setEditingPeriodId] = useState('');
+  const [editingOfferingId, setEditingOfferingId] = useState('');
   const [groupModalOpen, setGroupModalOpen] = useState(false);
   const [periodModalOpen, setPeriodModalOpen] = useState(false);
   const [offeringModalOpen, setOfferingModalOpen] = useState(false);
   const [groupForm, setGroupForm] = useState(initialGroupForm);
   const [periodForm, setPeriodForm] = useState(initialPeriodForm);
   const [offeringForm, setOfferingForm] = useState(initialOfferingForm);
+  const allowedLevels = useMemo(() => getInstitutionLevels(activeInstitution), [activeInstitution]);
 
   const { data, isLoading } = useQuery<StructureResponse>({
     queryKey: ['academic-structure', activeInstitutionId],
     queryFn: eduovaApi.academics.structure,
     enabled: Boolean(activeInstitutionId),
   });
-
-  const allowedLevels = useMemo(() => getInstitutionLevels(activeInstitution), [activeInstitution]);
+  const { data: tertiaryOverview } = useQuery<TertiaryOverview>({
+    queryKey: ['tertiary-overview', 'academic-structure', activeInstitutionId],
+    queryFn: eduovaApi.tertiary.overview,
+    enabled: Boolean(activeInstitutionId && allowedLevels.includes('TR')),
+  });
   const levelOptions = useMemo(
     () => allowedLevels.map((code) => ({ code, label: educationLevelLabels[code] })),
     [allowedLevels]
@@ -221,7 +245,7 @@ const AcademicStructurePage = () => {
   const offeringListLabel = pluralizeLabel(offeringLabel);
   const showCourseOption = allowedLevels.includes('TR');
 
-  const groups = useMemo(
+  const baseGroups = useMemo(
     () =>
       ((data?.groups || []) as AcademicGroup[]).filter(
         (group) =>
@@ -229,20 +253,43 @@ const AcademicStructurePage = () => {
       ),
     [allowedLevels, data?.groups]
   );
+  const groups = useMemo(
+    () =>
+      baseGroups.filter((group) => {
+        if (!selectedProgramId) {
+          return true;
+        }
+
+        if (group.level_code !== 'TR') {
+          return true;
+        }
+
+        return (group.program_ids || []).includes(selectedProgramId);
+      }),
+    [baseGroups, selectedProgramId]
+  );
   const visibleGroupIds = useMemo(() => new Set(groups.map((group) => group.id)), [groups]);
-  const periods = useMemo(
+  const basePeriods = useMemo(
     () =>
       ((data?.periods || []) as AcademicPeriod[]).filter((period) =>
-        visibleGroupIds.has(period.group_id)
+        new Set(baseGroups.map((group) => group.id)).has(period.group_id)
       ),
-    [data?.periods, visibleGroupIds]
+    [baseGroups, data?.periods]
   );
-  const offerings = useMemo(
+  const periods = useMemo(
+    () => basePeriods.filter((period) => visibleGroupIds.has(period.group_id)),
+    [basePeriods, visibleGroupIds]
+  );
+  const baseOfferings = useMemo(
     () =>
       ((data?.offerings || []) as AcademicOffering[]).filter((offering) =>
-        visibleGroupIds.has(offering.group_id)
+        new Set(baseGroups.map((group) => group.id)).has(offering.group_id)
       ),
-    [data?.offerings, visibleGroupIds]
+    [baseGroups, data?.offerings]
+  );
+  const offerings = useMemo(
+    () => baseOfferings.filter((offering) => visibleGroupIds.has(offering.group_id)),
+    [baseOfferings, visibleGroupIds]
   );
 
   const groupCounts = useMemo(
@@ -268,6 +315,37 @@ const AcademicStructurePage = () => {
         : offerings,
     [offerings, selectedGroupId]
   );
+  const tertiaryPrograms = useMemo(() => tertiaryOverview?.programs || [], [tertiaryOverview?.programs]);
+  const activeOfferingGroup = useMemo(
+    () => baseGroups.find((group) => group.id === offeringForm.group_id) || null,
+    [baseGroups, offeringForm.group_id]
+  );
+  const dependencyOfferingOptions = useMemo(() => {
+    if (!offeringForm.group_id) {
+      return [];
+    }
+
+    const relatedGroupIds =
+      activeOfferingGroup?.level_code === 'TR' && (activeOfferingGroup.program_ids || []).length
+        ? baseGroups
+            .filter(
+              (group) =>
+                group.level_code === 'TR' &&
+                (group.program_ids || []).some((programId) =>
+                  (activeOfferingGroup.program_ids || []).includes(programId)
+                )
+            )
+            .map((group) => group.id)
+        : [offeringForm.group_id];
+
+    return baseOfferings
+      .filter(
+        (offering) =>
+          relatedGroupIds.includes(offering.group_id) &&
+          offering.id !== editingOfferingId
+      )
+      .sort((a, b) => a.code.localeCompare(b.code));
+  }, [activeOfferingGroup, baseGroups, baseOfferings, editingOfferingId, offeringForm.group_id]);
 
   const detailGroup =
     detailState?.type === 'groups'
@@ -400,6 +478,7 @@ const AcademicStructurePage = () => {
       period_id: sourcePeriods[0]?.id || '',
       type: showCourseOption ? 'course' : 'subject',
     });
+    setEditingOfferingId('');
   };
 
   const createGroup = useMutation({
@@ -555,6 +634,7 @@ const AcademicStructurePage = () => {
   const openCreateModal = (tab: StructureTab) => {
     setActiveTab(tab);
     if (tab === 'groups') {
+      setEditingGroupId('');
       setGroupModalMode('create');
       resetGroupForm(selectedGroupId ? groups.find((group) => group.id === selectedGroupId)?.level_code : undefined);
       setGroupModalOpen(true);
@@ -562,12 +642,14 @@ const AcademicStructurePage = () => {
     }
 
     if (tab === 'periods') {
+      setEditingPeriodId('');
       setPeriodModalMode('create');
       resetPeriodForm(selectedGroupId);
       setPeriodModalOpen(true);
       return;
     }
 
+    setEditingOfferingId('');
     setOfferingModalMode('create');
     resetOfferingForm(selectedGroupId);
     setOfferingModalOpen(true);
@@ -576,12 +658,14 @@ const AcademicStructurePage = () => {
   const openGroupEdit = (group: AcademicGroup) => {
     setDetailState(null);
     setGroupModalMode('edit');
+    setEditingGroupId(group.id);
     setGroupForm({
       name: group.name,
       code: group.code,
       group_type: group.group_type,
       level_code: group.level_code,
       calendar_type: group.calendar_type,
+      program_ids: group.program_ids || [],
     });
     setGroupModalOpen(true);
   };
@@ -589,6 +673,7 @@ const AcademicStructurePage = () => {
   const openPeriodEdit = (period: AcademicPeriod) => {
     setDetailState(null);
     setPeriodModalMode('edit');
+    setEditingPeriodId(period.id);
     setPeriodForm({
       group_id: period.group_id,
       name: period.name,
@@ -598,6 +683,10 @@ const AcademicStructurePage = () => {
       registration_open: period.registration_open ? 'true' : 'false',
       start_date: period.start_date || '',
       end_date: period.end_date || '',
+      base_fee_amount: String(period.base_fee_amount || 0),
+      minimum_payment_percent: String(period.minimum_payment_percent || 0),
+      late_registration_penalty: String(period.late_registration_penalty || 0),
+      penalty_deadline: period.penalty_deadline || '',
     });
     setPeriodModalOpen(true);
   };
@@ -605,6 +694,7 @@ const AcademicStructurePage = () => {
   const openOfferingEdit = (offering: AcademicOffering) => {
     setDetailState(null);
     setOfferingModalMode('edit');
+    setEditingOfferingId(offering.id);
     setOfferingForm({
       group_id: offering.group_id,
       period_id: offering.period_id,
@@ -612,9 +702,10 @@ const AcademicStructurePage = () => {
       code: offering.code,
       name: offering.name,
       credit_hours: offering.credit_hours === null ? '' : String(offering.credit_hours),
+      fee_amount: String(offering.fee_amount || 0),
       is_core: offering.is_core ? 'true' : 'false',
-      prerequisite_codes: offering.prerequisite_codes.join(', '),
-      next_offering_codes: offering.next_offering_codes.join(', '),
+      prerequisite_codes: offering.prerequisite_codes || [],
+      next_offering_codes: offering.next_offering_codes || [],
     });
     setOfferingModalOpen(true);
   };
@@ -678,7 +769,7 @@ const AcademicStructurePage = () => {
           </div>
 
           {activeTab !== 'groups' ? (
-            <div className="grid gap-3 md:grid-cols-[minmax(0,280px)_1fr] md:items-end">
+            <div className="grid gap-3 md:grid-cols-[minmax(0,280px)_minmax(0,280px)_1fr] md:items-end">
               <Select
                 label={`${groupLabel} Filter`}
                 value={selectedGroupId}
@@ -692,14 +783,48 @@ const AcademicStructurePage = () => {
                   </option>
                 ))}
               </Select>
+              {allowedLevels.includes('TR') ? (
+                <Select
+                  label="Program Focus"
+                  value={selectedProgramId}
+                  onChange={(event) => setSelectedProgramId(event.target.value)}
+                  helperText="Use one reusable level setup, then focus the view by program."
+                >
+                  <option value="">All tertiary programs</option>
+                  {tertiaryPrograms.map((program: { id: string; name: string }) => (
+                    <option key={program.id} value={program.id}>
+                      {program.name}
+                    </option>
+                  ))}
+                </Select>
+              ) : null}
               <p className="text-sm text-slate-500">
                 Click any row to open details in a modal, then edit or delete without leaving the table.
               </p>
             </div>
           ) : (
-            <p className="text-sm text-slate-500">
-              Click any row to open details in a modal, then edit or delete from the same flow.
-            </p>
+            <div className="grid gap-3 md:grid-cols-[minmax(0,280px)_1fr] md:items-end">
+              {allowedLevels.includes('TR') ? (
+                <Select
+                  label="Program Focus"
+                  value={selectedProgramId}
+                  onChange={(event) => setSelectedProgramId(event.target.value)}
+                  helperText="Levels are reusable. Filter by program to see the right roadmap chain."
+                >
+                  <option value="">All tertiary programs</option>
+                  {tertiaryPrograms.map((program: { id: string; name: string }) => (
+                    <option key={program.id} value={program.id}>
+                      {program.name}
+                    </option>
+                  ))}
+                </Select>
+              ) : (
+                <div />
+              )}
+              <p className="text-sm text-slate-500">
+                Click any row to open details in a modal, then edit or delete from the same flow.
+              </p>
+            </div>
           )}
         </div>
 
@@ -905,6 +1030,27 @@ const AcademicStructurePage = () => {
                 </p>
               </div>
             </div>
+            {detailGroup.level_code === 'TR' ? (
+              <div className="rounded-2xl border border-slate-200 p-4">
+                <p className="text-sm text-slate-500">Linked programs</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {(detailGroup.program_ids || []).length ? (
+                    (detailGroup.program_ids || []).map((programId) => {
+                      const program = tertiaryPrograms.find(
+                        (item: { id: string; name: string }) => item.id === programId
+                      );
+                      return (
+                        <Badge key={programId} variant="info">
+                          {program?.name || programId}
+                        </Badge>
+                      );
+                    })
+                  ) : (
+                    <span className="text-sm text-slate-500">No programs linked yet.</span>
+                  )}
+                </div>
+              </div>
+            ) : null}
             <div className="flex flex-wrap justify-end gap-3">
               <Button
                 variant="secondary"
@@ -960,6 +1106,16 @@ const AcademicStructurePage = () => {
                 Dates: {detailPeriod.start_date || 'Not set'} to {detailPeriod.end_date || 'Not set'}
               </p>
               <p className="mt-2 text-sm text-slate-500">
+                Semester base fee: GHS {Number(detailPeriod.base_fee_amount || 0).toLocaleString()}
+              </p>
+              <p className="mt-2 text-sm text-slate-500">
+                Minimum payment before registration: {Number(detailPeriod.minimum_payment_percent || 0)}%
+              </p>
+              <p className="mt-2 text-sm text-slate-500">
+                Late registration penalty: GHS {Number(detailPeriod.late_registration_penalty || 0).toLocaleString()}
+                {detailPeriod.penalty_deadline ? ` after ${detailPeriod.penalty_deadline}` : ''}
+              </p>
+              <p className="mt-2 text-sm text-slate-500">
                 Linked {offeringLabel.toLowerCase()}s:{' '}
                 {offerings.filter((offering) => offering.period_id === detailPeriod.id).length}
               </p>
@@ -1004,6 +1160,12 @@ const AcademicStructurePage = () => {
                 <p className="mt-2 text-lg font-semibold text-brand-navy">{detailOffering.credit_hours ?? '-'}</p>
               </div>
               <div className="rounded-2xl bg-slate-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Course Fee</p>
+                <p className="mt-2 text-lg font-semibold text-brand-navy">
+                  GHS {Number(detailOffering.fee_amount || 0).toLocaleString()}
+                </p>
+              </div>
+              <div className="rounded-2xl bg-slate-50 p-4">
                 <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Status</p>
                 <div className="mt-2">
                   <Badge variant={detailOffering.is_core ? 'success' : 'info'}>
@@ -1042,6 +1204,7 @@ const AcademicStructurePage = () => {
         onOpenChange={(open) => {
           setGroupModalOpen(open);
           if (!open) {
+            setEditingGroupId('');
             resetGroupForm();
           }
         }}
@@ -1057,8 +1220,8 @@ const AcademicStructurePage = () => {
               createGroup.mutate(payload);
               return;
             }
-            if (detailGroup) {
-              updateGroup.mutate({ id: detailGroup.id, payload });
+            if (editingGroupId) {
+              updateGroup.mutate({ id: editingGroupId, payload });
             }
           }}
         >
@@ -1091,6 +1254,7 @@ const AcademicStructurePage = () => {
                 ...current,
                 level_code: event.target.value,
                 calendar_type: getDefaultCalendarForLevel(event.target.value),
+                program_ids: event.target.value === 'TR' ? current.program_ids : [],
               }))
             }
           >
@@ -1115,6 +1279,37 @@ const AcademicStructurePage = () => {
             <option value="trimester">Trimester</option>
             <option value="block">Block</option>
           </Select>
+          {groupForm.level_code === 'TR' ? (
+            <div className="space-y-2">
+              <label className="text-sm font-semibold text-slate-700">Linked Programs</label>
+              <div className="max-h-56 space-y-2 overflow-y-auto rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                {tertiaryPrograms.length ? (
+                  tertiaryPrograms.map((program: { id: string; name: string }) => {
+                    const checked = groupForm.program_ids.includes(program.id);
+                    return (
+                      <label key={program.id} className="flex items-center gap-3 rounded-2xl bg-white px-3 py-2 text-sm text-slate-700">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(event) =>
+                            setGroupForm((current) => ({
+                              ...current,
+                              program_ids: event.target.checked
+                                ? Array.from(new Set([...current.program_ids, program.id]))
+                                : current.program_ids.filter((item) => item !== program.id),
+                            }))
+                          }
+                        />
+                        <span>{program.name}</span>
+                      </label>
+                    );
+                  })
+                ) : (
+                  <p className="text-sm text-slate-500">Create tertiary programs first, then link this level to them.</p>
+                )}
+              </div>
+            </div>
+          ) : null}
           <div className="flex justify-end gap-3">
             <Button type="button" variant="secondary" onClick={() => setGroupModalOpen(false)}>
               Cancel
@@ -1131,6 +1326,7 @@ const AcademicStructurePage = () => {
         onOpenChange={(open) => {
           setPeriodModalOpen(open);
           if (!open) {
+            setEditingPeriodId('');
             resetPeriodForm(selectedGroupId);
           }
         }}
@@ -1147,13 +1343,17 @@ const AcademicStructurePage = () => {
               registration_open: periodForm.registration_open === 'true',
               start_date: periodForm.start_date || null,
               end_date: periodForm.end_date || null,
+              base_fee_amount: Number(periodForm.base_fee_amount || 0),
+              minimum_payment_percent: Number(periodForm.minimum_payment_percent || 0),
+              late_registration_penalty: Number(periodForm.late_registration_penalty || 0),
+              penalty_deadline: periodForm.penalty_deadline || null,
             };
             if (periodModalMode === 'create') {
               createPeriod.mutate(payload);
               return;
             }
-            if (detailPeriod) {
-              updatePeriod.mutate({ id: detailPeriod.id, payload });
+            if (editingPeriodId) {
+              updatePeriod.mutate({ id: editingPeriodId, payload });
             }
           }}
         >
@@ -1199,6 +1399,38 @@ const AcademicStructurePage = () => {
             type="date"
             value={periodForm.end_date}
             onChange={(event) => setPeriodForm((current) => ({ ...current, end_date: event.target.value }))}
+          />
+          <Input
+            label="Semester Base Fee (GHS)"
+            type="number"
+            min="0"
+            value={periodForm.base_fee_amount}
+            onChange={(event) => setPeriodForm((current) => ({ ...current, base_fee_amount: event.target.value }))}
+          />
+          <Input
+            label="Minimum Payment Before Registration (%)"
+            type="number"
+            min="0"
+            max="100"
+            value={periodForm.minimum_payment_percent}
+            onChange={(event) =>
+              setPeriodForm((current) => ({ ...current, minimum_payment_percent: event.target.value }))
+            }
+          />
+          <Input
+            label="Late Registration Penalty (GHS)"
+            type="number"
+            min="0"
+            value={periodForm.late_registration_penalty}
+            onChange={(event) =>
+              setPeriodForm((current) => ({ ...current, late_registration_penalty: event.target.value }))
+            }
+          />
+          <Input
+            label="Penalty Deadline"
+            type="date"
+            value={periodForm.penalty_deadline}
+            onChange={(event) => setPeriodForm((current) => ({ ...current, penalty_deadline: event.target.value }))}
           />
           <Select
             label="Calendar"
@@ -1258,15 +1490,10 @@ const AcademicStructurePage = () => {
               ...offeringForm,
               code: offeringForm.code.toUpperCase(),
               credit_hours: offeringForm.credit_hours ? Number(offeringForm.credit_hours) : null,
+              fee_amount: Number(offeringForm.fee_amount || 0),
               is_core: offeringForm.is_core === 'true',
-              prerequisite_codes: offeringForm.prerequisite_codes
-                .split(',')
-                .map((item) => item.trim())
-                .filter(Boolean),
-              next_offering_codes: offeringForm.next_offering_codes
-                .split(',')
-                .map((item) => item.trim())
-                .filter(Boolean),
+              prerequisite_codes: offeringForm.prerequisite_codes,
+              next_offering_codes: offeringForm.next_offering_codes,
             };
 
             if (offeringModalMode === 'create') {
@@ -1274,8 +1501,8 @@ const AcademicStructurePage = () => {
               return;
             }
 
-            if (detailOffering) {
-              updateOffering.mutate({ id: detailOffering.id, payload });
+            if (editingOfferingId) {
+              updateOffering.mutate({ id: editingOfferingId, payload });
             }
           }}
         >
@@ -1338,6 +1565,13 @@ const AcademicStructurePage = () => {
             value={offeringForm.credit_hours}
             onChange={(event) => setOfferingForm((current) => ({ ...current, credit_hours: event.target.value }))}
           />
+          <Input
+            label="Course Fee (GHS)"
+            type="number"
+            min="0"
+            value={offeringForm.fee_amount}
+            onChange={(event) => setOfferingForm((current) => ({ ...current, fee_amount: event.target.value }))}
+          />
           <Select
             label="Status"
             value={offeringForm.is_core}
@@ -1346,22 +1580,81 @@ const AcademicStructurePage = () => {
             <option value="true">Core</option>
             <option value="false">Elective</option>
           </Select>
-          <Input
-            label="Prerequisites"
-            value={offeringForm.prerequisite_codes}
-            onChange={(event) =>
-              setOfferingForm((current) => ({ ...current, prerequisite_codes: event.target.value }))
-            }
-            helperText="Separate multiple course or subject codes with commas."
-          />
-          <Input
-            label="Next Items"
-            value={offeringForm.next_offering_codes}
-            onChange={(event) =>
-              setOfferingForm((current) => ({ ...current, next_offering_codes: event.target.value }))
-            }
-            helperText="Use this to keep progression linked for the next period."
-          />
+          <div className="space-y-2">
+            <label className="text-sm font-semibold text-slate-700">Prerequisites</label>
+            <div className="max-h-48 space-y-2 overflow-y-auto rounded-2xl border border-slate-200 bg-slate-50 p-3">
+              {dependencyOfferingOptions.length ? (
+                dependencyOfferingOptions.map((option) => {
+                  const checked = offeringForm.prerequisite_codes.includes(option.code);
+                  return (
+                    <label
+                      key={`prereq-${option.id}`}
+                      className="flex items-center gap-3 rounded-2xl bg-white px-3 py-2 text-sm text-slate-700"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(event) =>
+                          setOfferingForm((current) => ({
+                            ...current,
+                            prerequisite_codes: event.target.checked
+                              ? Array.from(new Set([...current.prerequisite_codes, option.code]))
+                              : current.prerequisite_codes.filter((item) => item !== option.code),
+                          }))
+                        }
+                      />
+                      <span>
+                        {option.code} · {option.name}
+                      </span>
+                    </label>
+                  );
+                })
+              ) : (
+                <p className="text-sm text-slate-500">
+                  Pick a program-linked level and semester first to select prerequisites.
+                </p>
+              )}
+            </div>
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-semibold text-slate-700">Next Items</label>
+            <div className="max-h-48 space-y-2 overflow-y-auto rounded-2xl border border-slate-200 bg-slate-50 p-3">
+              {dependencyOfferingOptions.length ? (
+                dependencyOfferingOptions.map((option) => {
+                  const checked = offeringForm.next_offering_codes.includes(option.code);
+                  return (
+                    <label
+                      key={`next-${option.id}`}
+                      className="flex items-center gap-3 rounded-2xl bg-white px-3 py-2 text-sm text-slate-700"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(event) =>
+                          setOfferingForm((current) => ({
+                            ...current,
+                            next_offering_codes: event.target.checked
+                              ? Array.from(new Set([...current.next_offering_codes, option.code]))
+                              : current.next_offering_codes.filter((item) => item !== option.code),
+                          }))
+                        }
+                      />
+                      <span>
+                        {option.code} · {option.name}
+                      </span>
+                    </label>
+                  );
+                })
+              ) : (
+                <p className="text-sm text-slate-500">
+                  Select the follow-up courses from the same program roadmap to avoid typos.
+                </p>
+              )}
+            </div>
+            <p className="text-xs text-slate-500">
+              These options stay inside the same program-linked roadmap so the dependency chain is clean.
+            </p>
+          </div>
           <div className="flex justify-end gap-3">
             <Button type="button" variant="secondary" onClick={() => setOfferingModalOpen(false)}>
               Cancel

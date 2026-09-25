@@ -8,6 +8,67 @@ const databaseReady = () => Boolean(models.Institution && sequelize?.transaction
 
 const cloneSettings = (settings) => JSON.parse(JSON.stringify(settings || {}));
 
+const defaultProgressionPolicy = {
+  allow_carry_over_progression: false,
+  max_carry_over_courses: 0,
+  max_carry_over_credits: 0,
+  allow_manual_overrides: true,
+};
+
+const defaultFinancePolicy = {
+  new_student_registration_percent: 50,
+  returning_student_registration_percent: 50,
+  midsem_exam_percent: 50,
+  final_exam_percent: 100,
+};
+
+const normalizeBoolean = (value, fallback = false) =>
+  value === undefined || value === null ? fallback : Boolean(value);
+
+const normalizeNumber = (value, fallback = 0) => {
+  if (value === '' || value === null || value === undefined) {
+    return fallback;
+  }
+
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const normalizeProgressionOverride = (value) => {
+  if (value === 'allow' || value === 'hold') {
+    return value;
+  }
+
+  return 'default';
+};
+
+const parseCourseCodeList = (value) => {
+  if (Array.isArray(value)) {
+    return Array.from(
+      new Set(value.map((item) => String(item || '').trim().toUpperCase()).filter(Boolean))
+    );
+  }
+
+  return Array.from(
+    new Set(
+      String(value || '')
+        .split(',')
+        .map((item) => item.trim().toUpperCase())
+        .filter(Boolean)
+    )
+  );
+};
+
+const getProgressionPolicy = (settings) => ({
+  ...defaultProgressionPolicy,
+  ...(settings?.tertiary?.progression_policy || {}),
+});
+
+const getFinancePolicy = (settings) => ({
+  ...defaultFinancePolicy,
+  ...(settings?.tertiary?.finance_policy || {}),
+});
+
 const ensureTertiarySettings = (settings) => {
   const next = cloneSettings(settings);
   next.academics = next.academics || { groups: [], periods: [], offerings: [], progression_rules: [] };
@@ -22,6 +83,8 @@ const ensureTertiarySettings = (settings) => {
     'Students register only for their current semester roadmap.',
     'Outstanding resits block forward registration until cleared.',
   ];
+  next.tertiary.progression_policy = getProgressionPolicy(next);
+  next.tertiary.finance_policy = getFinancePolicy(next);
   next.tertiary.credentials = next.tertiary.credentials || ['Certificate', 'Diploma', 'Degree'];
   next.tertiary.id_format = next.tertiary.id_format || 'FAC/DEPT/YEAR/SEQ';
   return next;
@@ -47,9 +110,18 @@ const sortBySequence = (items = []) =>
     return String(a.name || '').localeCompare(String(b.name || ''));
   });
 
+const resolveProgramGroupIds = ({ program, settings }) => {
+  const directGroupIds = program.roadmap_group_ids || [];
+  const linkedGroupIds = (settings.academics?.groups || [])
+    .filter((item) => item.level_code === 'TR' && (item.program_ids || []).includes(program.id))
+    .map((item) => item.id);
+
+  return Array.from(new Set([...directGroupIds, ...linkedGroupIds]));
+};
+
 const buildProgramRoadmap = ({ program, settings }) => {
   const { groups, periods, offerings } = getAcademicStructureFromSettings(settings);
-  const roadmapGroupIds = program.roadmap_group_ids || [];
+  const roadmapGroupIds = resolveProgramGroupIds({ program, settings });
   const scopedGroups = sortBySequence(
     groups.filter((item) => roadmapGroupIds.includes(item.id))
   );
@@ -69,6 +141,10 @@ const buildProgramRoadmap = ({ program, settings }) => {
           name: period.name,
           sequence: Number(period.sequence || 0),
           status: period.status || 'planned',
+          base_fee_amount: Number(period.base_fee_amount || 0),
+          minimum_payment_percent: Number(period.minimum_payment_percent || 0),
+          late_registration_penalty: Number(period.late_registration_penalty || 0),
+          penalty_deadline: period.penalty_deadline || null,
           courses: offerings
             .filter((item) => item.group_id === group.id && item.period_id === period.id)
             .map((offering) => ({
@@ -76,12 +152,160 @@ const buildProgramRoadmap = ({ program, settings }) => {
               code: offering.code,
               name: offering.name,
               credit_hours: offering.credit_hours ?? null,
+              fee_amount: Number(offering.fee_amount || 0),
               is_core: offering.is_core !== false,
               prerequisite_codes: offering.prerequisite_codes || [],
             })),
         })),
       };
     }),
+  };
+};
+
+const buildFeeSummary = ({
+  currentPeriod,
+  currentCourses,
+  progress,
+  financePolicy,
+  paidAmount = 0,
+  invoicedAmount = 0,
+}) => {
+  const courseTotal = currentCourses.reduce(
+    (sum, item) => sum + Number(item.fee_amount || 0),
+    0
+  );
+  const baseFeeAmount = Number(currentPeriod.base_fee_amount || 0);
+  const isNewStudent =
+    Number(progress?.passed_offering_codes?.length || 0) === 0 &&
+    Number(progress?.completed_period_ids?.length || 0) === 0;
+  const defaultRegistrationPercent = isNewStudent
+    ? Number(financePolicy?.new_student_registration_percent || 0)
+    : Number(financePolicy?.returning_student_registration_percent || 0);
+  const minimumPaymentPercent = Number(
+    Number(currentPeriod.minimum_payment_percent || 0) > 0
+      ? currentPeriod.minimum_payment_percent
+      : defaultRegistrationPercent
+  );
+  const lateRegistrationPenalty = Number(currentPeriod.late_registration_penalty || 0);
+  const penaltyDeadline = currentPeriod.penalty_deadline || null;
+  const today = new Date().toISOString().slice(0, 10);
+  const penaltyApplied = Boolean(
+    penaltyDeadline && String(today) > String(penaltyDeadline).slice(0, 10)
+  );
+  const totalAmount = baseFeeAmount + courseTotal + (penaltyApplied ? lateRegistrationPenalty : 0);
+  const minimumRequiredAmount =
+    minimumPaymentPercent > 0 ? (totalAmount * minimumPaymentPercent) / 100 : 0;
+  const manualClearance = progress.fee_clearance !== false;
+  const meetsThreshold = minimumRequiredAmount <= 0 || Number(paidAmount || 0) >= minimumRequiredAmount;
+
+  return {
+    base_fee_amount: baseFeeAmount,
+    course_fee_total: courseTotal,
+    late_registration_penalty: lateRegistrationPenalty,
+    penalty_deadline: penaltyDeadline,
+    penalty_applied: penaltyApplied,
+    total_amount: totalAmount,
+    minimum_payment_percent: minimumPaymentPercent,
+    minimum_required_amount: minimumRequiredAmount,
+    paid_amount: Number(paidAmount || 0),
+    invoiced_amount: Number(invoicedAmount || 0),
+    outstanding_amount: Math.max(totalAmount - Number(paidAmount || 0), 0),
+    clearance_source: meetsThreshold ? 'automatic' : 'manual_override_required',
+    is_new_student: isNewStudent,
+    finance_policy: financePolicy,
+    fee_clearance: manualClearance && meetsThreshold,
+  };
+};
+
+const getRegistrationFinanceTotals = async ({ institutionId, studentId, currentPeriod }) => {
+  if (!currentPeriod?.term_semester_id || !models.StudentInvoice) {
+    return { paidAmount: 0, invoicedAmount: 0 };
+  }
+
+  const rows = await models.StudentInvoice.findAll({
+    where: {
+      institution_id: institutionId,
+      student_id: studentId,
+      term_id: currentPeriod.term_semester_id,
+    },
+    attributes: ['total_amount', 'paid_amount'],
+  }).catch(() => []);
+
+  return rows.reduce(
+    (accumulator, row) => ({
+      invoicedAmount: accumulator.invoicedAmount + Number(row.total_amount || 0),
+      paidAmount: accumulator.paidAmount + Number(row.paid_amount || 0),
+    }),
+    { paidAmount: 0, invoicedAmount: 0 }
+  );
+};
+
+const buildCarryOverSummary = ({
+  allOfferings = [],
+  currentOfferings = [],
+  outstandingCodes = [],
+  policy,
+  progress,
+}) => {
+  const outstandingCodeSet = new Set((outstandingCodes || []).filter(Boolean));
+  const offeringByCode = new Map();
+  allOfferings.forEach((item) => {
+    if (item?.code && !offeringByCode.has(item.code)) {
+      offeringByCode.set(item.code, item);
+    }
+  });
+
+  const outstandingCourses = Array.from(outstandingCodeSet)
+    .map((code) => offeringByCode.get(code))
+    .filter(Boolean);
+  const outstandingCreditHours = outstandingCourses.reduce(
+    (sum, item) => sum + Number(item.credit_hours || 0),
+    0
+  );
+  const outstandingCount = outstandingCodeSet.size;
+  const policyAllowsCarryOver =
+    outstandingCount === 0 ||
+    (policy.allow_carry_over_progression &&
+      (Number(policy.max_carry_over_courses || 0) <= 0 ||
+        outstandingCount <= Number(policy.max_carry_over_courses || 0)) &&
+      (Number(policy.max_carry_over_credits || 0) <= 0 ||
+        outstandingCreditHours <= Number(policy.max_carry_over_credits || 0)));
+  const progressionOverride = normalizeProgressionOverride(progress.progression_override);
+  const baseCanProgress = Boolean(progress.can_progress);
+  const manualOverrideAllowed = Boolean(policy.allow_manual_overrides);
+  const manualAllow = manualOverrideAllowed && progressionOverride === 'allow';
+  const manualHold = manualOverrideAllowed && progressionOverride === 'hold';
+  const effectiveCanProgress = manualHold
+    ? false
+    : manualAllow
+      ? true
+      : baseCanProgress && policyAllowsCarryOver;
+
+  const outstandingCurrentCourses = currentOfferings.filter((item) => outstandingCodeSet.has(item.code));
+  const reason = manualHold
+    ? 'An admin progression hold is active for this student.'
+    : manualAllow && outstandingCount > 0
+      ? 'An admin override allows this student to continue with carry-over courses.'
+      : outstandingCount === 0
+        ? 'No carry-over courses are blocking progression.'
+        : policyAllowsCarryOver
+          ? 'Carry-over load is within the institution progression policy.'
+          : 'Carry-over load is above the institution progression policy.';
+
+  return {
+    outstanding_count: outstandingCount,
+    outstanding_credit_hours: outstandingCreditHours,
+    outstanding_courses: outstandingCourses.map((item) => ({
+      code: item.code,
+      name: item.name,
+      credit_hours: item.credit_hours ?? null,
+    })),
+    current_period_resit_courses: outstandingCurrentCourses,
+    base_can_progress: baseCanProgress,
+    policy_allows_progression: policyAllowsCarryOver,
+    effective_can_progress: effectiveCanProgress,
+    progression_override: progressionOverride,
+    reason,
   };
 };
 
@@ -101,6 +325,7 @@ const getOverviewFromDatabase = async ({ institutionId }) => {
       roadmap: buildProgramRoadmap({ program, settings }),
     })),
     progression: settings.tertiary.progression,
+    progression_policy: getProgressionPolicy(settings),
     credentials: settings.tertiary.credentials,
     id_format: settings.tertiary.id_format,
   };
@@ -124,6 +349,7 @@ const getOverviewFromRuntime = async ({ institutionId }) => ({
     'Students register only for their current semester roadmap.',
     'Outstanding resits block forward registration until cleared.',
   ],
+  progression_policy: { ...defaultProgressionPolicy },
   credentials: ['Certificate', 'Diploma', 'Degree'],
   id_format: 'FAC/DEPT/YEAR/SEQ',
 });
@@ -342,6 +568,157 @@ const createProgram = async ({ institutionId, payload, userId, ip }) => {
   });
 };
 
+const updateProgressionPolicy = async ({ institutionId, payload, userId, ip }) => {
+  if (!databaseReady()) {
+    store.tertiary.progressionPolicy = {
+      ...(store.tertiary.progressionPolicy || defaultProgressionPolicy),
+      allow_carry_over_progression: normalizeBoolean(
+        payload.allow_carry_over_progression,
+        store.tertiary.progressionPolicy?.allow_carry_over_progression
+      ),
+      max_carry_over_courses: normalizeNumber(
+        payload.max_carry_over_courses,
+        store.tertiary.progressionPolicy?.max_carry_over_courses || 0
+      ),
+      max_carry_over_credits: normalizeNumber(
+        payload.max_carry_over_credits,
+        store.tertiary.progressionPolicy?.max_carry_over_credits || 0
+      ),
+      allow_manual_overrides: normalizeBoolean(
+        payload.allow_manual_overrides,
+        store.tertiary.progressionPolicy?.allow_manual_overrides ?? true
+      ),
+    };
+
+    return store.tertiary.progressionPolicy;
+  }
+
+  const institution = await models.Institution.findByPk(institutionId);
+  if (!institution) {
+    throw Object.assign(new Error('Institution not found.'), { statusCode: 404 });
+  }
+
+  const settings = ensureTertiarySettings(institution.settings);
+  const previous = getProgressionPolicy(settings);
+  settings.tertiary.progression_policy = {
+    ...previous,
+    allow_carry_over_progression: normalizeBoolean(
+      payload.allow_carry_over_progression,
+      previous.allow_carry_over_progression
+    ),
+    max_carry_over_courses: normalizeNumber(
+      payload.max_carry_over_courses,
+      previous.max_carry_over_courses
+    ),
+    max_carry_over_credits: normalizeNumber(
+      payload.max_carry_over_credits,
+      previous.max_carry_over_credits
+    ),
+    allow_manual_overrides: normalizeBoolean(
+      payload.allow_manual_overrides,
+      previous.allow_manual_overrides
+    ),
+  };
+
+  await institution.update({ settings });
+
+  await logAudit({
+    userId,
+    action: 'UPDATE',
+    resourceType: 'tertiary_progression_policy',
+    resourceId: institutionId,
+    previousValues: previous,
+    newValues: settings.tertiary.progression_policy,
+    ip,
+  });
+
+  return settings.tertiary.progression_policy;
+};
+
+const updateStudentProgress = async ({ institutionId, studentId, payload, userId, ip }) => {
+  if (!databaseReady()) {
+    const progressIndex = store.tertiary.studentProgress.findIndex(
+      (item) => item.student_id === studentId && item.institution_id === institutionId
+    );
+    if (progressIndex < 0) {
+      throw Object.assign(new Error('Student registration profile not found.'), { statusCode: 404 });
+    }
+
+    const current = store.tertiary.studentProgress[progressIndex];
+    const next = {
+      ...current,
+      can_progress:
+        payload.can_progress === undefined ? current.can_progress : Boolean(payload.can_progress),
+      fee_clearance:
+        payload.fee_clearance === undefined ? current.fee_clearance : Boolean(payload.fee_clearance),
+      progression_override:
+        payload.progression_override === undefined
+          ? normalizeProgressionOverride(current.progression_override)
+          : normalizeProgressionOverride(payload.progression_override),
+      progression_note:
+        payload.progression_note === undefined
+          ? current.progression_note || null
+          : String(payload.progression_note || '').trim() || null,
+      outstanding_resit_codes:
+        payload.outstanding_resit_codes === undefined
+          ? current.outstanding_resit_codes || []
+          : parseCourseCodeList(payload.outstanding_resit_codes),
+    };
+
+    store.tertiary.studentProgress[progressIndex] = next;
+    return next;
+  }
+
+  const institution = await models.Institution.findByPk(institutionId);
+  if (!institution) {
+    throw Object.assign(new Error('Institution not found.'), { statusCode: 404 });
+  }
+
+  const settings = ensureTertiarySettings(institution.settings);
+  const progressIndex = settings.tertiary.student_progress.findIndex(
+    (item) => item.student_id === studentId && item.institution_id === institutionId
+  );
+  if (progressIndex < 0) {
+    throw Object.assign(new Error('Student registration profile not found.'), { statusCode: 404 });
+  }
+
+  const current = settings.tertiary.student_progress[progressIndex];
+  const next = {
+    ...current,
+    can_progress:
+      payload.can_progress === undefined ? current.can_progress : Boolean(payload.can_progress),
+    fee_clearance:
+      payload.fee_clearance === undefined ? current.fee_clearance : Boolean(payload.fee_clearance),
+    progression_override:
+      payload.progression_override === undefined
+        ? normalizeProgressionOverride(current.progression_override)
+        : normalizeProgressionOverride(payload.progression_override),
+    progression_note:
+      payload.progression_note === undefined
+        ? current.progression_note || null
+        : String(payload.progression_note || '').trim() || null,
+    outstanding_resit_codes:
+      payload.outstanding_resit_codes === undefined
+        ? current.outstanding_resit_codes || []
+        : parseCourseCodeList(payload.outstanding_resit_codes),
+  };
+
+  settings.tertiary.student_progress[progressIndex] = next;
+  await institution.update({ settings });
+
+  await logAudit({
+    userId,
+    action: 'UPDATE',
+    resourceType: 'tertiary_student_progress',
+    resourceId: studentId,
+    previousValues: current,
+    newValues: next,
+    ip,
+  });
+
+  return next;
+};
+
 const getRegistrationStateFromSettings = async ({ institutionId, studentId }) => {
   const institution = await models.Institution.findByPk(institutionId);
   if (!institution) {
@@ -349,6 +726,7 @@ const getRegistrationStateFromSettings = async ({ institutionId, studentId }) =>
   }
 
   const settings = ensureTertiarySettings(institution.settings);
+  const progressionPolicy = getProgressionPolicy(settings);
   const progress = settings.tertiary.student_progress.find(
     (item) => item.student_id === studentId && item.institution_id === institutionId
   );
@@ -366,26 +744,33 @@ const getRegistrationStateFromSettings = async ({ institutionId, studentId }) =>
   const currentOfferings = offerings.filter(
     (item) => item.group_id === currentGroup.id && item.period_id === currentPeriod.id
   );
-  const outstandingResits = currentOfferings.filter((item) =>
-    (progress.outstanding_resit_codes || []).includes(item.code)
+  const eligibleCurrentCourses = currentOfferings.filter((item) =>
+    (item.prerequisite_codes || []).every((code) =>
+      (progress.passed_offering_codes || []).includes(code)
+    )
   );
-
+  const carryOverSummary = buildCarryOverSummary({
+    allOfferings: offerings,
+    currentOfferings,
+    outstandingCodes: progress.outstanding_resit_codes || [],
+    policy: progressionPolicy,
+    progress,
+  });
+  const outstandingResits = carryOverSummary.current_period_resit_courses || [];
   const eligibleCourses =
-    (progress.outstanding_resit_codes || []).length > 0
-      ? outstandingResits
-      : currentOfferings.filter((item) =>
-          (item.prerequisite_codes || []).every((code) =>
-            (progress.passed_offering_codes || []).includes(code)
-          )
-        );
+    carryOverSummary.outstanding_count > 0
+      ? carryOverSummary.effective_can_progress
+        ? Array.from(new Map([...outstandingResits, ...eligibleCurrentCourses].map((item) => [item.id, item])).values())
+        : outstandingResits
+      : eligibleCurrentCourses;
 
   const blockedCourses = currentOfferings
     .filter((item) => !eligibleCourses.some((eligible) => eligible.id === item.id))
     .map((item) => ({
       ...item,
       reason:
-        (progress.outstanding_resit_codes || []).length > 0
-          ? 'Outstanding resit exists. Clear carry-over courses before adding progression courses.'
+        carryOverSummary.outstanding_count > 0 && !carryOverSummary.effective_can_progress
+          ? 'Carry-over load is above the allowed progression policy for this student.'
           : 'Missing prerequisite completion for this course.',
     }));
 
@@ -394,7 +779,7 @@ const getRegistrationStateFromSettings = async ({ institutionId, studentId }) =>
       item.group_id === currentGroup.id &&
       Number(item.sequence || 0) === Number(currentPeriod.sequence || 0) + 1
   );
-  const nextTermPreview = nextPeriod
+  const nextTermPreview = nextPeriod && carryOverSummary.effective_can_progress
     ? offerings.filter((item) => item.group_id === currentGroup.id && item.period_id === nextPeriod.id)
     : [];
 
@@ -405,18 +790,37 @@ const getRegistrationStateFromSettings = async ({ institutionId, studentId }) =>
       item.period_id === currentPeriod.id
   );
 
+  const financeTotals = await getRegistrationFinanceTotals({
+    institutionId,
+    studentId,
+    currentPeriod,
+  });
+  const feeSummary = buildFeeSummary({
+    currentPeriod,
+    currentCourses: currentOfferings,
+    progress,
+    paidAmount: financeTotals.paidAmount,
+    invoicedAmount: financeTotals.invoicedAmount,
+  });
+
   return {
     settings,
     student_id: studentId,
     current_group: currentGroup,
     current_period: currentPeriod,
-    fee_clearance: progress.fee_clearance,
-    can_progress: progress.can_progress && (progress.outstanding_resit_codes || []).length === 0,
+    fee_clearance: feeSummary.fee_clearance,
+    can_progress: carryOverSummary.effective_can_progress,
+    base_can_progress: carryOverSummary.base_can_progress,
+    progression_override: carryOverSummary.progression_override,
+    progression_note: progress.progression_note || null,
+    progression_policy: progressionPolicy,
+    carry_over_summary: carryOverSummary,
     outstanding_resit_codes: progress.outstanding_resit_codes || [],
     eligible_courses: eligibleCourses,
     blocked_courses: blockedCourses,
     next_period_preview: nextTermPreview,
     already_registered: alreadyRegistered,
+    fee_summary: feeSummary,
   };
 };
 
@@ -441,10 +845,12 @@ const getAcademicStructureForInstitution = ({ institutionId }) => {
 
 const getStudentRegistrationState = async ({ institutionId, studentId }) => {
   if (databaseReady()) {
-    const { settings, ...state } = await getRegistrationStateFromSettings({ institutionId, studentId });
-    return state;
+    const registrationState = await getRegistrationStateFromSettings({ institutionId, studentId });
+    delete registrationState.settings;
+    return registrationState;
   }
 
+  const progressionPolicy = store.tertiary.progressionPolicy || { ...defaultProgressionPolicy };
   const progress = store.tertiary.studentProgress.find(
     (item) => item.student_id === studentId && item.institution_id === institutionId
   );
@@ -462,24 +868,31 @@ const getStudentRegistrationState = async ({ institutionId, studentId }) => {
   const currentOfferings = offerings.filter(
     (item) => item.group_id === currentGroup.id && item.period_id === currentPeriod.id
   );
-  const outstandingResits = currentOfferings.filter((item) =>
-    progress.outstanding_resit_codes.includes(item.code)
+  const eligibleCurrentCourses = currentOfferings.filter((item) =>
+    item.prerequisite_codes.every((code) => progress.passed_offering_codes.includes(code))
   );
-
+  const carryOverSummary = buildCarryOverSummary({
+    allOfferings: offerings,
+    currentOfferings,
+    outstandingCodes: progress.outstanding_resit_codes,
+    policy: progressionPolicy,
+    progress,
+  });
+  const outstandingResits = carryOverSummary.current_period_resit_courses || [];
   const eligibleCourses =
-    progress.outstanding_resit_codes.length > 0
-      ? outstandingResits
-      : currentOfferings.filter((item) =>
-          item.prerequisite_codes.every((code) => progress.passed_offering_codes.includes(code))
-        );
+    carryOverSummary.outstanding_count > 0
+      ? carryOverSummary.effective_can_progress
+        ? Array.from(new Map([...outstandingResits, ...eligibleCurrentCourses].map((item) => [item.id, item])).values())
+        : outstandingResits
+      : eligibleCurrentCourses;
 
   const blockedCourses = currentOfferings
     .filter((item) => !eligibleCourses.some((eligible) => eligible.id === item.id))
     .map((item) => ({
       ...item,
       reason:
-        progress.outstanding_resit_codes.length > 0
-          ? 'Outstanding resit exists. Clear carry-over courses before adding progression courses.'
+        carryOverSummary.outstanding_count > 0 && !carryOverSummary.effective_can_progress
+          ? 'Carry-over load is above the allowed progression policy for this student.'
           : 'Missing prerequisite completion for this course.',
     }));
 
@@ -488,7 +901,7 @@ const getStudentRegistrationState = async ({ institutionId, studentId }) => {
       item.group_id === currentGroup.id &&
       item.sequence === Number(currentPeriod.sequence || 0) + 1
   );
-  const nextTermPreview = nextPeriod
+  const nextTermPreview = nextPeriod && carryOverSummary.effective_can_progress
     ? offerings.filter((item) => item.group_id === currentGroup.id && item.period_id === nextPeriod.id)
     : [];
 
@@ -499,17 +912,37 @@ const getStudentRegistrationState = async ({ institutionId, studentId }) => {
       item.period_id === currentPeriod.id
   );
 
+  const periodInvoices = store.finance.invoices.filter(
+    (item) =>
+      item.institution_id === institutionId &&
+      item.student_id === studentId &&
+      (item.term_id === currentPeriod.term_semester_id || item.period_id === currentPeriod.id)
+  );
+  const feeSummary = buildFeeSummary({
+    currentPeriod,
+    currentCourses: currentOfferings,
+    progress,
+    paidAmount: periodInvoices.reduce((sum, item) => sum + Number(item.paid_amount || 0), 0),
+    invoicedAmount: periodInvoices.reduce((sum, item) => sum + Number(item.total_amount || 0), 0),
+  });
+
   return {
     student_id: studentId,
     current_group: currentGroup,
     current_period: currentPeriod,
-    fee_clearance: progress.fee_clearance,
-    can_progress: progress.can_progress && progress.outstanding_resit_codes.length === 0,
+    fee_clearance: feeSummary.fee_clearance,
+    can_progress: carryOverSummary.effective_can_progress,
+    base_can_progress: carryOverSummary.base_can_progress,
+    progression_override: carryOverSummary.progression_override,
+    progression_note: progress.progression_note || null,
+    progression_policy: progressionPolicy,
+    carry_over_summary: carryOverSummary,
     outstanding_resit_codes: progress.outstanding_resit_codes,
     eligible_courses: eligibleCourses,
     blocked_courses: blockedCourses,
     next_period_preview: nextTermPreview,
     already_registered: alreadyRegistered,
+    fee_summary: feeSummary,
   };
 };
 
@@ -696,6 +1129,8 @@ module.exports = {
   createDepartment,
   listPrograms,
   createProgram,
+  updateProgressionPolicy,
+  updateStudentProgress,
   getStudentRegistrationState,
   registerCourses,
   getTranscript,

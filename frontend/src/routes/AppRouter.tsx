@@ -422,6 +422,14 @@ const AppRouter = () => {
               }
             />
             <Route
+              path="/tertiary/course-registration"
+              element={
+                <ProtectedRoute allowedRoles={['institution_admin', 'teacher']}>
+                  <StudentCourseRegistrationPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
               path="/student/academics"
               element={
                 <ProtectedRoute allowedRoles={['student']}>

@@ -43,12 +43,14 @@ const sortBySequence = (items = []) =>
     return String(a.name || '').localeCompare(String(b.name || ''));
   });
 
-const buildRoadmapFromGroupIds = ({ settings, groupIds = [] }) => {
+const buildRoadmapFromGroupIds = ({ settings, groupIds = [], progress = null }) => {
   const groups = (settings.academics?.groups || []).filter((item) => item.level_code === 'TR');
   const periods = settings.academics?.periods || [];
   const offerings = settings.academics?.offerings || [];
   const scopedGroupIds = groupIds.filter(Boolean);
   const scopedGroups = sortBySequence(groups.filter((item) => scopedGroupIds.includes(item.id)));
+  const passedCodes = new Set(progress?.passed_offering_codes || []);
+  const outstandingCodes = new Set(progress?.outstanding_resit_codes || []);
 
   return {
     level_count: scopedGroups.length,
@@ -57,12 +59,8 @@ const buildRoadmapFromGroupIds = ({ settings, groupIds = [] }) => {
       id: group.id,
       name: group.name,
       code: group.code,
-      periods: sortBySequence(periods.filter((item) => item.group_id === group.id)).map((period) => ({
-        id: period.id,
-        name: period.name,
-        sequence: Number(period.sequence || 0),
-        status: period.status || 'planned',
-        courses: offerings
+      periods: sortBySequence(periods.filter((item) => item.group_id === group.id)).map((period) => {
+        const periodCourses = offerings
           .filter((item) => item.group_id === group.id && item.period_id === period.id)
           .map((offering) => ({
             id: offering.id,
@@ -71,8 +69,26 @@ const buildRoadmapFromGroupIds = ({ settings, groupIds = [] }) => {
             credit_hours: offering.credit_hours ?? null,
             is_core: offering.is_core !== false,
             prerequisite_codes: offering.prerequisite_codes || [],
-          })),
-      })),
+            completed: passedCodes.has(offering.code),
+            outstanding: outstandingCodes.has(offering.code),
+          }));
+        const completedCourses = periodCourses.filter((course) => course.completed).length;
+        const totalCourses = periodCourses.length;
+        const completionPercent =
+          totalCourses > 0 ? Math.round((completedCourses / totalCourses) * 100) : 0;
+
+        return {
+          id: period.id,
+          name: period.name,
+          sequence: Number(period.sequence || 0),
+          status: period.status || 'planned',
+          total_courses: totalCourses,
+          completed_courses: completedCourses,
+          completion_percent: completionPercent,
+          is_completed: totalCourses > 0 && completedCourses === totalCourses,
+          courses: periodCourses,
+        };
+      }),
     })),
   };
 };
@@ -95,7 +111,7 @@ const buildStudentTertiaryProfile = ({ settings, profile, studentId }) => {
   const roadmapGroupIds = Array.from(
     new Set([...(program?.roadmap_group_ids || []), ...(currentGroupId ? [currentGroupId] : [])])
   );
-  const roadmap = buildRoadmapFromGroupIds({ settings, groupIds: roadmapGroupIds });
+  const roadmap = buildRoadmapFromGroupIds({ settings, groupIds: roadmapGroupIds, progress });
   const currentLevel =
     roadmap?.levels?.find((item) => item.id === currentGroupId) ||
     (currentGroup

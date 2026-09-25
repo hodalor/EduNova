@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Download, FileBadge2, PencilLine } from 'lucide-react';
+import { CheckCircle2, Download, FileBadge2, PencilLine } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
 import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 
@@ -72,6 +72,19 @@ const StudentDetailPage = () => {
   const tertiaryRoadmap = data.tertiary?.roadmap || null;
   const currentLevelId = data.tertiary?.current_level?.id || null;
   const currentPeriodId = data.tertiary?.current_period?.id || null;
+  type RoadmapLevel = NonNullable<
+    NonNullable<NonNullable<StudentDetail['tertiary']>['roadmap']>['levels']
+  >[number];
+  type RoadmapPeriod = NonNullable<RoadmapLevel['periods']>[number];
+  type RoadmapChartPeriod = RoadmapPeriod & { levelId: string; levelName: string };
+  const roadmapPeriods =
+    tertiaryRoadmap?.levels.flatMap((level: RoadmapLevel) =>
+      level.periods.map((period: RoadmapPeriod) => ({
+        ...period,
+        levelId: level.id,
+        levelName: level.name,
+      }))
+    ) || [];
   const presentDays = data.attendanceCalendar.filter((item: StudentDetail['attendanceCalendar'][number]) => item.value > 0).length;
   const absentDays = data.attendanceCalendar.filter((item: StudentDetail['attendanceCalendar'][number]) => item.value <= 0).length;
   const attendanceRate = presentDays + absentDays > 0 ? Math.round((presentDays / (presentDays + absentDays)) * 100) : 0;
@@ -310,6 +323,43 @@ const StudentDetailPage = () => {
                 title="Levels And Courses"
                 description="Each level shows its semesters and the courses the student is expected to complete."
               >
+                <div className="mb-6 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                  {roadmapPeriods.map((period: RoadmapChartPeriod) => {
+                    const isCurrentPeriod = currentPeriodId === period.id;
+                    const isCompleted = Boolean(period.is_completed);
+
+                    return (
+                      <div
+                        key={`chart-${period.id}`}
+                        className={`rounded-3xl border p-4 ${
+                          isCompleted
+                            ? 'border-emerald-300 bg-emerald-50'
+                            : isCurrentPeriod
+                              ? 'border-brand-navy bg-brand-navy/[0.03]'
+                              : 'border-slate-200 bg-white'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-xs uppercase tracking-[0.14em] text-slate-400">
+                              {period.levelName}
+                            </p>
+                            <p className="mt-1 font-semibold text-brand-navy">{period.name}</p>
+                          </div>
+                          {isCompleted ? (
+                            <CheckCircle2 className="h-6 w-6 text-emerald-600" />
+                          ) : null}
+                        </div>
+                        <p className="mt-4 text-3xl font-semibold text-brand-navy">
+                          {Number(period.completion_percent || 0)}%
+                        </p>
+                        <p className="mt-2 text-sm text-slate-500">
+                          {Number(period.completed_courses || 0)} of {Number(period.total_courses || 0)} courses cleared
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
                 <div className="space-y-4">
                   {tertiaryRoadmap.levels.map(
                     (
@@ -389,13 +439,30 @@ const StudentDetailPage = () => {
                                       ) => (
                                         <div
                                           key={course.id}
-                                          className="rounded-2xl border border-slate-200 bg-white px-3 py-2"
+                                          className={`rounded-2xl border px-3 py-2 ${
+                                            course.completed
+                                              ? 'border-emerald-200 bg-emerald-50'
+                                              : course.outstanding
+                                                ? 'border-amber-200 bg-amber-50'
+                                                : 'border-slate-200 bg-white'
+                                          }`}
                                         >
-                                          <p className="text-sm font-semibold text-brand-navy">{course.name}</p>
-                                          <p className="text-xs text-slate-500">
-                                            {course.code}
-                                            {course.credit_hours ? ` · ${course.credit_hours} credits` : ''}
-                                          </p>
+                                          <div className="flex items-start justify-between gap-3">
+                                            <div>
+                                              <p className="text-sm font-semibold text-brand-navy">{course.name}</p>
+                                              <p className="text-xs text-slate-500">
+                                                {course.code}
+                                                {course.credit_hours ? ` · ${course.credit_hours} credits` : ''}
+                                              </p>
+                                            </div>
+                                            {course.completed ? (
+                                              <Badge variant="active">Cleared</Badge>
+                                            ) : course.outstanding ? (
+                                              <Badge variant="info">Carry-over</Badge>
+                                            ) : (
+                                              <Badge variant="inactive">Pending</Badge>
+                                            )}
+                                          </div>
                                         </div>
                                       )
                                     )
