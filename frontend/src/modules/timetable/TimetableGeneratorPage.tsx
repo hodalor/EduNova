@@ -90,6 +90,8 @@ const TimetableGeneratorPage = () => {
   const groups = ((data?.groups || []) as AcademicGroup[]).filter(
     (group) => !allowedLevels.length || allowedLevels.includes(group.level_code as EducationLevelCode)
   );
+  const selectedGroup = groups.find((group: AcademicGroup) => group.id === groupId) || null;
+  const isTertiaryScope = selectedGroup?.level_code === 'TR';
 
   useEffect(() => {
     if (!groupId && groups[0]?.id) {
@@ -136,7 +138,11 @@ const TimetableGeneratorPage = () => {
     <div className="space-y-6">
       <PageHeader
         title="Timetable Generator"
-        description="Use the actual school structure to prepare a timetable draft and reorder teaching load."
+        description={
+          isTertiaryScope
+            ? 'Use the actual tertiary structure to prepare a course timetable draft and reorder teaching load.'
+            : 'Use the actual school structure to prepare a timetable draft and reorder teaching load.'
+        }
       />
 
       <div className="grid gap-3 md:grid-cols-3">
@@ -153,19 +159,39 @@ const TimetableGeneratorPage = () => {
       </div>
 
       {step === 1 ? (
-        <Card title="Step 1: Context" description="Select class and term for timetable generation.">
+        <Card
+          title="Step 1: Context"
+          description={
+            isTertiaryScope
+              ? 'Select level and semester for timetable generation.'
+              : 'Select class and term for timetable generation.'
+          }
+        >
           <div className="grid gap-4 md:grid-cols-3">
-            <Select label="Class or Level" value={groupId} onChange={(event) => setGroupId(event.target.value)}>
-              <option value="">Select class or level</option>
+            <Select
+              label={isTertiaryScope ? 'Level' : 'Class or Level'}
+              value={groupId}
+              onChange={(event) => setGroupId(event.target.value)}
+            >
+              <option value="">{isTertiaryScope ? 'Select level' : 'Select class or level'}</option>
               {groups.map((group: AcademicGroup) => (
                 <option key={group.id} value={group.id}>
                   {group.name} ({group.code})
                 </option>
               ))}
             </Select>
-            <Select label="Term">
-              <option>Term 2</option>
-              <option>Term 3</option>
+            <Select label={isTertiaryScope ? 'Semester' : 'Term'}>
+              {isTertiaryScope ? (
+                <>
+                  <option>Semester 1</option>
+                  <option>Semester 2</option>
+                </>
+              ) : (
+                <>
+                  <option>Term 2</option>
+                  <option>Term 3</option>
+                </>
+              )}
             </Select>
             <div className="flex items-end">
               <Button onClick={() => setStep(2)}>Continue</Button>
@@ -175,7 +201,14 @@ const TimetableGeneratorPage = () => {
       ) : null}
 
       {step === 2 ? (
-        <Card title="Step 2: Subject Configuration" description="Review assigned teachers and periods per week.">
+        <Card
+          title={isTertiaryScope ? 'Step 2: Course Configuration' : 'Step 2: Subject Configuration'}
+          description={
+            isTertiaryScope
+              ? 'Review assigned lecturers and weekly course slots.'
+              : 'Review assigned teachers and periods per week.'
+          }
+        >
           <div className="space-y-4">
             <DndContext
               sensors={sensors}
@@ -236,7 +269,10 @@ const TimetableGeneratorPage = () => {
           ) : null}
 
           {generated ? (
-            <Card title="Generated Result" description="Review the generated slots and publish when satisfied.">
+            <Card
+              title={isTertiaryScope ? 'Generated Course Timetable' : 'Generated Result'}
+              description="Review the generated slots and publish when satisfied."
+            >
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                 {generatedRows.map((item) => (
                   <div key={item.slot} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">

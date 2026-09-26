@@ -535,8 +535,11 @@ const buildAssessmentRows = ({ groups, periods, offerings }) => {
       return {
         id: `${offering.id}-default`,
         className: group.name,
+        levelName: group.name,
         subject: offering.name,
+        courseName: offering.name,
         term: period.name,
+        semesterName: period.name,
         assessment: group.level_code === 'TR' ? 'Coursework' : 'Midterm',
         max_score: 100,
         class_id: group.id,

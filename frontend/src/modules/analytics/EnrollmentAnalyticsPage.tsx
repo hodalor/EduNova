@@ -20,6 +20,8 @@ import Button from '../../components/ui/Button';
 import Card from '../../components/ui/Card';
 import DatePicker from '../../components/ui/DatePicker';
 import PageLoader from '../../components/ui/PageLoader';
+import { getInstitutionLevels } from '../../lib/institution';
+import { useAuthStore } from '../../store/authStore';
 
 interface TrendRow {
   month: string;
@@ -40,6 +42,12 @@ interface CapacityRow {
 const colors = ['#0F1B3C', '#F5A623', '#3B82F6', '#22C55E', '#8B5CF6'];
 
 const EnrollmentAnalyticsPage = () => {
+  const institution = useAuthStore((state) => state.institution);
+  const tenantContext = useAuthStore((state) => state.tenantContext);
+  const activeInstitution = tenantContext || institution;
+  const institutionLevels = getInstitutionLevels(activeInstitution);
+  const isPureTertiaryWorkspace =
+    institutionLevels.length === 1 && institutionLevels[0] === 'TR';
   const [from, setFrom] = useState('2026-01-01');
   const [to, setTo] = useState('2026-06-30');
   const { data, isLoading, isError, refetch } = useQuery({
@@ -105,7 +113,14 @@ const EnrollmentAnalyticsPage = () => {
         </Card>
       </div>
 
-      <Card title="Class Capacity vs Enrollment" description="Current seat utilization by class.">
+      <Card
+        title={isPureTertiaryWorkspace ? 'Level Capacity vs Enrollment' : 'Class Capacity vs Enrollment'}
+        description={
+          isPureTertiaryWorkspace
+            ? 'Current seat utilization by level.'
+            : 'Current seat utilization by class.'
+        }
+      >
         <div className="h-96">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={data.capacity as CapacityRow[]}>

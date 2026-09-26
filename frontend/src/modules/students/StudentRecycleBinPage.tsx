@@ -14,6 +14,7 @@ import Table from '../../components/ui/Table';
 import { ConfirmDialog } from '../../components/ui/core';
 import PageHeader from '../shared/PageHeader';
 import { useAuthStore } from '../../store/authStore';
+import { getInstitutionLevels } from '../../lib/institution';
 
 interface DeletedStudentRow {
   id: string;
@@ -40,6 +41,9 @@ const StudentRecycleBinPage = () => {
   const queryClient = useQueryClient();
   const institution = useAuthStore((state) => state.institution);
   const tenantContext = useAuthStore((state) => state.tenantContext);
+  const institutionLevels = getInstitutionLevels(tenantContext || institution);
+  const isPureTertiaryWorkspace =
+    institutionLevels.length === 1 && institutionLevels[0] === 'TR';
   const activeInstitutionId = (tenantContext || institution)?.id || null;
   const [search, setSearch] = useState('');
   const [confirmState, setConfirmState] = useState<{
@@ -150,7 +154,7 @@ const StudentRecycleBinPage = () => {
           columns={[
             { header: 'Student', accessorKey: 'name' },
             { header: 'Student Number', accessorKey: 'student_number' },
-            { header: 'Class', accessorKey: 'className' },
+            { header: isPureTertiaryWorkspace ? 'Level' : 'Class', accessorKey: 'className' },
             {
               header: 'Level',
               cell: ({ row }) => <Badge variant="info">{row.original.level}</Badge>,

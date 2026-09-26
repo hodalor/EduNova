@@ -71,6 +71,7 @@ const TimetableViewPage = () => {
     (group) => !allowedLevels.length || allowedLevels.includes(group.level_code as EducationLevelCode)
   );
   const selectedGroup = groups.find((group: AcademicGroup) => group.id === groupId) || null;
+  const isTertiaryScope = selectedGroup?.level_code === 'TR';
   const actualEntries = useMemo(() => (data || []) as TimetableEntry[], [data]);
   const structureEntries = useMemo(() => {
     const offerings = ((structure?.offerings || []) as AcademicOffering[]).filter(
@@ -101,11 +102,15 @@ const TimetableViewPage = () => {
     <div className="space-y-6">
       <PageHeader
         title="Timetable View"
-        description="Review the weekly timetable using the current school structure."
+        description={
+          isTertiaryScope
+            ? 'Review the weekly course timetable using the current tertiary structure.'
+            : 'Review the weekly timetable using the current school structure.'
+        }
         actions={
           <div className="flex gap-3">
             <Button variant={viewMode === 'class' ? 'primary' : 'secondary'} onClick={() => setViewMode('class')}>
-              Class View
+              {isTertiaryScope ? 'Level View' : 'Class View'}
             </Button>
             <Button variant={viewMode === 'teacher' ? 'primary' : 'secondary'} onClick={() => setViewMode('teacher')}>
               Teacher View
@@ -114,10 +119,17 @@ const TimetableViewPage = () => {
         }
       />
 
-      <Card title="Scope" description="Choose the class or level you want to review.">
+      <Card
+        title="Scope"
+        description={
+          isTertiaryScope
+            ? 'Choose the level you want to review.'
+            : 'Choose the class or level you want to review.'
+        }
+      >
         <div className="grid gap-4 md:grid-cols-[1fr_auto]">
-          <Select label="Class or Level" value={groupId} onChange={(event) => setGroupId(event.target.value)}>
-            <option value="">Select class or level</option>
+          <Select label={isTertiaryScope ? 'Level' : 'Class or Level'} value={groupId} onChange={(event) => setGroupId(event.target.value)}>
+            <option value="">{isTertiaryScope ? 'Select level' : 'Select class or level'}</option>
             {groups.map((group: AcademicGroup) => (
               <option key={group.id} value={group.id}>
                 {group.name} ({group.code})
@@ -135,7 +147,10 @@ const TimetableViewPage = () => {
         </div>
       </Card>
 
-      <Card title="Weekly Grid" description={`Currently showing ${viewMode} timetable mode.`}>
+      <Card
+        title={isTertiaryScope ? 'Weekly Course Grid' : 'Weekly Grid'}
+        description={`Currently showing ${isTertiaryScope && viewMode === 'class' ? 'level' : viewMode} timetable mode.`}
+      >
         <div className="overflow-x-auto">
           <div className="grid min-w-[900px] grid-cols-[120px_repeat(5,minmax(0,1fr))] gap-3">
             <div />

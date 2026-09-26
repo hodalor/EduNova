@@ -55,6 +55,22 @@ const formatNumber = (value) =>
 const formatPercent = (value, digits = 1) =>
   `${(Number(value) || 0).toFixed(digits)}%`;
 
+const withAcademicAliases = (payload = {}) => {
+  const className = payload.className || payload.class_name || payload.levelName || 'Unassigned';
+  const subject = payload.subject || payload.courseName || payload.course_name || '';
+  const term = payload.term || payload.term_name || payload.semesterName || '';
+
+  return {
+    ...payload,
+    className,
+    levelName: payload.levelName || className,
+    subject,
+    courseName: payload.courseName || subject,
+    term,
+    semesterName: payload.semesterName || term,
+  };
+};
+
 const databaseReady = () =>
   Boolean(
     models?.Institution &&
@@ -172,7 +188,7 @@ const computeRealtimeOverview = async ({ institutionId }) => {
       totalPaid = paymentsRows.reduce((sum, row) => sum + (Number(row.amount) || 0), 0);
       collectionRate = totalInvoiced > 0 ? (totalPaid / totalInvoiced) * 100 : 0;
       paymentsRows.forEach((row) => {
-        recentPayments.push({
+        recentPayments.push(withAcademicAliases({
           id: row.id,
           studentName:
             `${row.student?.user?.first_name || ''} ${row.student?.user?.last_name || ''}`.trim() ||
@@ -183,7 +199,7 @@ const computeRealtimeOverview = async ({ institutionId }) => {
           method: row.payment_method || 'Bank',
           date: row.paid_at ? String(row.paid_at).slice(0, 10) : todayIso,
           status: 'Paid',
-        });
+        }));
       });
     } catch (_err) {
       totalInvoiced = 0;
@@ -203,16 +219,18 @@ const computeRealtimeOverview = async ({ institutionId }) => {
       .sort((a, b) => new Date(b.paid_at || 0) - new Date(a.paid_at || 0))
       .slice(0, 5)
       .forEach((row) => {
-        recentPayments.push({
+        recentPayments.push(withAcademicAliases({
           id: row.id,
           studentName:
             invoices.find((inv) => inv.id === row.invoice_id)?.student_name ||
             `Student #${row.invoice_id || row.id}`,
+          className:
+            invoices.find((inv) => inv.id === row.invoice_id)?.class_name || 'Unassigned',
           amount: Number(row.amount) || 0,
           method: row.payment_method || 'Bank',
           date: row.paid_at ? String(row.paid_at).slice(0, 10) : todayIso,
           status: 'Paid',
-        });
+        }));
       });
   }
 
@@ -447,22 +465,24 @@ const getRevenue = async ({ institutionId, params = {} }) =>
         const today = new Date().toISOString().slice(0, 10);
         const defaulters = allInvoices
           .filter((invoice) => Number(invoice.balance || 0) > 0)
-          .map((invoice) => ({
-            id: invoice.id,
-            student: invoice.student_name || `Student #${invoice.student_id}`,
-            className: invoice.class_name || invoice.student?.class?.name || 'Unassigned',
-            amount: Number(invoice.balance || 0),
-            daysOverdue:
-              invoice.due_date && String(invoice.due_date).slice(0, 10) < today
-                ? Math.max(
-                    Math.floor(
-                      (new Date(today).getTime() - new Date(String(invoice.due_date).slice(0, 10)).getTime()) /
-                        (1000 * 60 * 60 * 24)
-                    ),
-                    0
-                  )
-                : 0,
-          }))
+          .map((invoice) =>
+            withAcademicAliases({
+              id: invoice.id,
+              student: invoice.student_name || `Student #${invoice.student_id}`,
+              className: invoice.class_name || invoice.student?.class?.name || 'Unassigned',
+              amount: Number(invoice.balance || 0),
+              daysOverdue:
+                invoice.due_date && String(invoice.due_date).slice(0, 10) < today
+                  ? Math.max(
+                      Math.floor(
+                        (new Date(today).getTime() - new Date(String(invoice.due_date).slice(0, 10)).getTime()) /
+                          (1000 * 60 * 60 * 24)
+                      ),
+                      0
+                    )
+                  : 0,
+            })
+          )
           .sort((a, b) => b.amount - a.amount);
 
         return {
@@ -507,22 +527,24 @@ const getRevenue = async ({ institutionId, params = {} }) =>
         expenseBreakdown: [],
         defaulters: invoices
           .filter((invoice) => Number(invoice.balance || 0) > 0)
-          .map((invoice) => ({
-            id: invoice.id,
-            student: invoice.student_name || `Student #${invoice.student_id}`,
-            className: invoice.class_name || 'Unassigned',
-            amount: Number(invoice.balance || 0),
-            daysOverdue:
-              invoice.due_date && String(invoice.due_date).slice(0, 10) < new Date().toISOString().slice(0, 10)
-                ? Math.max(
-                    Math.floor(
-                      (new Date().setHours(0, 0, 0, 0) - new Date(String(invoice.due_date).slice(0, 10)).getTime()) /
-                        (1000 * 60 * 60 * 24)
-                    ),
-                    0
-                  )
-                : 0,
-          })),
+          .map((invoice) =>
+            withAcademicAliases({
+              id: invoice.id,
+              student: invoice.student_name || `Student #${invoice.student_id}`,
+              className: invoice.class_name || 'Unassigned',
+              amount: Number(invoice.balance || 0),
+              daysOverdue:
+                invoice.due_date && String(invoice.due_date).slice(0, 10) < new Date().toISOString().slice(0, 10)
+                  ? Math.max(
+                      Math.floor(
+                        (new Date().setHours(0, 0, 0, 0) - new Date(String(invoice.due_date).slice(0, 10)).getTime()) /
+                          (1000 * 60 * 60 * 24)
+                      ),
+                      0
+                    )
+                  : 0,
+            })
+          ),
       };
     },
   });
@@ -756,24 +778,28 @@ const getPerformance = async ({ institutionId, params = {} }) =>
         });
 
         return {
-          averageGrades: Array.from(classMap.entries()).map(([className, entry]) => ({
-            className,
-            average: entry.total ? Math.round(entry.sum / entry.total) : 0,
-            benchmark: 70,
-          })),
+          averageGrades: Array.from(classMap.entries()).map(([className, entry]) =>
+            withAcademicAliases({
+              className,
+              average: entry.total ? Math.round(entry.sum / entry.total) : 0,
+              benchmark: 70,
+            })
+          ),
           passRates: [],
           atRisk: reportCards
             .filter((item) => Number(item.overall_average || 0) > 0 && Number(item.overall_average || 0) < 50)
-            .map((item) => ({
-              id: item.student_id,
-              student:
-                `${item.student?.user?.first_name || ''} ${item.student?.user?.last_name || ''}`.trim() ||
-                item.student_id,
-              className: item.class?.name || item.student?.class?.name || 'Unassigned',
-              average: Math.round(Number(item.overall_average || 0)),
-              attendance: 0,
-              risk: 'high',
-            })),
+            .map((item) =>
+              withAcademicAliases({
+                id: item.student_id,
+                student:
+                  `${item.student?.user?.first_name || ''} ${item.student?.user?.last_name || ''}`.trim() ||
+                  item.student_id,
+                className: item.class?.name || item.student?.class?.name || 'Unassigned',
+                average: Math.round(Number(item.overall_average || 0)),
+                attendance: 0,
+                risk: 'high',
+              })
+            ),
           publishedReports: reportCards.filter((item) => item.is_published).length,
         };
       }
@@ -789,22 +815,26 @@ const getPerformance = async ({ institutionId, params = {} }) =>
       });
 
       return {
-        averageGrades: Array.from(classMap.entries()).map(([className, entry]) => ({
-          className,
-          average: entry.total ? Math.round(entry.sum / entry.total) : 0,
-          benchmark: 70,
-        })),
+        averageGrades: Array.from(classMap.entries()).map(([className, entry]) =>
+          withAcademicAliases({
+            className,
+            average: entry.total ? Math.round(entry.sum / entry.total) : 0,
+            benchmark: 70,
+          })
+        ),
         passRates: [],
         atRisk: reportCards
           .filter((item) => Number(item.overall_average || 0) > 0 && Number(item.overall_average || 0) < 50)
-          .map((item) => ({
-            id: item.student_id,
-            student: item.student_name || item.student_id,
-            className: item.class_name || 'Unassigned',
-            average: Math.round(Number(item.overall_average || 0)),
-            attendance: 0,
-            risk: 'high',
-          })),
+          .map((item) =>
+            withAcademicAliases({
+              id: item.student_id,
+              student: item.student_name || item.student_id,
+              className: item.class_name || 'Unassigned',
+              average: Math.round(Number(item.overall_average || 0)),
+              attendance: 0,
+              risk: 'high',
+            })
+          ),
         publishedReports: reportCards.filter((item) => item.is_published).length,
       };
     },
@@ -856,7 +886,7 @@ const getEnrollmentTrend = async ({ institutionId, params = {} }) =>
               acc.set(key, current);
               return acc;
             }, new Map())
-          ).map(([, value]) => value),
+          ).map(([, value]) => withAcademicAliases(value)),
         };
       }
 

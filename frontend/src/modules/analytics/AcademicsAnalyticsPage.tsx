@@ -18,6 +18,8 @@ import Card from '../../components/ui/Card';
 import DatePicker from '../../components/ui/DatePicker';
 import PageLoader from '../../components/ui/PageLoader';
 import Table from '../../components/ui/Table';
+import { getInstitutionLevels } from '../../lib/institution';
+import { useAuthStore } from '../../store/authStore';
 
 interface AverageGradeRow {
   className: string;
@@ -40,6 +42,12 @@ interface AtRiskRow {
 }
 
 const AcademicsAnalyticsPage = () => {
+  const institution = useAuthStore((state) => state.institution);
+  const tenantContext = useAuthStore((state) => state.tenantContext);
+  const activeInstitution = tenantContext || institution;
+  const institutionLevels = getInstitutionLevels(activeInstitution);
+  const isPureTertiaryWorkspace =
+    institutionLevels.length === 1 && institutionLevels[0] === 'TR';
   const [from, setFrom] = useState('2026-01-01');
   const [to, setTo] = useState('2026-06-30');
   const { data, isLoading, isError, refetch } = useQuery({
@@ -71,7 +79,10 @@ const AcademicsAnalyticsPage = () => {
       </div>
 
       <div className="grid gap-6 xl:grid-cols-2">
-        <Card title="Average Grades per Class" description="Comparison against the benchmark target.">
+        <Card
+          title={isPureTertiaryWorkspace ? 'Average Grades per Level' : 'Average Grades per Class'}
+          description="Comparison against the benchmark target."
+        >
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={data.averageGrades as AverageGradeRow[]}>
@@ -86,7 +97,14 @@ const AcademicsAnalyticsPage = () => {
           </div>
         </Card>
 
-        <Card title="Pass Rate per Subject" description="Horizontal comparison across major subjects.">
+        <Card
+          title={isPureTertiaryWorkspace ? 'Pass Rate per Course' : 'Pass Rate per Subject'}
+          description={
+            isPureTertiaryWorkspace
+              ? 'Horizontal comparison across major courses.'
+              : 'Horizontal comparison across major subjects.'
+          }
+        >
           <div className="space-y-4">
             {(data.passRates as PassRateRow[]).map((row) => (
               <div key={row.subject}>
@@ -111,7 +129,7 @@ const AcademicsAnalyticsPage = () => {
         data={data.atRisk as AtRiskRow[]}
         columns={[
           { header: 'Student', accessorKey: 'student' },
-          { header: 'Class', accessorKey: 'className' },
+          { header: isPureTertiaryWorkspace ? 'Level' : 'Class', accessorKey: 'className' },
           { header: 'Average Grade', cell: ({ row }) => `${row.original.average}%` },
           { header: 'Attendance', cell: ({ row }) => `${row.original.attendance}%` },
           {

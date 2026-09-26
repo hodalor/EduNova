@@ -23,6 +23,7 @@ import { NavLink, Outlet, useLocation } from 'react-router-dom';
 
 import { cn } from '../../lib/cn';
 import {
+  getInstitutionLevels,
   getRoleHomeTitle,
   getWorkspaceLabel,
   isDaycareInstitution,
@@ -246,6 +247,11 @@ const buildNavGroups = (
     .filter((group) => group.items.length > 0);
 };
 
+const isPureTertiaryWorkspace = (institution: InstitutionSummary | null) => {
+  const levels = getInstitutionLevels(institution);
+  return levels.length === 1 && levels[0] === 'TR';
+};
+
 export const Sidebar = () => {
   const collapsed = useUiStore((state) => state.sidebarCollapsed);
   const role = useAuthStore((state) => state.role);
@@ -255,6 +261,7 @@ export const Sidebar = () => {
   const activeInstitution = tenantContext || institution;
   const groups = buildNavGroups(role, institution, tenantContext, permissions);
   const workspaceLabel = getWorkspaceLabel(activeInstitution);
+  const pureTertiaryWorkspace = isPureTertiaryWorkspace(activeInstitution);
 
   return (
     <aside
@@ -274,14 +281,16 @@ export const Sidebar = () => {
                 EDUOVA
               </p>
               <p className="mt-1 text-sm font-semibold text-white">
-                {activeInstitution?.name || 'Education Platform'}
+                {activeInstitution?.name || (pureTertiaryWorkspace ? 'Tertiary Platform' : 'Education Platform')}
               </p>
               <p className="mt-1 text-xs uppercase tracking-[0.16em] text-slate-400">
                 {role === 'super_admin' && tenantContext
                   ? `Platform Master · ${tenantContext.name}`
                   : role === 'super_admin'
                     ? 'Platform Master'
-                    : workspaceLabel}
+                    : pureTertiaryWorkspace
+                      ? 'Tertiary Workspace'
+                      : workspaceLabel}
               </p>
             </div>
           ) : null}

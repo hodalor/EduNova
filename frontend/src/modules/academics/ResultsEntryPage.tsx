@@ -12,6 +12,8 @@ import Input from '../../components/ui/Input';
 import Modal from '../../components/ui/Modal';
 import PageLoader from '../../components/ui/PageLoader';
 import PageHeader from '../shared/PageHeader';
+import { getInstitutionLevels } from '../../lib/institution';
+import { useAuthStore } from '../../store/authStore';
 
 interface AssessmentRow {
   id: string;
@@ -49,6 +51,12 @@ interface StudentRow {
 }
 
 const ResultsEntryPage = () => {
+  const institution = useAuthStore((state) => state.institution);
+  const tenantContext = useAuthStore((state) => state.tenantContext);
+  const activeInstitution = tenantContext || institution;
+  const institutionLevels = getInstitutionLevels(activeInstitution);
+  const isPureTertiaryWorkspace =
+    institutionLevels.length === 1 && institutionLevels[0] === 'TR';
   const [scores, setScores] = useState<Record<string, number>>({});
   const [selectedAssessmentId, setSelectedAssessmentId] = useState('');
 
@@ -86,6 +94,7 @@ const ResultsEntryPage = () => {
 
   const selectedAssessment =
     assessments.find((item) => item.id === selectedAssessmentId) || null;
+  const selectedAssessmentIsTertiary = selectedAssessment?.level_code === 'TR';
   const selectedGradeScale =
     ((gradeScalesQuery.data || []) as GradeScaleDefinition[]).find(
       (item) => item.level_code === selectedAssessment?.level_code
@@ -126,6 +135,9 @@ const ResultsEntryPage = () => {
       })),
     [scores, visibleStudents]
   );
+  const structureLabel = isPureTertiaryWorkspace ? 'Level' : 'Class';
+  const offeringLabel = isPureTertiaryWorkspace ? 'Course' : 'Subject';
+  const periodLabel = isPureTertiaryWorkspace ? 'Semester' : 'Term';
 
   if (assessmentsQuery.isLoading || studentsQuery.isLoading) {
     return <PageLoader />;
@@ -159,7 +171,11 @@ const ResultsEntryPage = () => {
     <div className="space-y-6">
       <PageHeader
         title="Results Entry"
-        description="Open an assessment row to enter scores, review limits, and import marks from one modal."
+        description={
+          isPureTertiaryWorkspace
+            ? 'Open a course row to enter scores, calculate grade points, and keep transcript data aligned.'
+            : 'Open an assessment row to enter scores, review limits, and import marks from one modal.'
+        }
       />
 
       <Card>
@@ -178,7 +194,7 @@ const ResultsEntryPage = () => {
             <table className="min-w-full divide-y divide-slate-200 text-sm">
               <thead className="bg-slate-50">
                 <tr>
-                  {['Class', 'Subject', 'Term', 'Assessment', 'Max Score'].map((label) => (
+                  {[structureLabel, offeringLabel, periodLabel, 'Assessment', 'Max Score'].map((label) => (
                     <th key={label} className="px-4 py-3 text-left font-semibold uppercase text-slate-600">
                       {label}
                     </th>
@@ -224,15 +240,21 @@ const ResultsEntryPage = () => {
           <div className="space-y-6">
             <div className="grid gap-4 md:grid-cols-4">
               <div className="rounded-2xl bg-slate-50 p-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Class</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                  {selectedAssessmentIsTertiary ? 'Level' : 'Class'}
+                </p>
                 <p className="mt-2 text-lg font-semibold text-brand-navy">{selectedAssessment.className}</p>
               </div>
               <div className="rounded-2xl bg-slate-50 p-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Subject</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                  {selectedAssessmentIsTertiary ? 'Course' : 'Subject'}
+                </p>
                 <p className="mt-2 text-lg font-semibold text-brand-navy">{selectedAssessment.subject}</p>
               </div>
               <div className="rounded-2xl bg-slate-50 p-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Term</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                  {selectedAssessmentIsTertiary ? 'Semester' : 'Term'}
+                </p>
                 <p className="mt-2 text-lg font-semibold text-brand-navy">{selectedAssessment.term}</p>
               </div>
               <div className="rounded-2xl bg-slate-50 p-4">
@@ -316,12 +338,23 @@ const ResultsEntryPage = () => {
               <Button variant="secondary" onClick={() => setSelectedAssessmentId('')}>
                 Close
               </Button>
-              <Button
-                variant="secondary"
-                onClick={() => toast.success('Report card generation should follow after scores are confirmed.')}
-              >
-                Generate Report Cards
-              </Button>
+              {!selectedAssessmentIsTertiary ? (
+                <Button
+                  variant="secondary"
+                  onClick={() => toast.success('Report card generation should follow after scores are confirmed.')}
+                >
+                  Generate Report Cards
+                </Button>
+              ) : (
+                <Button
+                  variant="secondary"
+                  onClick={() =>
+                    toast.success('Tertiary transcript output is available from the student profile after results are posted.')
+                  }
+                >
+                  Transcript Follows Student Profile
+                </Button>
+              )}
               <Button loading={saveScoresMutation.isPending} onClick={handleSaveScores}>
                 Save All Scores
               </Button>

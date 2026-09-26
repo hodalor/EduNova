@@ -19,6 +19,8 @@ import Card from '../../components/ui/Card';
 import DatePicker from '../../components/ui/DatePicker';
 import PageLoader from '../../components/ui/PageLoader';
 import Table from '../../components/ui/Table';
+import { getInstitutionLevels } from '../../lib/institution';
+import { useAuthStore } from '../../store/authStore';
 
 interface RateRow {
   day: string;
@@ -41,6 +43,12 @@ interface AbsenteeRow {
 const intensityMap = ['bg-emerald-50', 'bg-amber-100', 'bg-amber-300', 'bg-rose-400'];
 
 const AttendanceAnalyticsPage = () => {
+  const institution = useAuthStore((state) => state.institution);
+  const tenantContext = useAuthStore((state) => state.tenantContext);
+  const activeInstitution = tenantContext || institution;
+  const institutionLevels = getInstitutionLevels(activeInstitution);
+  const isPureTertiaryWorkspace =
+    institutionLevels.length === 1 && institutionLevels[0] === 'TR';
   const [from, setFrom] = useState('2026-06-01');
   const [to, setTo] = useState('2026-06-30');
   const { data, isLoading, isError, refetch } = useQuery({
@@ -110,7 +118,7 @@ const AttendanceAnalyticsPage = () => {
         data={data.chronicAbsentees as AbsenteeRow[]}
         columns={[
           { header: 'Student', accessorKey: 'student' },
-          { header: 'Class', accessorKey: 'className' },
+          { header: isPureTertiaryWorkspace ? 'Level' : 'Class', accessorKey: 'className' },
           { header: 'Attendance', cell: ({ row }) => `${row.original.attendance}%` },
           { header: 'Consecutive Days', accessorKey: 'consecutive' },
           {

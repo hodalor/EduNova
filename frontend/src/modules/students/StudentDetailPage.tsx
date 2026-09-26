@@ -475,7 +475,9 @@ const StudentDetailPage = () => {
               <Card title="Current Academic Snapshot" description="Overview of the student's current study context.">
                 <div className="space-y-3 text-sm text-slate-600">
                   <div className="rounded-2xl bg-slate-50 p-4">
-                    <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Class</p>
+                    <p className="text-xs uppercase tracking-[0.14em] text-slate-400">
+                      {data.tertiary?.program_name ? 'Level' : 'Class'}
+                    </p>
                     <p className="mt-2 font-semibold text-brand-navy">{data.className}</p>
                   </div>
                   <div className="rounded-2xl bg-slate-50 p-4">

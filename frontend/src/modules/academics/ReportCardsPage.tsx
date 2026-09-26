@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { CheckCircle2, FileCheck2, Send } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 import { eduovaApi } from '../../api/eduovaApi';
 import Badge from '../../components/ui/Badge';
@@ -12,6 +13,7 @@ import PageLoader from '../../components/ui/PageLoader';
 import Select from '../../components/ui/Select';
 import Table from '../../components/ui/Table';
 import { ConfirmDialog } from '../../components/ui/core';
+import { getInstitutionLevels } from '../../lib/institution';
 import PageHeader from '../shared/PageHeader';
 import { useAuthStore } from '../../store/authStore';
 
@@ -37,6 +39,10 @@ const ReportCardsPage = () => {
   const institution = useAuthStore((state) => state.institution);
   const tenantContext = useAuthStore((state) => state.tenantContext);
   const activeInstitutionId = (tenantContext || institution)?.id || null;
+  const activeInstitution = tenantContext || institution;
+  const institutionLevels = getInstitutionLevels(activeInstitution);
+  const isPureTertiaryWorkspace =
+    institutionLevels.length === 1 && institutionLevels[0] === 'TR';
   const [classFilter, setClassFilter] = useState('all');
   const [termFilter, setTermFilter] = useState('all');
   const [confirmState, setConfirmState] = useState<{
@@ -136,6 +142,31 @@ const ReportCardsPage = () => {
 
   if (isLoading) {
     return <PageLoader />;
+  }
+
+  if (isPureTertiaryWorkspace) {
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          title="Transcripts"
+          description="Tertiary institutions work with transcripts, not report cards."
+        />
+        <Card
+          title="Transcript Workflow"
+          description="Open each student profile and use the Transcript tab for official academic output."
+          action={
+            <Link to="/students">
+              <Button>Open Student Register</Button>
+            </Link>
+          }
+        >
+          <EmptyState
+            title="Report cards are for lower levels"
+            message="For tertiary students, score entry, grades, GP, TGP, and transcript output stay on the student record instead of a report-card queue."
+          />
+        </Card>
+      </div>
+    );
   }
 
   return (

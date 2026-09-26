@@ -10,7 +10,7 @@ import Card from '../../components/ui/Card';
 import PageLoader from '../../components/ui/PageLoader';
 import PageHeader from '../shared/PageHeader';
 import { useAuthStore } from '../../store/authStore';
-import { isTertiaryInstitution } from '../../lib/institution';
+import { getInstitutionLevels, isTertiaryInstitution } from '../../lib/institution';
 
 interface ReportCardRow {
   id: string;
@@ -39,6 +39,9 @@ interface InvoiceRow {
 const StudentWorkspacePage = () => {
   const user = useAuthStore((state) => state.user);
   const institution = useAuthStore((state) => state.institution);
+  const institutionLevels = getInstitutionLevels(institution);
+  const isPureTertiaryWorkspace =
+    institutionLevels.length === 1 && institutionLevels[0] === 'TR';
   const { data: reportCards = [], isLoading: loadingReports } = useQuery<ReportCardRow[]>({
     queryKey: ['student-report-cards'],
     queryFn: eduovaApi.academics.reportCards,
@@ -71,9 +74,11 @@ const StudentWorkspacePage = () => {
         icon: CalendarRange,
       },
       {
-        label: 'Published Reports',
+        label: isPureTertiaryWorkspace ? 'Academic Updates' : 'Published Reports',
         value: `${reportCards.filter((item: ReportCardRow) => item.status !== 'Pending').length}`,
-        helper: 'Available report cards and academic updates.',
+        helper: isPureTertiaryWorkspace
+          ? 'Available academic updates ahead of transcript release.'
+          : 'Available report cards and academic updates.',
         icon: GraduationCap,
       },
       {
@@ -89,7 +94,7 @@ const StudentWorkspacePage = () => {
         icon: ShieldAlert,
       },
     ];
-  }, [attendance, invoices, reportCards, timetable]);
+  }, [attendance, invoices, reportCards, timetable, isPureTertiaryWorkspace]);
 
   if (loadingReports || loadingAttendance || loadingTimetable || loadingInvoices) {
     return <PageLoader />;
@@ -123,7 +128,14 @@ const StudentWorkspacePage = () => {
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
-        <Card title="My Academic Record" description="Recent report publication and review status.">
+        <Card
+          title={isPureTertiaryWorkspace ? 'My Academic Progress' : 'My Academic Record'}
+          description={
+            isPureTertiaryWorkspace
+              ? 'Recent academic updates, finance standing, and transcript readiness.'
+              : 'Recent report publication and review status.'
+          }
+        >
           <div className="space-y-3">
             {reportCards.map((item: ReportCardRow) => (
               <div
@@ -132,7 +144,11 @@ const StudentWorkspacePage = () => {
               >
                 <div>
                   <p className="font-semibold text-brand-navy">{item.student}</p>
-                  <p className="text-sm text-slate-500">Academic record update available.</p>
+                  <p className="text-sm text-slate-500">
+                    {isPureTertiaryWorkspace
+                      ? 'Academic update available for your transcript trail.'
+                      : 'Academic record update available.'}
+                  </p>
                 </div>
                 <Badge variant={item.status === 'Pending' ? 'pending' : 'success'}>
                   {item.status}
@@ -181,7 +197,14 @@ const StudentWorkspacePage = () => {
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-        <Card title="Upcoming Timetable" description="Next subjects and room allocations.">
+        <Card
+          title="Upcoming Timetable"
+          description={
+            isPureTertiaryWorkspace
+              ? 'Next courses and room allocations.'
+              : 'Next subjects and room allocations.'
+          }
+        >
           <div className="space-y-3">
             {timetable.map((item: TimetableRow, index: number) => (
               <div

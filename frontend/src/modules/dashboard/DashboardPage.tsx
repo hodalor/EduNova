@@ -21,7 +21,13 @@ import Card from '../../components/ui/Card';
 import PageLoader from '../../components/ui/PageLoader';
 import Stat from '../../components/ui/Stat';
 import Table from '../../components/ui/Table';
-import { isTertiaryInstitution, isDaycareInstitution, supportsAcademics, supportsFinance } from '../../lib/institution';
+import {
+  getInstitutionLevels,
+  isTertiaryInstitution,
+  isDaycareInstitution,
+  supportsAcademics,
+  supportsFinance,
+} from '../../lib/institution';
 import { useAuthStore } from '../../store/authStore';
 import PageHeader from '../shared/PageHeader';
 import ParentWorkspacePage from '../workspace/ParentWorkspacePage';
@@ -61,6 +67,9 @@ const DashboardPage = () => {
   const navigate = useNavigate();
   const role = useAuthStore((state) => state.role);
   const institution = useAuthStore((state) => state.tenantContext || state.institution);
+  const institutionLevels = getInstitutionLevels(institution);
+  const isPureTertiaryWorkspace =
+    institutionLevels.length === 1 && institutionLevels[0] === 'TR';
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['dashboard-overview', institution?.id],
     queryFn: eduovaApi.analytics.getOverview,
@@ -97,8 +106,12 @@ const DashboardPage = () => {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Executive Dashboard"
-        description="Institution performance at a glance across finance, academics, attendance, and daily operations."
+        title={isPureTertiaryWorkspace ? 'Tertiary Dashboard' : 'Executive Dashboard'}
+        description={
+          isPureTertiaryWorkspace
+            ? 'Institution performance at a glance across finance, academics, registration, and daily operations.'
+            : 'Institution performance at a glance across finance, academics, attendance, and daily operations.'
+        }
       />
       <div className="grid gap-5 xl:grid-cols-4">
         {(data.stats as DashboardStat[]).map((item) => (
@@ -122,7 +135,14 @@ const DashboardPage = () => {
             </ResponsiveContainer>
           </div>
         </Card>
-        <Card title="Enrollment by Level" description="Current distribution of students across education levels.">
+        <Card
+          title="Enrollment by Level"
+          description={
+            isPureTertiaryWorkspace
+              ? 'Current distribution of students across tertiary levels.'
+              : 'Current distribution of students across education levels.'
+          }
+        >
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={data.enrollmentByLevel}>
@@ -143,7 +163,7 @@ const DashboardPage = () => {
           data={data.recentPayments as RecentPaymentRow[]}
           columns={[
             { header: 'Student', accessorKey: 'student' },
-            { header: 'Class', accessorKey: 'className' },
+            { header: isPureTertiaryWorkspace ? 'Level' : 'Class', accessorKey: 'className' },
             { header: 'Method', accessorKey: 'method' },
             { header: 'Amount', cell: ({ row }) => `GHS ${row.original.amount.toLocaleString()}` },
             { header: 'Received', accessorKey: 'receivedAt' },
@@ -164,7 +184,14 @@ const DashboardPage = () => {
         </Card>
       </div>
 
-      <Card title="Quick Actions" description="Launch the most common administrative workflows.">
+      <Card
+        title="Quick Actions"
+        description={
+          isPureTertiaryWorkspace
+            ? 'Launch the most common tertiary administrative workflows.'
+            : 'Launch the most common administrative workflows.'
+        }
+      >
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <Button
             variant="secondary"
@@ -204,7 +231,7 @@ const DashboardPage = () => {
               leftIcon={<Receipt className="h-4 w-4" />}
               onClick={() => navigate('/tertiary')}
             >
-              Tertiary Setup
+              {isPureTertiaryWorkspace ? 'Program Setup' : 'Tertiary Setup'}
             </Button>
           ) : null}
           {supportsFinance(institution) ? (

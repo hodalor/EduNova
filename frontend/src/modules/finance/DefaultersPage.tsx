@@ -7,6 +7,8 @@ import Button from '../../components/ui/Button';
 import PageLoader from '../../components/ui/PageLoader';
 import Table from '../../components/ui/Table';
 import PageHeader from '../shared/PageHeader';
+import { getInstitutionLevels } from '../../lib/institution';
+import { useAuthStore } from '../../store/authStore';
 
 interface DefaulterRow {
   id: string;
@@ -14,9 +16,15 @@ interface DefaulterRow {
   amount: number;
   daysOverdue: number;
   className: string;
+  levelName?: string;
 }
 
 const DefaultersPage = () => {
+  const institution = useAuthStore((state) => state.institution);
+  const tenantContext = useAuthStore((state) => state.tenantContext);
+  const institutionLevels = getInstitutionLevels(tenantContext || institution);
+  const isPureTertiaryWorkspace =
+    institutionLevels.length === 1 && institutionLevels[0] === 'TR';
   const { data, isLoading } = useQuery({
     queryKey: ['finance-defaulters'],
     queryFn: eduovaApi.finance.defaulters,
@@ -28,7 +36,7 @@ const DefaultersPage = () => {
     const worksheet = XLSX.utils.json_to_sheet(
       rows.map((row) => ({
         Student: row.student,
-        Class: row.className,
+        [isPureTertiaryWorkspace ? 'Level' : 'Class']: row.levelName || row.className,
         Amount: row.amount,
         DaysOverdue: row.daysOverdue,
       }))
@@ -62,7 +70,10 @@ const DefaultersPage = () => {
         data={rows}
         columns={[
           { header: 'Student', accessorKey: 'student' },
-          { header: 'Class', accessorKey: 'className' },
+            {
+              header: isPureTertiaryWorkspace ? 'Level' : 'Class',
+              cell: ({ row }) => row.original.levelName || row.original.className,
+            },
           { header: 'Amount', cell: ({ row }) => `GHS ${row.original.amount.toLocaleString()}` },
           { header: 'Days Overdue', accessorKey: 'daysOverdue' },
           { header: 'Contact', cell: () => '+233 24 000 0111' },

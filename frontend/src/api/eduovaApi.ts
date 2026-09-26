@@ -21,6 +21,23 @@ const asNumber = (value: unknown): number => Number(value) || 0;
 const asString = (value: unknown, fallback = ''): string =>
   typeof value === 'string' && value.trim() ? value : fallback;
 
+const normalizeAcademicNames = (payload: unknown): Record<string, unknown> => {
+  const item = asRecord(payload);
+  const className = asString(item.className, asString(item.class_name, asString(item.levelName, '-')));
+  const subject = asString(item.subject, asString(item.courseName, ''));
+  const term = asString(item.term, asString(item.term_name, asString(item.semesterName, '')));
+
+  return {
+    ...item,
+    className,
+    levelName: asString(item.levelName, className),
+    subject,
+    courseName: asString(item.courseName, subject),
+    term,
+    semesterName: asString(item.semesterName, term),
+  };
+};
+
 const normalizeDashboardOverview = (payload: unknown) => {
   const raw = asRecord(payload);
 
@@ -69,11 +86,12 @@ const normalizeDashboardOverview = (payload: unknown) => {
 
   const recentPayments = Array.isArray(raw.recentPayments)
     ? raw.recentPayments.map((entry, index) => {
-        const item = asRecord(entry);
+        const item = normalizeAcademicNames(entry);
         return {
           id: asString(item.id, `payment-${index + 1}`),
           student: asString(item.student, asString(item.studentName, 'Student')),
           className: asString(item.className, '-'),
+          levelName: asString(item.levelName, asString(item.className, '-')),
           amount: asNumber(item.amount),
           method: asString(item.method, 'Bank'),
           receivedAt: asString(item.receivedAt, asString(item.date, '')),
@@ -288,7 +306,10 @@ export const eduovaApi = {
       (await axiosInstance.delete(`/v1/academics/offerings/${id}`)).data.data,
     saveScores: async (payload: Record<string, unknown>) =>
       (await axiosInstance.post('/v1/academics/scores', payload)).data.data,
-    assessments: async () => (await axiosInstance.get('/v1/academics/assessments')).data.data,
+    assessments: async () => {
+      const data = (await axiosInstance.get('/v1/academics/assessments')).data.data;
+      return Array.isArray(data) ? data.map((item) => normalizeAcademicNames(item)) : [];
+    },
     gradeScales: async (levelCode?: string) =>
       (
         await axiosInstance.get('/v1/academics/grade-scales', {

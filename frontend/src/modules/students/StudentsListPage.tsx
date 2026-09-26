@@ -40,6 +40,8 @@ const StudentsListPage = () => {
     () => getInstitutionLevels(activeInstitution),
     [activeInstitution]
   );
+  const isPureTertiaryWorkspace =
+    allowedLevels.length === 1 && allowedLevels[0] === 'TR';
 
   const [search, setSearch] = useState('');
   const [level, setLevel] = useState('all');
@@ -88,7 +90,11 @@ const StudentsListPage = () => {
     <div className="space-y-6">
       <PageHeader
         title="Students"
-        description="Manage active student records, enrollment status, class placement, and communication workflows."
+        description={
+          isPureTertiaryWorkspace
+            ? 'Manage active student records, program placement, level assignment, and transcript-ready profiles.'
+            : 'Manage active student records, enrollment status, class placement, and communication workflows.'
+        }
         actions={
           <div className="flex flex-wrap gap-2">
             {canManageDeletion ? (
@@ -105,7 +111,14 @@ const StudentsListPage = () => {
         }
       />
 
-      <Card title="Filters" description="Refine the student register by level, class, status, and search terms.">
+      <Card
+        title="Filters"
+        description={
+          isPureTertiaryWorkspace
+            ? 'Refine the student register by level, assigned academic level, status, and search terms.'
+            : 'Refine the student register by level, class, status, and search terms.'
+        }
+      >
         <div className="grid gap-4 xl:grid-cols-[1.4fr_1fr_1fr_1fr]">
           <SearchInput placeholder="Search name or student number" onDebouncedChange={setSearch} />
           <Select label="Education Level" value={level} onChange={(event) => setLevel(event.target.value)}>
@@ -114,8 +127,12 @@ const StudentsListPage = () => {
               <option key={code} value={code}>{LEVEL_LABELS[code]}</option>
             ))}
           </Select>
-          <Select label="Class" value={className} onChange={(event) => setClassName(event.target.value)}>
-            <option value="all">All classes</option>
+          <Select
+            label={isPureTertiaryWorkspace ? 'Assigned Level' : 'Class'}
+            value={className}
+            onChange={(event) => setClassName(event.target.value)}
+          >
+            <option value="all">{isPureTertiaryWorkspace ? 'All levels' : 'All classes'}</option>
             {classes.map((item) => (
               <option key={item} value={item}>
                 {item}
@@ -167,7 +184,7 @@ const StudentsListPage = () => {
               ),
             },
             { header: 'Student Number', accessorKey: 'student_number' },
-            { header: 'Class', accessorKey: 'className' },
+            { header: isPureTertiaryWorkspace ? 'Level' : 'Class', accessorKey: 'className' },
             {
               header: 'Level',
               cell: ({ row }) => <Badge variant="info">{row.original.level}</Badge>,

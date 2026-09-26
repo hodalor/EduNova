@@ -6,6 +6,8 @@ import Button from '../../components/ui/Button';
 import Card from '../../components/ui/Card';
 import PageLoader from '../../components/ui/PageLoader';
 import Table from '../../components/ui/Table';
+import { getInstitutionLevels } from '../../lib/institution';
+import { useAuthStore } from '../../store/authStore';
 import PageHeader from '../shared/PageHeader';
 
 interface GradebookRow {
@@ -29,6 +31,12 @@ const scoreColor = (value: number) => {
 };
 
 const GradebookPage = () => {
+  const institution = useAuthStore((state) => state.institution);
+  const tenantContext = useAuthStore((state) => state.tenantContext);
+  const activeInstitution = tenantContext || institution;
+  const institutionLevels = getInstitutionLevels(activeInstitution);
+  const isPureTertiaryWorkspace =
+    institutionLevels.length === 1 && institutionLevels[0] === 'TR';
   const { data, isLoading } = useQuery({
     queryKey: ['academics-gradebook'],
     queryFn: eduovaApi.academics.gradebook,
@@ -39,8 +47,8 @@ const GradebookPage = () => {
   const exportExcel = () => {
     const worksheet = XLSX.utils.json_to_sheet(rows);
     const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Gradebook');
-    XLSX.writeFile(workbook, 'eduova-gradebook.xlsx');
+    XLSX.utils.book_append_sheet(workbook, worksheet, isPureTertiaryWorkspace ? 'Course Gradebook' : 'Gradebook');
+    XLSX.writeFile(workbook, isPureTertiaryWorkspace ? 'eduova-course-gradebook.xlsx' : 'eduova-gradebook.xlsx');
   };
 
   if (isLoading) {
@@ -50,12 +58,23 @@ const GradebookPage = () => {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Gradebook"
-        description="View the assessment matrix, sort by performance, and export grade data."
+        title={isPureTertiaryWorkspace ? 'Course Gradebook' : 'Gradebook'}
+        description={
+          isPureTertiaryWorkspace
+            ? 'View posted course scores, grades, and grade points before transcript release.'
+            : 'View the assessment matrix, sort by performance, and export grade data.'
+        }
         actions={<Button onClick={exportExcel}>Export as Excel</Button>}
       />
 
-      <Card title="Assessment Matrix" description="Rows represent students and columns represent assessment components.">
+      <Card
+        title={isPureTertiaryWorkspace ? 'Course Assessment Matrix' : 'Assessment Matrix'}
+        description={
+          isPureTertiaryWorkspace
+            ? 'Rows represent students and columns represent course assessment components and grade points.'
+            : 'Rows represent students and columns represent assessment components.'
+        }
+      >
         <Table<GradebookRow>
           data={rows}
           columns={[

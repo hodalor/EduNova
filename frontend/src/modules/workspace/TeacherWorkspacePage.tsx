@@ -11,13 +11,16 @@ import EmptyState from '../../components/ui/EmptyState';
 import PageLoader from '../../components/ui/PageLoader';
 import PageHeader from '../shared/PageHeader';
 import { useAuthStore } from '../../store/authStore';
-import { isTertiaryInstitution } from '../../lib/institution';
+import { getInstitutionLevels, isTertiaryInstitution } from '../../lib/institution';
 
 interface AssessmentRow {
   id: string;
   className: string;
+  levelName?: string;
   subject: string;
+  courseName?: string;
   term: string;
+  semesterName?: string;
   assessment: string;
   max_score: number;
 }
@@ -41,9 +44,12 @@ interface TimetableRow {
 const TeacherWorkspacePage = () => {
   const user = useAuthStore((state) => state.user);
   const institution = useAuthStore((state) => state.tenantContext || state.institution);
+  const institutionLevels = getInstitutionLevels(institution);
+  const isPureTertiaryWorkspace =
+    institutionLevels.length === 1 && institutionLevels[0] === 'TR';
   const { data: assessments = [], isLoading: loadingAssessments } = useQuery<AssessmentRow[]>({
     queryKey: ['teacher-assessments'],
-    queryFn: eduovaApi.academics.assessments,
+    queryFn: () => eduovaApi.academics.assessments() as Promise<AssessmentRow[]>,
   });
   const { data: attendance = [], isLoading: loadingAttendance } = useQuery<AttendanceRow[]>({
     queryKey: ['teacher-attendance-report'],
@@ -58,14 +64,16 @@ const TeacherWorkspacePage = () => {
     const pendingScores = assessments.length;
     const attentionLearners = attendance.filter((item: AttendanceRow) => item.rate < 80).length;
     const classCoverage = new Set(
-      assessments.map((item: AssessmentRow) => item.className)
+      assessments.map((item: AssessmentRow) => item.levelName || item.className)
     ).size;
 
     return [
       {
-        label: 'Class Groups',
+        label: isPureTertiaryWorkspace ? 'Assigned Levels' : 'Class Groups',
         value: `${classCoverage}`,
-        helper: 'Distinct class groups assigned this session.',
+        helper: isPureTertiaryWorkspace
+          ? 'Distinct tertiary levels assigned this semester.'
+          : 'Distinct class groups assigned this session.',
         icon: Users2,
       },
       {
@@ -87,7 +95,7 @@ const TeacherWorkspacePage = () => {
         icon: MessageSquare,
       },
     ];
-  }, [assessments, attendance]);
+  }, [assessments, attendance, isPureTertiaryWorkspace]);
 
   if (loadingAssessments || loadingAttendance || loadingTimetable) {
     return <PageLoader />;
@@ -121,7 +129,10 @@ const TeacherWorkspacePage = () => {
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-        <Card title="Assessment Queue" description="Scoring and publishing work ready for action.">
+        <Card
+          title={isPureTertiaryWorkspace ? 'Coursework Queue' : 'Assessment Queue'}
+          description="Scoring and publishing work ready for action."
+        >
           <div className="space-y-3">
             {assessments.length ? (
               assessments.map((item: AssessmentRow) => (
@@ -130,9 +141,9 @@ const TeacherWorkspacePage = () => {
                   className="flex items-center justify-between rounded-2xl border border-slate-200 px-4 py-3"
                 >
                   <div>
-                    <p className="font-semibold text-brand-navy">{item.subject}</p>
+                    <p className="font-semibold text-brand-navy">{item.courseName || item.subject}</p>
                     <p className="text-sm text-slate-500">
-                      {item.className} · {item.term} · {item.assessment}
+                      {item.levelName || item.className} · {item.semesterName || item.term} · {item.assessment}
                     </p>
                   </div>
                   <Badge variant="info">{item.max_score} marks</Badge>
@@ -140,8 +151,12 @@ const TeacherWorkspacePage = () => {
               ))
             ) : (
               <EmptyState
-                title="No assessment queue yet"
-                message="Scored coursework and moderation items will appear here when this lecturer is assigned active classes."
+                title={isPureTertiaryWorkspace ? 'No coursework queue yet' : 'No assessment queue yet'}
+                message={
+                  isPureTertiaryWorkspace
+                    ? 'Scored coursework and moderation items will appear here when this lecturer is assigned active levels.'
+                    : 'Scored coursework and moderation items will appear here when this lecturer is assigned active classes.'
+                }
               />
             )}
           </div>

@@ -444,6 +444,8 @@ const serializeStudentListItem = ({ student, profile }) => {
     student_number: student.student_number,
     className:
       student.class?.name || profile?.group_name || profile?.class_name || profile?.assigned_class || 'Unassigned',
+    levelName:
+      student.class?.name || profile?.group_name || profile?.class_name || profile?.assigned_class || 'Unassigned',
     level: student.level?.level_code || profile?.level_code || '',
     status: student.status,
     photo: student.user?.profile_photo || student.photo_url || null,
@@ -458,6 +460,8 @@ const serializeDeletedStudentListItem = ({ student, profile }) => {
     name: fullName || profile?.full_name || 'Student',
     student_number: student.student_number,
     className:
+      student.class?.name || profile?.group_name || profile?.class_name || profile?.assigned_class || 'Unassigned',
+    levelName:
       student.class?.name || profile?.group_name || profile?.class_name || profile?.assigned_class || 'Unassigned',
     level: student.level?.level_code || profile?.level_code || '',
     status: student.status,
@@ -638,6 +642,8 @@ const getStudentFromDatabase = async ({ institutionId, studentId }) => {
     name: `${student.user?.first_name || ''} ${student.user?.last_name || ''}`.trim(),
     student_number: student.student_number,
     className:
+      student.class?.name || profile.group_name || profile.class_name || profile.assigned_class || 'Unassigned',
+    levelName:
       student.class?.name || profile.group_name || profile.class_name || profile.assigned_class || 'Unassigned',
     level: student.level?.level_code || profile.level_code || '',
     status: student.status,
