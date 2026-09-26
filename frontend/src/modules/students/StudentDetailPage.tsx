@@ -309,6 +309,12 @@ const StudentDetailPage = () => {
       window.print();
     }
   };
+  const transcriptVerificationUrl =
+    typeof window !== 'undefined' && transcriptQuery.data?.verification_code
+      ? `${window.location.origin}/transcript/verify/${encodeURIComponent(
+          transcriptQuery.data.verification_code
+        )}`
+      : '';
   const handleEditSave = async () => {
     if (!isEditing) {
       setIsEditing(true);
@@ -515,14 +521,20 @@ const StudentDetailPage = () => {
                 title="Official Transcript"
                 description="Letterhead, grading system, and print-ready transcript layout for this tertiary student."
                 action={
-                  <Button
-                    variant="secondary"
-                    leftIcon={<Download className="h-4 w-4" />}
-                    onClick={handleTranscriptExport}
-                    className="print:hidden"
-                  >
-                    Print / Save PDF
-                  </Button>
+                  <div className="flex flex-wrap gap-2 print:hidden">
+                    {transcriptVerificationUrl ? (
+                      <a href={transcriptVerificationUrl} target="_blank" rel="noreferrer">
+                        <Button variant="secondary">Open Verification Page</Button>
+                      </a>
+                    ) : null}
+                    <Button
+                      variant="secondary"
+                      leftIcon={<Download className="h-4 w-4" />}
+                      onClick={handleTranscriptExport}
+                    >
+                      Print / Save PDF
+                    </Button>
+                  </div>
                 }
                 className="print:overflow-visible print:rounded-none print:border-0 print:shadow-none"
               >
@@ -599,6 +611,12 @@ const StudentDetailPage = () => {
                             <span className="font-semibold uppercase">Code:</span>{' '}
                             {transcriptQuery.data.verification_code || 'Pending'}
                           </p>
+                          {transcriptVerificationUrl ? (
+                            <p className="break-all text-xs text-slate-500">
+                              <span className="font-semibold uppercase text-slate-700">Verify At:</span>{' '}
+                              {transcriptVerificationUrl}
+                            </p>
+                          ) : null}
                         </div>
                       </div>
 

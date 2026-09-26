@@ -383,6 +383,8 @@ export const eduovaApi = {
       (await axiosInstance.get(`/v1/tertiary/student-registration/${studentId}`)).data.data,
     transcript: async (studentId: string) =>
       (await axiosInstance.get(`/v1/tertiary/transcript/${studentId}`)).data.data,
+    verifyTranscript: async (code: string) =>
+      (await authApi.get(`/v1/tertiary/transcript-verify/${encodeURIComponent(code)}`)).data.data,
     registerCourses: async (payload: Record<string, unknown>) =>
       (await axiosInstance.post('/v1/tertiary/course-registration', payload)).data.data,
   },

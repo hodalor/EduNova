@@ -8,6 +8,8 @@ const { enforceSubscriptionAccess } = require('../../shared/middleware/subscript
 
 const router = express.Router();
 
+router.get('/transcript-verify/:code', generalApiRateLimiter, controller.verifyTranscript);
+
 router.use(
   authenticate,
   resolveInstitution,

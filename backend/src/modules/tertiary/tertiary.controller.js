@@ -25,6 +25,11 @@ const ensureStudentOwnsRecord = async (req, studentId) => {
 };
 
 module.exports = {
+  verifyTranscript: wrap((req) =>
+    tertiaryService.verifyTranscriptByCode({
+      verificationCode: req.params.code,
+    })
+  ),
   getOverview: wrap((req) =>
     tertiaryService.getOverview({ institutionId: req.institutionId })
   ),

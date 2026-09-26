@@ -194,6 +194,56 @@ const buildTranscriptVerificationCode = ({ institutionId, studentId, rows = [] }
     .slice(0, 12)
     .toUpperCase();
 
+const buildTranscriptVerificationResponse = ({
+  institutionId,
+  institution = null,
+  settings,
+  studentId,
+  studentProfile = {},
+  rows = [],
+}) => {
+  const latest = rows[rows.length - 1] || {};
+  const branding = getTranscriptBranding(settings, institution);
+  const verificationCode = buildTranscriptVerificationCode({
+    institutionId,
+    studentId,
+    rows,
+  });
+
+  return {
+    verified: true,
+    verification_code: verificationCode,
+    verified_at: new Date().toISOString(),
+    transcript_title: 'Official Academic Transcript',
+    issued_on: latest.issued_on || latest.generated_at || new Date().toISOString(),
+    institution: {
+      id: institutionId,
+      name: branding.institution_name || institution?.name || '',
+      website: branding.website || '',
+      email: branding.email || '',
+      logo_url: branding.logo_url || institution?.logo_url || '',
+    },
+    student: {
+      student_id: studentId,
+      student_number: studentProfile.student_number || studentProfile.admission_number || '',
+      name: studentProfile.full_name || studentProfile.name || '',
+      program_name: studentProfile.tertiary?.program_name || studentProfile.program_name || '',
+      department_name: studentProfile.tertiary?.department_name || studentProfile.department_name || '',
+      faculty_name: studentProfile.tertiary?.faculty_name || studentProfile.faculty_name || '',
+    },
+    total_courses_taken: countTranscriptCourses(rows),
+    total_credit_hours: Number(latest.credit_hours || 0),
+    cgpa: Number(latest.cgpa || 0),
+    final_classification: resolveClassDesignation({ settings, cgpa: latest.cgpa }),
+    latest_period:
+      latest.semester ||
+      latest.semester_name ||
+      latest.term ||
+      latest.term_name ||
+      '',
+  };
+};
+
 const getFinanceDefaults = (settings) => {
   const currencies =
     Array.isArray(settings?.finance?.currencies) && settings.finance.currencies.length
@@ -1935,6 +1985,102 @@ const getTranscript = async ({ institutionId, studentId }) => {
   };
 };
 
+const verifyTranscriptByCode = async ({ verificationCode }) => {
+  const normalizedCode = String(verificationCode || '').trim().toUpperCase();
+  if (!normalizedCode) {
+    throw Object.assign(new Error('Verification code is required.'), { statusCode: 400 });
+  }
+
+  if (databaseReady()) {
+    const institutions = await models.Institution.findAll({
+      attributes: ['id', 'name', 'logo_url', 'settings'],
+      order: [['created_at', 'ASC']],
+    });
+
+    for (const institution of institutions) {
+      const settings = ensureTertiarySettings(institution.settings);
+      const transcriptsByStudent = new Map();
+      (settings.tertiary.transcripts || []).forEach((row) => {
+        if (String(row.institution_id) !== String(institution.id)) {
+          return;
+        }
+        const key = String(row.student_id || '');
+        if (!key) {
+          return;
+        }
+        const current = transcriptsByStudent.get(key) || [];
+        current.push(row);
+        transcriptsByStudent.set(key, current);
+      });
+
+      for (const [studentId, rows] of transcriptsByStudent.entries()) {
+        const code = buildTranscriptVerificationCode({
+          institutionId: institution.id,
+          studentId,
+          rows,
+        });
+        if (code !== normalizedCode) {
+          continue;
+        }
+
+        const studentProfile =
+          settings.admissions.student_profiles.find(
+            (item) => String(item.student_id || item.id) === String(studentId)
+          ) || {};
+
+        return buildTranscriptVerificationResponse({
+          institutionId: institution.id,
+          institution,
+          settings,
+          studentId,
+          studentProfile,
+          rows,
+        });
+      }
+    }
+  } else {
+    const settings = ensureTertiarySettings(store.settings || {});
+    const transcriptsByStudent = new Map();
+    (store.tertiary.transcripts || []).forEach((row) => {
+      const key = `${row.institution_id || ''}:${row.student_id || ''}`;
+      if (!row.institution_id || !row.student_id) {
+        return;
+      }
+      const current = transcriptsByStudent.get(key) || [];
+      current.push(row);
+      transcriptsByStudent.set(key, current);
+    });
+
+    for (const [key, rows] of transcriptsByStudent.entries()) {
+      const [institutionId, studentId] = String(key).split(':');
+      const code = buildTranscriptVerificationCode({
+        institutionId,
+        studentId,
+        rows,
+      });
+      if (code !== normalizedCode) {
+        continue;
+      }
+
+      const studentProfile =
+        settings.admissions.student_profiles.find(
+          (item) => String(item.student_id || item.id) === String(studentId)
+        ) || {};
+
+      return buildTranscriptVerificationResponse({
+        institutionId,
+        institution: null,
+        settings,
+        studentId,
+        studentProfile,
+        rows,
+      });
+    }
+  }
+
+  throw Object.assign(new Error('Transcript verification record not found.'), { statusCode: 404 });
+};
+
 module.exports = {
   getOverview,
   listFaculties,
@@ -1955,4 +2101,5 @@ module.exports = {
   getStudentRegistrationState,
   registerCourses,
   getTranscript,
+  verifyTranscriptByCode,
 };

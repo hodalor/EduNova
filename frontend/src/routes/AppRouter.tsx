@@ -27,6 +27,9 @@ const StudentRecycleBinPage = lazy(() => import('../modules/students/StudentRecy
 const StudentDetailPage = lazy(() => import('../modules/students/StudentDetailPage'));
 const StudentEnrollmentForm = lazy(() => import('../modules/students/StudentEnrollmentForm'));
 const StudentIDCard = lazy(() => import('../modules/students/StudentIDCard'));
+const TranscriptVerificationPage = lazy(
+  () => import('../modules/students/TranscriptVerificationPage')
+);
 const FinanceDashboardPage = lazy(() => import('../modules/finance/FinanceDashboardPage'));
 const StudentFinancePage = lazy(() => import('../modules/finance/StudentFinancePage'));
 const InvoicesPage = lazy(() => import('../modules/finance/InvoicesPage'));
@@ -82,6 +85,7 @@ const AppRouter = () => {
               </PublicRoute>
             }
           />
+          <Route path="/transcript/verify/:code" element={<TranscriptVerificationPage />} />
           <Route
             element={
               <ProtectedRoute allowedRoles={['institution_admin', 'teacher', 'student', 'parent', 'driver', 'accountant', 'librarian']}>
