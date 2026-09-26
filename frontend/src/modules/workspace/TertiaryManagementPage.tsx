@@ -10,7 +10,6 @@ import {
   Trash2,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { Link } from 'react-router-dom';
 
 import { eduovaApi } from '../../api/eduovaApi';
 import Badge from '../../components/ui/Badge';
@@ -507,19 +506,7 @@ const TertiaryManagementPage = () => {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Tertiary Management"
-        description="Run faculties, departments, programs, credentials, calendars, and progression rules for universities, colleges, and short-course institutions."
-      />
-
-      <div className="flex flex-wrap gap-3">
-        <Link
-          to="/academics/structure"
-          className="inline-flex rounded-2xl bg-brand-navy px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-900"
-        >
-          Manage levels, semesters, and courses
-        </Link>
-      </div>
+      <PageHeader title="Tertiary Management" />
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {[
@@ -555,7 +542,6 @@ const TertiaryManagementPage = () => {
                 <div>
                   <p className="text-sm font-medium text-slate-500">{item.label}</p>
                   <p className="mt-3 text-2xl font-bold text-brand-navy">{item.value}</p>
-                  <p className="mt-2 text-sm text-slate-500">{item.helper}</p>
                 </div>
                 <span className="rounded-2xl bg-brand-navy/5 p-3 text-brand-navy">
                   <Icon className="h-6 w-6" />
@@ -568,7 +554,6 @@ const TertiaryManagementPage = () => {
 
       <Card
         title="Progression Policy"
-        description="Control how many failed courses a tertiary student may carry forward before the system blocks next-semester registration."
         action={
           <Button
             onClick={() =>
@@ -610,7 +595,6 @@ const TertiaryManagementPage = () => {
                 max_carry_over_courses: event.target.value,
               }))
             }
-            helperText="Set `0` to require a full clear before progression."
           />
           <Input
             label="Maximum Carry-over Credits"
@@ -623,7 +607,6 @@ const TertiaryManagementPage = () => {
                 max_carry_over_credits: event.target.value,
               }))
             }
-            helperText="Use this when credit load matters more than course count."
           />
           <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
             <input
@@ -643,7 +626,6 @@ const TertiaryManagementPage = () => {
 
       <Card
         title="Finance Policy"
-        description="Set the default payment thresholds that control registration and exam eligibility for tertiary students."
         action={
           <Button
             onClick={() =>

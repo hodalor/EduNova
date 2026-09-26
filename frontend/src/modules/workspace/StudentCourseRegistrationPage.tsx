@@ -181,7 +181,11 @@ const StudentCourseRegistrationPage = () => {
         />
         <Card title="Select Student" description="Search by student name or student number.">
           <div className="grid gap-4 xl:grid-cols-[1.1fr_1fr]">
-            <SearchInput placeholder="Search tertiary students" onDebouncedChange={setSearch} />
+            <SearchInput
+              value={search}
+              placeholder="Search tertiary students"
+              onDebouncedChange={setSearch}
+            />
             <Select
               label="Student"
               value={selectedStudentId}
@@ -229,7 +233,11 @@ const StudentCourseRegistrationPage = () => {
       {isAdminMode ? (
         <Card title="Selected Student" description="Admin-assisted registration uses the same real-time progression checks as the student portal.">
           <div className="grid gap-4 xl:grid-cols-[1.1fr_1fr]">
-            <SearchInput placeholder="Search tertiary students" onDebouncedChange={setSearch} />
+            <SearchInput
+              value={search}
+              placeholder="Search tertiary students"
+              onDebouncedChange={setSearch}
+            />
             <Select
               label="Student"
               value={selectedStudentId}

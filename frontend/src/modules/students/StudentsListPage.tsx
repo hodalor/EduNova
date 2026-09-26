@@ -46,6 +46,7 @@ const StudentsListPage = () => {
   const [search, setSearch] = useState('');
   const [level, setLevel] = useState('all');
   const [className, setClassName] = useState('all');
+  const [program, setProgram] = useState('all');
   const [status, setStatus] = useState('all');
   const [confirmDeleteState, setConfirmDeleteState] = useState<{
     open: boolean;
@@ -62,14 +63,45 @@ const StudentsListPage = () => {
       search,
       level,
       className,
+      program,
       status,
     }),
-    [className, level, search, status]
+    [className, level, program, search, status]
   );
 
-  const { data, isLoading } = useStudents(filters);
+  const { data, allRows, isLoading } = useStudents(filters);
   const rows = (data || []) as StudentListItem[];
-  const classes = Array.from(new Set(rows.map((row) => row.className)));
+  const allStudentRows = useMemo<StudentListItem[]>(() => allRows || [], [allRows]);
+  const filterBaseRows = useMemo(
+    () =>
+      allStudentRows.filter((row: StudentListItem) => {
+        const matchesLevel = level === 'all' || row.level === level;
+        const matchesProgram =
+          !isPureTertiaryWorkspace ||
+          program === 'all' ||
+          String(row.program_name || '').trim() === program;
+        return matchesLevel && matchesProgram;
+      }),
+    [allStudentRows, isPureTertiaryWorkspace, level, program]
+  );
+  const classes = useMemo<string[]>(
+    () =>
+      Array.from(
+        new Set(filterBaseRows.map((row: StudentListItem) => row.className).filter(Boolean))
+      ).sort(),
+    [filterBaseRows]
+  );
+  const programs = useMemo<string[]>(
+    () =>
+      Array.from(
+        new Set(
+          allStudentRows
+            .map((row: StudentListItem) => String(row.program_name || '').trim())
+            .filter(Boolean)
+        )
+      ).sort(),
+    [allStudentRows]
+  );
   const canManageDeletion = user?.role === 'institution_admin';
 
   const deleteStudent = useMutation({
@@ -90,11 +122,6 @@ const StudentsListPage = () => {
     <div className="space-y-6">
       <PageHeader
         title="Students"
-        description={
-          isPureTertiaryWorkspace
-            ? 'Manage active student records, program placement, level assignment, and transcript-ready profiles.'
-            : 'Manage active student records, enrollment status, class placement, and communication workflows.'
-        }
         actions={
           <div className="flex flex-wrap gap-2">
             {canManageDeletion ? (
@@ -104,29 +131,43 @@ const StudentsListPage = () => {
                 </Button>
               </Link>
             ) : null}
-            <Link to="/students/enroll">
-              <Button leftIcon={<UserPlus className="h-4 w-4" />}>Enroll Student</Button>
-            </Link>
           </div>
         }
       />
 
-      <Card
-        title="Filters"
-        description={
-          isPureTertiaryWorkspace
-            ? 'Refine the student register by level, assigned academic level, status, and search terms.'
-            : 'Refine the student register by level, class, status, and search terms.'
-        }
-      >
-        <div className="grid gap-4 xl:grid-cols-[1.4fr_1fr_1fr_1fr]">
-          <SearchInput placeholder="Search name or student number" onDebouncedChange={setSearch} />
+      <Card>
+        <div
+          className={`grid gap-4 ${
+            isPureTertiaryWorkspace
+              ? 'xl:grid-cols-[1.4fr_1fr_1fr_1fr_1fr]'
+              : 'xl:grid-cols-[1.4fr_1fr_1fr_1fr]'
+          }`}
+        >
+          <SearchInput
+            value={search}
+            placeholder="Search name or student number"
+            onDebouncedChange={setSearch}
+          />
           <Select label="Education Level" value={level} onChange={(event) => setLevel(event.target.value)}>
             <option value="all">All levels</option>
             {allowedLevels.map((code) => (
               <option key={code} value={code}>{LEVEL_LABELS[code]}</option>
             ))}
           </Select>
+          {isPureTertiaryWorkspace ? (
+            <Select
+              label="Program"
+              value={program}
+              onChange={(event) => setProgram(event.target.value)}
+            >
+              <option value="all">All programs</option>
+              {programs.map((item) => (
+                <option key={item} value={item}>
+                  {item}
+                </option>
+              ))}
+            </Select>
+          ) : null}
           <Select
             label={isPureTertiaryWorkspace ? 'Assigned Level' : 'Class'}
             value={className}
@@ -149,6 +190,11 @@ const StudentsListPage = () => {
       </Card>
 
       <div className="flex flex-wrap gap-3">
+        <Link to="/students/enroll">
+          <Button variant="secondary" leftIcon={<UserPlus className="h-4 w-4" />}>
+            Enroll Student
+          </Button>
+        </Link>
         <Button variant="secondary" leftIcon={<Download className="h-4 w-4" />}>
           Export CSV
         </Button>
@@ -178,7 +224,11 @@ const StudentsListPage = () => {
                     >
                       {row.original.name}
                     </Link>
-                    <p className="text-xs text-slate-500">{row.original.guardian}</p>
+                    <p className="text-xs text-slate-500">
+                      {isPureTertiaryWorkspace
+                        ? row.original.program_name || 'Program not assigned'
+                        : row.original.guardian}
+                    </p>
                   </div>
                 </div>
               ),

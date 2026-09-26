@@ -900,15 +900,7 @@ const AcademicStructurePage = () => {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Academic Structure"
-        description="Manage levels, semesters, terms, subjects, and courses from one table-first workspace."
-        actions={
-          <Button leftIcon={<PlusCircle className="h-4 w-4" />} onClick={() => openCreateModal(activeTab)}>
-            Add {activeTab === 'groups' ? groupLabel : activeTab === 'periods' ? periodLabel : offeringLabel}
-          </Button>
-        }
-      />
+      <PageHeader title="Academic Structure" />
 
       <Card>
         <div className="flex flex-col gap-4 border-b border-slate-200 pb-4">
@@ -937,7 +929,7 @@ const AcademicStructurePage = () => {
           </div>
 
           {activeTab === 'grades' ? (
-            <div className="grid gap-3 md:grid-cols-[minmax(0,280px)_1fr] md:items-end">
+            <div className="grid gap-3 md:max-w-[280px]">
               <Select
                 label="Education Level"
                 value={selectedGradeLevel}
@@ -949,17 +941,19 @@ const AcademicStructurePage = () => {
                   </option>
                 ))}
               </Select>
-              <p className="text-sm text-slate-500">
-                Define the score range, grade, GPA point, and transcript classification rules for each level.
-              </p>
             </div>
           ) : activeTab !== 'groups' ? (
-            <div className="grid gap-3 md:grid-cols-[minmax(0,280px)_minmax(0,280px)_1fr] md:items-end">
+            <div
+              className={`grid gap-3 md:items-end ${
+                allowedLevels.includes('TR')
+                  ? 'md:grid-cols-[minmax(0,280px)_minmax(0,280px)]'
+                  : 'md:max-w-[280px]'
+              }`}
+            >
               <Select
                 label={`${groupLabel} Filter`}
                 value={selectedGroupId}
                 onChange={(event) => setSelectedGroupId(event.target.value)}
-                helperText={`Leave on "All" to manage every ${groupLabel.toLowerCase()} in one list.`}
               >
                 <option value="">All {groupListLabel}</option>
                 {groups.map((group) => (
@@ -982,12 +976,9 @@ const AcademicStructurePage = () => {
                   ))}
                 </Select>
               ) : null}
-              <p className="text-sm text-slate-500">
-                Click any row to open details in a modal, then edit or delete without leaving the table.
-              </p>
             </div>
           ) : (
-            <div className="grid gap-3 md:grid-cols-[minmax(0,280px)_1fr] md:items-end">
+            <div className="grid gap-3 md:max-w-[280px]">
               {allowedLevels.includes('TR') ? (
                 <Select
                   label="Program Focus"
@@ -1001,12 +992,7 @@ const AcademicStructurePage = () => {
                     </option>
                   ))}
                 </Select>
-              ) : (
-                <div />
-              )}
-              <p className="text-sm text-slate-500">
-                Click any row to open details in a modal, then edit or delete from the same flow.
-              </p>
+              ) : null}
             </div>
           )}
         </div>
@@ -1187,14 +1173,9 @@ const AcademicStructurePage = () => {
             <div className="space-y-6">
               <div className="rounded-3xl border border-slate-200 p-4">
                 <div className="mb-4 flex items-center justify-between gap-3">
-                  <div>
-                    <h3 className="text-lg font-semibold text-brand-navy">
-                      {educationLevelLabels[selectedGradeLevel] || selectedGradeLevel} Grade Rules
-                    </h3>
-                    <p className="text-sm text-slate-500">
-                      Scores entered for this level will auto-resolve grade, GP, and TGP from these ranges.
-                    </p>
-                  </div>
+                  <h3 className="text-lg font-semibold text-brand-navy">
+                    {educationLevelLabels[selectedGradeLevel] || selectedGradeLevel} Grade Rules
+                  </h3>
                   <Button
                     onClick={() =>
                       saveGradeScale.mutate({
@@ -1306,12 +1287,7 @@ const AcademicStructurePage = () => {
               {selectedGradeLevel === 'TR' ? (
                 <div className="rounded-3xl border border-slate-200 p-4">
                   <div className="mb-4 flex items-center justify-between gap-3">
-                    <div>
-                      <h3 className="text-lg font-semibold text-brand-navy">Class Designation</h3>
-                      <p className="text-sm text-slate-500">
-                        Control the final transcript award label from cumulative GPA ranges.
-                      </p>
-                    </div>
+                    <h3 className="text-lg font-semibold text-brand-navy">Class Designation</h3>
                     <Button
                       type="button"
                       variant="secondary"

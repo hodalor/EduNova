@@ -142,6 +142,7 @@ const StudentRecycleBinPage = () => {
 
       <div className="max-w-sm">
         <SearchInput
+          value={search}
           placeholder="Search deleted students"
           onDebouncedChange={setSearch}
         />

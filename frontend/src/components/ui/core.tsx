@@ -59,7 +59,7 @@ export const PageLoader = () => (
   <div className="flex min-h-[40vh] items-center justify-center">
     <div className="surface flex items-center gap-3 px-5 py-4 text-sm font-medium text-slate-600">
       <Spinner />
-      Loading EDUOVA workspace...
+      Loading EDUNOVA workspace...
     </div>
   </div>
 );
@@ -563,16 +563,18 @@ export interface SearchInputProps {
 }
 
 export const SearchInput = ({
-  value = '',
+  value,
   placeholder = 'Search...',
   delay = 350,
   onDebouncedChange,
 }: SearchInputProps) => {
-  const [localValue, setLocalValue] = useState(value);
+  const [localValue, setLocalValue] = useState(() => (typeof value === 'string' ? value : ''));
 
   useEffect(() => {
-    setLocalValue(value);
-  }, [value]);
+    if (typeof value === 'string' && value !== localValue) {
+      setLocalValue(value);
+    }
+  }, [localValue, value]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => onDebouncedChange?.(localValue), delay);

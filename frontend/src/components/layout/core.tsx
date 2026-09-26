@@ -15,17 +15,13 @@ import {
   Settings,
   Users2,
   Bell,
-  ChevronRight,
   ShieldCheck,
   Trash2,
 } from 'lucide-react';
-import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import { NavLink, Outlet } from 'react-router-dom';
 
 import { cn } from '../../lib/cn';
 import {
-  getInstitutionLevels,
-  getRoleHomeTitle,
-  getWorkspaceLabel,
   isDaycareInstitution,
   isTertiaryInstitution,
   supportsAcademics,
@@ -247,21 +243,13 @@ const buildNavGroups = (
     .filter((group) => group.items.length > 0);
 };
 
-const isPureTertiaryWorkspace = (institution: InstitutionSummary | null) => {
-  const levels = getInstitutionLevels(institution);
-  return levels.length === 1 && levels[0] === 'TR';
-};
-
 export const Sidebar = () => {
   const collapsed = useUiStore((state) => state.sidebarCollapsed);
   const role = useAuthStore((state) => state.role);
   const institution = useAuthStore((state) => state.institution);
   const tenantContext = useAuthStore((state) => state.tenantContext);
   const permissions = useAuthStore((state) => state.permissions);
-  const activeInstitution = tenantContext || institution;
   const groups = buildNavGroups(role, institution, tenantContext, permissions);
-  const workspaceLabel = getWorkspaceLabel(activeInstitution);
-  const pureTertiaryWorkspace = isPureTertiaryWorkspace(activeInstitution);
 
   return (
     <aside
@@ -278,19 +266,7 @@ export const Sidebar = () => {
           {!collapsed ? (
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-[0.42em] text-brand-gold">
-                EDUOVA
-              </p>
-              <p className="mt-1 text-sm font-semibold text-white">
-                {activeInstitution?.name || (pureTertiaryWorkspace ? 'Tertiary Platform' : 'Education Platform')}
-              </p>
-              <p className="mt-1 text-xs uppercase tracking-[0.16em] text-slate-400">
-                {role === 'super_admin' && tenantContext
-                  ? `Platform Master · ${tenantContext.name}`
-                  : role === 'super_admin'
-                    ? 'Platform Master'
-                    : pureTertiaryWorkspace
-                      ? 'Tertiary Workspace'
-                      : workspaceLabel}
+                EDUNOVA
               </p>
             </div>
           ) : null}
@@ -328,7 +304,6 @@ export const Sidebar = () => {
 };
 
 export const Topbar = () => {
-  const location = useLocation();
   const user = useAuthStore((state) => state.user);
   const role = useAuthStore((state) => state.role);
   const institution = useAuthStore((state) => state.institution);
@@ -339,10 +314,11 @@ export const Topbar = () => {
   const notificationBadgeCount = useUiStore((state) => state.notificationBadgeCount);
   const toggleSidebar = useUiStore((state) => state.toggleSidebar);
   const activeInstitution = tenantContext || institution;
-  const crumbs = location.pathname
-    .split('/')
-    .filter(Boolean)
-    .map((segment) => segment.replace(/-/g, ' '));
+  const title =
+    activeInstitution?.name ||
+    (role === 'super_admin'
+      ? tenantContext?.name || 'Platform Workspace'
+      : 'EDUNOVA');
 
   return (
     <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/90 backdrop-blur">
@@ -356,21 +332,7 @@ export const Topbar = () => {
             {collapsed ? <PanelLeftOpen className="h-5 w-5" /> : <PanelLeftClose className="h-5 w-5" />}
           </button>
           <div>
-            <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
-              <span>Workspace</span>
-              {crumbs.map((crumb) => (
-                <span key={crumb} className="inline-flex items-center gap-2">
-                  <ChevronRight className="h-3.5 w-3.5" />
-                  <span>{crumb}</span>
-                </span>
-              ))}
-            </div>
-            <h2 className="mt-1 text-2xl font-semibold text-brand-navy">
-              {getRoleHomeTitle(role, activeInstitution)}
-            </h2>
-            <p className="mt-1 text-sm text-slate-500">
-              {activeInstitution?.name || 'EDUOVA'} · {getWorkspaceLabel(activeInstitution)}
-            </p>
+            <h2 className="text-2xl font-semibold text-brand-navy">{title}</h2>
             {role === 'super_admin' && tenantContext ? (
               <p className="mt-1 text-xs font-semibold uppercase tracking-[0.14em] text-brand-gold">
                 School scope active
@@ -400,7 +362,7 @@ export const Topbar = () => {
                 />
                 <div className="text-left">
                   <p className="text-sm font-semibold text-brand-navy">
-                    {[user?.first_name, user?.last_name].filter(Boolean).join(' ') || 'EDUOVA Admin'}
+                    {[user?.first_name, user?.last_name].filter(Boolean).join(' ') || 'EDUNOVA Admin'}
                   </p>
                   <p className="text-xs uppercase tracking-[0.14em] text-slate-400">
                     {user?.role || 'guest'}
@@ -452,7 +414,7 @@ export const AuthLayout = ({
   title,
   description,
   children,
-  decorativeWord = 'EDUOVA',
+  decorativeWord = 'EDUNOVA',
 }: AuthLayoutProps) => (
   <div className="flex min-h-screen items-center justify-center bg-brand-navy px-4 py-10">
     <div className="grid w-full max-w-6xl overflow-hidden rounded-[2rem] bg-white shadow-2xl lg:grid-cols-[1.5fr_1fr]">
@@ -468,7 +430,7 @@ export const AuthLayout = ({
           ))}
         </div>
         <div className="relative z-10 max-w-xl">
-          <p className="text-sm font-semibold uppercase tracking-[0.4em] text-brand-gold">EDUOVA</p>
+          <p className="text-sm font-semibold uppercase tracking-[0.4em] text-brand-gold">EDUNOVA</p>
           <h1 className="mt-8 text-4xl font-semibold leading-tight">
             Trustworthy administration for every school.
           </h1>

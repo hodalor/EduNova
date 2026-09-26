@@ -62,6 +62,20 @@ const resolveStudentCategory = (profile = {}) =>
     ? 'international'
     : 'local';
 
+const resolveInvoiceFinanceMeta = ({ settings, profile = {}, invoice = {} }) => {
+  const financeDefaults = getFinanceDefaults(settings);
+  const studentCategory = resolveStudentCategory(profile);
+
+  return {
+    student_category: studentCategory,
+    currency_code:
+      invoice.currency_code ||
+      (studentCategory === 'international'
+        ? financeDefaults.default_international_currency
+        : financeDefaults.default_local_currency),
+  };
+};
+
 const resolveOfferingFee = ({ offering, profile, settings }) => {
   const financeDefaults = getFinanceDefaults(settings);
   const studentCategory = resolveStudentCategory(profile);

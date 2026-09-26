@@ -87,7 +87,11 @@ const PaymentFormPage = () => {
         <Card title="Payment Form" description="Capture the payment transaction details.">
           <form className="space-y-5" onSubmit={handleSubmit(() => undefined)}>
             <div>
-              <SearchInput placeholder="Search student" onDebouncedChange={setSearch} />
+              <SearchInput
+                value={search}
+                placeholder="Search student"
+                onDebouncedChange={setSearch}
+              />
               {search ? (
                 <div className="mt-3 max-h-52 space-y-2 overflow-y-auto rounded-2xl border border-slate-200 p-3">
                   {matchingStudents.map((item) => (
