@@ -90,6 +90,7 @@ export const Button = ({
   children,
   variant = 'primary',
   size = 'md',
+  type = 'button',
   loading = false,
   leftIcon,
   rightIcon,
@@ -104,6 +105,7 @@ export const Button = ({
       className
     )}
     disabled={disabled || loading}
+    type={type}
     {...props}
   >
     {loading ? <Spinner size="sm" className="border-white/50 border-t-white" /> : leftIcon}

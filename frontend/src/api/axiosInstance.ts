@@ -19,6 +19,71 @@ const axiosInstance = axios.create({
   withCredentials: true,
 });
 
+const collectValidationMessages = (value: unknown): string[] => {
+  if (Array.isArray(value)) {
+    return value.flatMap(collectValidationMessages);
+  }
+
+  if (!value || typeof value !== 'object') {
+    return [];
+  }
+
+  const item = value as Record<string, unknown>;
+  const messages: string[] = [];
+
+  if (typeof item.message === 'string' && item.message.trim()) {
+    messages.push(item.message.trim());
+  }
+
+  if (typeof item.msg === 'string' && item.msg.trim()) {
+    messages.push(item.msg.trim());
+  }
+
+  if (typeof item.path === 'string' && typeof item.message === 'string' && item.message.trim()) {
+    messages.push(`${item.path}: ${item.message.trim()}`);
+  }
+
+  return messages;
+};
+
+export const getApiErrorMessage = (
+  error: unknown,
+  fallback = 'Something went wrong. Please try again.'
+): string => {
+  if (axios.isAxiosError(error)) {
+    const payload = error.response?.data as
+      | {
+          message?: string;
+          error?: string;
+          errors?: unknown;
+        }
+      | undefined;
+
+    if (payload?.message && String(payload.message).trim()) {
+      return String(payload.message).trim();
+    }
+
+    if (payload?.error && String(payload.error).trim()) {
+      return String(payload.error).trim();
+    }
+
+    const validationMessages = collectValidationMessages(payload?.errors);
+    if (validationMessages.length) {
+      return validationMessages.join(' | ');
+    }
+
+    if (!error.response) {
+      return 'Unable to reach the server. Check your connection and try again.';
+    }
+  }
+
+  if (error instanceof Error && error.message.trim()) {
+    return error.message.trim();
+  }
+
+  return fallback;
+};
+
 axiosInstance.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   const accessToken = tokenStorage.getAccessToken();
   const { institution, tenantContext, role } = useAuthStore.getState();
@@ -137,8 +202,8 @@ axiosInstance.interceptors.response.use(
       }
     }
 
-    if ((error.response?.status || 0) >= 500) {
-      toast.error('A server error occurred. Please try again.');
+    if (!error.response) {
+      toast.error(getApiErrorMessage(error));
     }
 
     return Promise.reject(error);

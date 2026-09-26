@@ -21,6 +21,22 @@ const asNumber = (value: unknown): number => Number(value) || 0;
 const asString = (value: unknown, fallback = ''): string =>
   typeof value === 'string' && value.trim() ? value : fallback;
 
+interface AcademicAssessmentRecord {
+  id: string;
+  className: string;
+  levelName: string;
+  subject: string;
+  courseName: string;
+  term: string;
+  semesterName: string;
+  assessment: string;
+  max_score: number;
+  class_id?: string;
+  subject_id?: string;
+  level_code?: string;
+  credit_hours?: number | null;
+}
+
 const normalizeAcademicNames = (payload: unknown): Record<string, unknown> => {
   const item = asRecord(payload);
   const className = asString(item.className, asString(item.class_name, asString(item.levelName, '-')));
@@ -306,9 +322,31 @@ export const eduovaApi = {
       (await axiosInstance.delete(`/v1/academics/offerings/${id}`)).data.data,
     saveScores: async (payload: Record<string, unknown>) =>
       (await axiosInstance.post('/v1/academics/scores', payload)).data.data,
-    assessments: async () => {
+    assessments: async (): Promise<AcademicAssessmentRecord[]> => {
       const data = (await axiosInstance.get('/v1/academics/assessments')).data.data;
-      return Array.isArray(data) ? data.map((item) => normalizeAcademicNames(item)) : [];
+      return Array.isArray(data)
+        ? data.map((item, index) => {
+            const normalized = normalizeAcademicNames(item);
+            return {
+              id: asString(normalized.id, `assessment-${index + 1}`),
+              className: asString(normalized.className, '-'),
+              levelName: asString(normalized.levelName, asString(normalized.className, '-')),
+              subject: asString(normalized.subject, ''),
+              courseName: asString(normalized.courseName, asString(normalized.subject, '')),
+              term: asString(normalized.term, ''),
+              semesterName: asString(normalized.semesterName, asString(normalized.term, '')),
+              assessment: asString(normalized.assessment, 'Assessment'),
+              max_score: asNumber(normalized.max_score),
+              class_id: asString(normalized.class_id, '') || undefined,
+              subject_id: asString(normalized.subject_id, '') || undefined,
+              level_code: asString(normalized.level_code, '') || undefined,
+              credit_hours:
+                normalized.credit_hours === null || normalized.credit_hours === undefined
+                  ? null
+                  : asNumber(normalized.credit_hours),
+            };
+          })
+        : [];
     },
     gradeScales: async (levelCode?: string) =>
       (

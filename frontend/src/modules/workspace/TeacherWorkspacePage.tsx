@@ -49,7 +49,7 @@ const TeacherWorkspacePage = () => {
     institutionLevels.length === 1 && institutionLevels[0] === 'TR';
   const { data: assessments = [], isLoading: loadingAssessments } = useQuery<AssessmentRow[]>({
     queryKey: ['teacher-assessments'],
-    queryFn: () => eduovaApi.academics.assessments() as Promise<AssessmentRow[]>,
+    queryFn: eduovaApi.academics.assessments,
   });
   const { data: attendance = [], isLoading: loadingAttendance } = useQuery<AttendanceRow[]>({
     queryKey: ['teacher-attendance-report'],

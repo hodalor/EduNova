@@ -218,7 +218,8 @@ const StudentDetailPage = () => {
   const updateStudent = useUpdateStudent();
   const transcriptSections = useMemo(
     () =>
-      (transcriptQuery.data?.semesters || []).map((semester, index) =>
+      ((transcriptQuery.data?.semesters || []) as Array<Record<string, unknown>>).map(
+        (semester: Record<string, unknown>, index: number) =>
         normalizeTranscriptSemester(semester, index)
       ),
     [transcriptQuery.data]

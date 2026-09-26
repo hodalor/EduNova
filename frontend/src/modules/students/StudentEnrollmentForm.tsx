@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import type { BaseSyntheticEvent } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useQuery } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
@@ -117,6 +118,29 @@ interface ParentOption {
   role: string;
   is_active: boolean;
 }
+
+const collectFormErrorMessages = (value: unknown): string[] => {
+  if (!value || typeof value !== 'object') {
+    return [];
+  }
+
+  if (Array.isArray(value)) {
+    return value.flatMap(collectFormErrorMessages);
+  }
+
+  const item = value as Record<string, unknown>;
+  const messages: string[] = [];
+
+  if (typeof item.message === 'string' && item.message.trim()) {
+    messages.push(item.message.trim());
+  }
+
+  Object.values(item).forEach((entry) => {
+    messages.push(...collectFormErrorMessages(entry));
+  });
+
+  return Array.from(new Set(messages));
+};
 
 const levelLabels: Record<EducationLevelCode, string> = {
   DC: 'Daycare',
@@ -474,9 +498,25 @@ const StudentEnrollmentForm = () => {
       } else {
         setStep(0);
       }
-      toast.error('Please complete the required enrollment fields before submitting.');
+      const [firstError] = collectFormErrorMessages(formErrors);
+      toast.error(
+        firstError
+          ? `Enrollment cannot be submitted yet: ${firstError}`
+          : 'Please complete the required enrollment fields before submitting.'
+      );
     }
   );
+
+  const handleFormSubmit = async (event: BaseSyntheticEvent) => {
+    event.preventDefault();
+
+    if (step < steps.length - 1) {
+      await nextStep();
+      return;
+    }
+
+    await onSubmit(event);
+  };
 
   if (structureLoading || tertiaryLoading) {
     return <PageLoader />;
@@ -513,7 +553,7 @@ const StudentEnrollmentForm = () => {
         </div>
       </Card>
 
-      <form className="space-y-6" onSubmit={onSubmit}>
+      <form className="space-y-6" onSubmit={handleFormSubmit}>
         {step === 0 ? (
           <Card title="Education Level" description="Choose the pathway available for this school.">
             <Select label="Education Level" error={errors.level?.message} {...register('level')}>
@@ -814,11 +854,11 @@ const StudentEnrollmentForm = () => {
           </Button>
           <div className="flex gap-3">
             {step < steps.length - 1 ? (
-              <Button type="button" onClick={nextStep}>
+              <Button key="continue-enrollment" type="button" onClick={nextStep}>
                 Continue
               </Button>
             ) : (
-              <Button type="submit" loading={createStudent.isPending}>
+              <Button key="submit-enrollment" type="submit" loading={createStudent.isPending}>
                 Submit Enrollment
               </Button>
             )}

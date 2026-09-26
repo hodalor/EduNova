@@ -403,6 +403,52 @@ const parseCsvList = (value) =>
     .map((item) => item.trim())
     .filter(Boolean);
 
+const formatSequelizeCreateError = (error) => {
+  if (!error || typeof error !== 'object') {
+    return null;
+  }
+
+  if (error.name === 'SequelizeUniqueConstraintError') {
+    const fields = Array.isArray(error.errors)
+      ? error.errors
+          .map((item) => String(item.path || item.message || '').trim())
+          .filter(Boolean)
+      : [];
+    const labels = Array.from(new Set(fields));
+
+    if (labels.length) {
+      return Object.assign(
+        new Error(`A record with the same ${labels.join(', ')} already exists. Review the student number, admission number, email, or parent account details and try again.`),
+        { statusCode: 409 }
+      );
+    }
+
+    return Object.assign(
+      new Error('A matching student or user record already exists. Review the enrollment details and try again.'),
+      { statusCode: 409 }
+    );
+  }
+
+  if (error.name === 'SequelizeValidationError') {
+    const messages = Array.isArray(error.errors)
+      ? error.errors
+          .map((item) => String(item.message || item.path || '').trim())
+          .filter(Boolean)
+      : [];
+
+    if (messages.length) {
+      return Object.assign(new Error(messages.join(' | ')), { statusCode: 400 });
+    }
+
+    return Object.assign(
+      new Error('The student record could not be created because one or more required fields are invalid.'),
+      { statusCode: 400 }
+    );
+  }
+
+  return null;
+};
+
 const ensureLevelRecord = async ({ institutionId, levelCode, transaction }) => {
   let level = await models.EducationLevel.findOne({
     where: { institution_id: institutionId, level_code: levelCode },
@@ -921,11 +967,15 @@ const createStudentInDatabase = async ({ institutionId, payload, actorId, ip }) 
       settings.academics.groups.find((item) => item.name === payload.assignedClass);
 
     const levelRecord = await ensureLevelRecord({ institutionId, levelCode, transaction });
-    const nextSequence = await models.Student.count({ where: { institution_id: institutionId }, transaction });
+    const nextSequence = await models.Student.count({
+      where: { institution_id: institutionId },
+      transaction,
+      paranoid: false,
+    });
     const year = new Date().getFullYear();
     const studentNumber =
       payload.student_number ||
-      `EDU-${year}-${String(nextSequence + 1).padStart(4, '0')}`;
+      createSequence('EDU', new Date(year, 0, 1), nextSequence + 1, 4);
     const admissionNumber =
       payload.admission_number ||
       `${String(institution.code || 'EDU').toUpperCase()}-${String(nextSequence + 1).padStart(4, '0')}`;
@@ -1128,6 +1178,10 @@ const createStudentInDatabase = async ({ institutionId, payload, actorId, ip }) 
     };
   } catch (error) {
     await transaction.rollback();
+    const normalizedError = formatSequelizeCreateError(error);
+    if (normalizedError) {
+      throw normalizedError;
+    }
     throw error;
   }
 };

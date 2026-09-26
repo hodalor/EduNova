@@ -2,12 +2,13 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 
 import { eduovaApi } from '../../../api/eduovaApi';
+import { getApiErrorMessage } from '../../../api/axiosInstance';
 
 export const useUpdateStudent = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: eduovaApi.students.update,
+    mutationFn: (payload: Record<string, unknown>) => eduovaApi.students.update(payload),
     onMutate: async (payload: unknown) => {
       await queryClient.cancelQueries({ queryKey: ['student'] });
       return { payload };
@@ -17,8 +18,10 @@ export const useUpdateStudent = () => {
       void queryClient.invalidateQueries({ queryKey: ['student'] });
       void queryClient.invalidateQueries({ queryKey: ['students'] });
     },
-    onError: () => {
-      toast.error('Unable to update student record.');
+    onError: (error: unknown) => {
+      toast.error(
+        getApiErrorMessage(error, 'Unable to update student record. Review the profile details and try again.')
+      );
     },
   });
 };
