@@ -23,6 +23,21 @@ interface AssessmentRow {
   class_id?: string;
   subject_id?: string;
   level_code?: string;
+  credit_hours?: number | null;
+}
+
+interface GradeScaleRule {
+  id: string;
+  min_score: number;
+  max_score: number;
+  grade: string;
+  gp: number | null;
+  remark?: string | null;
+}
+
+interface GradeScaleDefinition {
+  level_code: string;
+  rules: GradeScaleRule[];
 }
 
 interface StudentRow {
@@ -44,6 +59,10 @@ const ResultsEntryPage = () => {
   const studentsQuery = useQuery({
     queryKey: ['academics-results-students'],
     queryFn: eduovaApi.students.list,
+  });
+  const gradeScalesQuery = useQuery({
+    queryKey: ['academic-grade-scales'],
+    queryFn: () => eduovaApi.academics.gradeScales(),
   });
 
   const saveScoresMutation = useMutation({
@@ -67,6 +86,24 @@ const ResultsEntryPage = () => {
 
   const selectedAssessment =
     assessments.find((item) => item.id === selectedAssessmentId) || null;
+  const selectedGradeScale =
+    ((gradeScalesQuery.data || []) as GradeScaleDefinition[]).find(
+      (item) => item.level_code === selectedAssessment?.level_code
+    ) || null;
+
+  const resolveOutcome = (score: number) => {
+    const numericScore = Number(score || 0);
+    const creditHours = Number(selectedAssessment?.credit_hours || 0);
+    const rule = selectedGradeScale?.rules?.find(
+      (item) => numericScore >= Number(item.min_score) && numericScore <= Number(item.max_score)
+    );
+    const gp = rule?.gp === null || rule?.gp === undefined ? null : Number(rule.gp);
+    return {
+      grade: rule?.grade || '—',
+      gp,
+      tgp: gp !== null ? Number((gp * creditHours).toFixed(2)) : null,
+    };
+  };
 
   const visibleStudents = useMemo(() => {
     if (!selectedAssessment) {
@@ -113,6 +150,7 @@ const ResultsEntryPage = () => {
         student_id: row.id,
         student_name: row.name,
         score: row.score,
+        credit_hours: selectedAssessment.credit_hours || 0,
       })),
     });
   };
@@ -226,7 +264,7 @@ const ResultsEntryPage = () => {
                 <table className="min-w-full divide-y divide-slate-200 text-sm">
                   <thead className="bg-slate-50">
                     <tr>
-                      {['Student', 'Student Number', 'Score'].map((label) => (
+                      {['Student', 'Student Number', 'Score', 'Grade', 'GP', 'TGP'].map((label) => (
                         <th key={label} className="px-4 py-3 text-left font-semibold uppercase text-slate-600">
                           {label}
                         </th>
@@ -257,6 +295,15 @@ const ResultsEntryPage = () => {
                               }))
                             }
                           />
+                        </td>
+                        <td className="px-4 py-3 font-semibold text-brand-navy">
+                          {resolveOutcome(Number(scores[row.id] ?? row.score)).grade}
+                        </td>
+                        <td className="px-4 py-3">
+                          {resolveOutcome(Number(scores[row.id] ?? row.score)).gp ?? '—'}
+                        </td>
+                        <td className="px-4 py-3">
+                          {resolveOutcome(Number(scores[row.id] ?? row.score)).tgp ?? '—'}
                         </td>
                       </tr>
                     ))}

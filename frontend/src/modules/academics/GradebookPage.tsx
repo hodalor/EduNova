@@ -14,6 +14,8 @@ interface GradebookRow {
   assignment: number;
   exam: number;
   final: number;
+  grade?: string;
+  gp?: number | null;
 }
 
 const scoreColor = (value: number) => {
@@ -75,6 +77,11 @@ const GradebookPage = () => {
             {
               header: 'Final Average',
               cell: ({ row }) => <span className={scoreColor(row.original.final)}>{row.original.final}</span>,
+            },
+            { header: 'Grade', accessorKey: 'grade' },
+            {
+              header: 'GP',
+              cell: ({ row }) => <span>{row.original.gp ?? '—'}</span>,
             },
           ]}
         />

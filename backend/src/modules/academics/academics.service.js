@@ -26,12 +26,284 @@ const ensureAcademicSettings = (settings) => {
   next.academics.groups = next.academics.groups || [];
   next.academics.periods = next.academics.periods || [];
   next.academics.offerings = next.academics.offerings || [];
+  next.academics.report_card_workflow = next.academics.report_card_workflow || {};
+  next.academics.grade_scales = next.academics.grade_scales || {};
   next.academics.progression_rules =
     next.academics.progression_rules || [
       'Students only see courses or subjects assigned to their class or level.',
       'Registration opens only for the active academic period.',
     ];
   return next;
+};
+
+const defaultGradeScaleByLevel = {
+  PR: {
+    rules: [
+      { min_score: 80, max_score: 100, grade: 'A', gp: null, remark: 'Excellent' },
+      { min_score: 70, max_score: 79, grade: 'B', gp: null, remark: 'Very Good' },
+      { min_score: 60, max_score: 69, grade: 'C', gp: null, remark: 'Good' },
+      { min_score: 50, max_score: 59, grade: 'D', gp: null, remark: 'Pass' },
+      { min_score: 0, max_score: 49, grade: 'F', gp: null, remark: 'Fail' },
+    ],
+    class_designations: [],
+  },
+  JH: {
+    rules: [
+      { min_score: 80, max_score: 100, grade: 'A1', gp: null, remark: 'Excellent' },
+      { min_score: 70, max_score: 79, grade: 'B2', gp: null, remark: 'Very Good' },
+      { min_score: 60, max_score: 69, grade: 'C4', gp: null, remark: 'Good' },
+      { min_score: 50, max_score: 59, grade: 'D7', gp: null, remark: 'Credit' },
+      { min_score: 0, max_score: 49, grade: 'F9', gp: null, remark: 'Fail' },
+    ],
+    class_designations: [],
+  },
+  SH: {
+    rules: [
+      { min_score: 80, max_score: 100, grade: 'A1', gp: null, remark: 'Excellent' },
+      { min_score: 70, max_score: 79, grade: 'B2', gp: null, remark: 'Very Good' },
+      { min_score: 60, max_score: 69, grade: 'C4', gp: null, remark: 'Credit' },
+      { min_score: 50, max_score: 59, grade: 'D7', gp: null, remark: 'Pass' },
+      { min_score: 0, max_score: 49, grade: 'F9', gp: null, remark: 'Fail' },
+    ],
+    class_designations: [],
+  },
+  TR: {
+    rules: [
+      { min_score: 90, max_score: 100, grade: 'A+', gp: 4.0, remark: 'Excellent' },
+      { min_score: 85, max_score: 89, grade: 'A', gp: 4.0, remark: 'Excellent' },
+      { min_score: 80, max_score: 84, grade: 'A-', gp: 3.7, remark: 'Excellent' },
+      { min_score: 76, max_score: 79, grade: 'B+', gp: 3.3, remark: 'Very Good' },
+      { min_score: 72, max_score: 75, grade: 'B', gp: 3.0, remark: 'Very Good' },
+      { min_score: 68, max_score: 71, grade: 'B-', gp: 2.7, remark: 'Good' },
+      { min_score: 64, max_score: 67, grade: 'C+', gp: 2.3, remark: 'Credit' },
+      { min_score: 60, max_score: 63, grade: 'C', gp: 2.0, remark: 'Credit' },
+      { min_score: 57, max_score: 59, grade: 'C-', gp: 1.7, remark: 'Pass' },
+      { min_score: 54, max_score: 56, grade: 'D+', gp: 1.3, remark: 'Pass' },
+      { min_score: 51, max_score: 53, grade: 'D', gp: 1.0, remark: 'Pass' },
+      { min_score: 49, max_score: 50, grade: 'D-', gp: 0.7, remark: 'Marginal Pass' },
+      { min_score: 0, max_score: 48, grade: 'F', gp: 0, remark: 'Fail' },
+    ],
+    class_designations: [
+      { min_gpa: 3.6, max_gpa: 4, label: 'First Class' },
+      { min_gpa: 3.25, max_gpa: 3.59, label: 'Second Class (Upper Division)' },
+      { min_gpa: 2.5, max_gpa: 3.24, label: 'Second Class (Lower Division)' },
+      { min_gpa: 2, max_gpa: 2.49, label: 'Third Class' },
+      { min_gpa: 0, max_gpa: 1.99, label: 'Pass' },
+    ],
+  },
+};
+
+const cloneGradeScaleDefinition = (definition = { rules: [], class_designations: [] }) => ({
+  rules: (definition.rules || []).map((rule) => ({ ...rule })),
+  class_designations: (definition.class_designations || []).map((item) => ({ ...item })),
+});
+
+const getGradeScaleDefinition = (settings, levelCode) => {
+  const normalizedLevelCode = String(levelCode || '').trim().toUpperCase();
+  const configured = settings?.academics?.grade_scales?.[normalizedLevelCode];
+  if (configured) {
+    return cloneGradeScaleDefinition(configured);
+  }
+  return cloneGradeScaleDefinition(defaultGradeScaleByLevel[normalizedLevelCode] || { rules: [], class_designations: [] });
+};
+
+const normalizeGradeScaleRule = (rule = {}, index = 0) => ({
+  id: String(rule.id || `rule-${index + 1}`),
+  min_score: Number(rule.min_score ?? 0),
+  max_score: Number(rule.max_score ?? 0),
+  grade: String(rule.grade || '').trim().toUpperCase(),
+  gp: rule.gp === '' || rule.gp === null || rule.gp === undefined ? null : Number(rule.gp),
+  remark: String(rule.remark || '').trim() || null,
+});
+
+const normalizeClassDesignation = (item = {}, index = 0) => ({
+  id: String(item.id || `designation-${index + 1}`),
+  min_gpa: Number(item.min_gpa ?? 0),
+  max_gpa: Number(item.max_gpa ?? 0),
+  label: String(item.label || '').trim(),
+});
+
+const listGradeScales = async ({ institutionId, levelCodes = [] }) => {
+  const normalizedLevels = Array.from(
+    new Set((Array.isArray(levelCodes) ? levelCodes : []).map((item) => String(item || '').trim().toUpperCase()).filter(Boolean))
+  );
+
+  let settings;
+  if (models.Institution) {
+    const institution = await models.Institution.findByPk(institutionId, { attributes: ['settings'] });
+    if (!institution) {
+      throw Object.assign(new Error('Institution not found.'), { statusCode: 404 });
+    }
+    settings = ensureAcademicSettings(institution.settings);
+  } else {
+    store.settings = ensureAcademicSettings(store.settings || {});
+    settings = store.settings;
+  }
+
+  const targetLevels = normalizedLevels.length ? normalizedLevels : ['PR', 'JH', 'SH', 'TR'];
+  return targetLevels.map((levelCode) => ({
+    level_code: levelCode,
+    ...getGradeScaleDefinition(settings, levelCode),
+  }));
+};
+
+const updateGradeScale = async ({ institutionId, userId, payload, ip }) => {
+  const levelCode = String(payload.level_code || '').trim().toUpperCase();
+  if (!levelCode) {
+    throw Object.assign(new Error('Level code is required.'), { statusCode: 400 });
+  }
+  requireLevelConfig(levelCode);
+
+  const rules = (Array.isArray(payload.rules) ? payload.rules : [])
+    .map((rule, index) => normalizeGradeScaleRule(rule, index))
+    .filter((rule) => rule.grade && Number.isFinite(rule.min_score) && Number.isFinite(rule.max_score))
+    .sort((a, b) => Number(b.max_score) - Number(a.max_score));
+
+  if (!rules.length) {
+    throw Object.assign(new Error('Add at least one grade rule.'), { statusCode: 400 });
+  }
+
+  const designations = (Array.isArray(payload.class_designations) ? payload.class_designations : [])
+    .map((item, index) => normalizeClassDesignation(item, index))
+    .filter((item) => item.label && Number.isFinite(item.min_gpa) && Number.isFinite(item.max_gpa))
+    .sort((a, b) => Number(b.max_gpa) - Number(a.max_gpa));
+
+  if (models.Institution) {
+    const institution = await models.Institution.findByPk(institutionId);
+    if (!institution) {
+      throw Object.assign(new Error('Institution not found.'), { statusCode: 404 });
+    }
+    const settings = ensureAcademicSettings(institution.settings);
+    const oldValues = getGradeScaleDefinition(settings, levelCode);
+    settings.academics.grade_scales[levelCode] = {
+      rules,
+      class_designations: designations,
+    };
+    await institution.update({ settings });
+    await logAudit({
+      userId,
+      action: 'UPDATE',
+      resourceType: 'academic_grade_scale',
+      resourceId: `${institutionId}:${levelCode}`,
+      oldValues,
+      newValues: settings.academics.grade_scales[levelCode],
+      ip,
+    });
+    return {
+      level_code: levelCode,
+      ...settings.academics.grade_scales[levelCode],
+    };
+  }
+
+  store.settings = ensureAcademicSettings(store.settings || {});
+  const oldValues = getGradeScaleDefinition(store.settings, levelCode);
+  store.settings.academics.grade_scales[levelCode] = {
+    rules,
+    class_designations: designations,
+  };
+  await logAudit({
+    userId,
+    action: 'UPDATE',
+    resourceType: 'academic_grade_scale',
+    resourceId: `${institutionId}:${levelCode}`,
+    oldValues,
+    newValues: store.settings.academics.grade_scales[levelCode],
+    ip,
+  });
+  return {
+    level_code: levelCode,
+    ...store.settings.academics.grade_scales[levelCode],
+  };
+};
+
+const resolveGradeOutcome = ({ settings, levelCode, score, creditHours = 0 }) => {
+  const config = requireLevelConfig(levelCode);
+  if (!config.hasGrades) {
+    return {
+      grade: 'milestone',
+      gp: null,
+      tgp: null,
+      remark: null,
+    };
+  }
+
+  const numericScore = Number(score);
+  const definition = getGradeScaleDefinition(settings, levelCode);
+  const matchedRule = definition.rules.find(
+    (rule) => numericScore >= Number(rule.min_score) && numericScore <= Number(rule.max_score)
+  );
+
+  if (matchedRule) {
+    const gp = matchedRule.gp === null || matchedRule.gp === undefined ? null : Number(matchedRule.gp);
+    return {
+      grade: matchedRule.grade,
+      gp,
+      tgp: gp !== null && Number.isFinite(Number(creditHours || 0)) ? Number((gp * Number(creditHours || 0)).toFixed(2)) : null,
+      remark: matchedRule.remark || null,
+    };
+  }
+
+  return {
+    grade: `${numericScore}%`,
+    gp: null,
+    tgp: null,
+    remark: null,
+  };
+};
+
+const normalizeReportCardWorkflow = (workflow = {}) => ({
+  report_card_id: workflow.report_card_id || null,
+  status: workflow.status || 'draft',
+  reviewed_by: workflow.reviewed_by || null,
+  reviewed_at: workflow.reviewed_at || null,
+  review_note: workflow.review_note || null,
+  approved_by: workflow.approved_by || null,
+  approved_at: workflow.approved_at || null,
+  approval_note: workflow.approval_note || null,
+  published_by: workflow.published_by || null,
+  published_at: workflow.published_at || null,
+  publish_note: workflow.publish_note || null,
+});
+
+const resolveReportCardStatus = ({ reportCard, workflow }) => {
+  if (Boolean(reportCard?.is_published)) {
+    return 'published';
+  }
+
+  const normalized = normalizeReportCardWorkflow(workflow);
+  if (normalized.approved_at) {
+    return 'approved';
+  }
+  if (normalized.reviewed_at) {
+    return 'reviewed';
+  }
+  return 'draft';
+};
+
+const canManageReportCardStage = ({ actor, stage }) => {
+  const role = String(actor?.role || '').trim();
+  if (role === 'institution_admin') {
+    return true;
+  }
+
+  if (stage === 'review' && role === 'teacher') {
+    return true;
+  }
+
+  return false;
+};
+
+const serializeReportCard = ({ reportCard, workflow = {} }) => {
+  const normalizedWorkflow = normalizeReportCardWorkflow(workflow);
+  const status = resolveReportCardStatus({ reportCard, workflow: normalizedWorkflow });
+  return {
+    ...reportCard,
+    workflow: {
+      ...normalizedWorkflow,
+      status,
+    },
+    status,
+  };
 };
 
 const ensureLevelRecord = async ({ institutionId, levelCode, transaction }) => {
@@ -270,6 +542,7 @@ const buildAssessmentRows = ({ groups, periods, offerings }) => {
         class_id: group.id,
         subject_id: offering.subject_id || offering.id,
         level_code: group.level_code,
+        credit_hours: offering.credit_hours ?? null,
       };
     })
     .filter(Boolean);
@@ -293,6 +566,9 @@ const listAssessments = async ({ institutionId }) => {
 };
 
 const getGradebook = async ({ institutionId }) => {
+  const settings = models.Institution
+    ? ensureAcademicSettings((await models.Institution.findByPk(institutionId, { attributes: ['settings'] }))?.settings)
+    : ensureAcademicSettings(store.settings || {});
   const students = store.students.profiles.filter((item) => item.institution_id === institutionId);
   const scoreRows = store.academics.scores.filter((item) => item.institution_id === institutionId);
 
@@ -305,15 +581,24 @@ const getGradebook = async ({ institutionId }) => {
     const assignment = Number(orderedScores[1]?.score || 0);
     const exam = Number(orderedScores[2]?.score || 0);
     const populated = [quiz, assignment, exam].filter((item) => item > 0);
+    const final = populated.length
+      ? Math.round(populated.reduce((sum, item) => sum + item, 0) / populated.length)
+      : 0;
+    const outcome = resolveGradeOutcome({
+      settings,
+      levelCode: student.level_code || 'PR',
+      score: final,
+      creditHours: 0,
+    });
 
     return {
       student: student.full_name || `${student.first_name || ''} ${student.last_name || ''}`.trim(),
       quiz,
       assignment,
       exam,
-      final: populated.length
-        ? Math.round(populated.reduce((sum, item) => sum + item, 0) / populated.length)
-        : 0,
+      final,
+      grade: outcome.grade,
+      gp: outcome.gp,
     };
   });
 };
@@ -1520,36 +1805,30 @@ const deleteAcademicOffering = async (context) => {
 };
 
 const calculateGrade = ({ levelCode, score }) => {
-  const config = requireLevelConfig(levelCode);
-  if (!config.hasGrades) {
-    return 'milestone';
-  }
-
-  const numericScore = Number(score);
-  if (config.gradeSystem === 'AF') {
-    if (numericScore >= 80) return 'A';
-    if (numericScore >= 70) return 'B';
-    if (numericScore >= 60) return 'C';
-    if (numericScore >= 50) return 'D';
-    return 'F';
-  }
-  if (config.gradeSystem === 'wassce') {
-    if (numericScore >= 80) return 'A1';
-    if (numericScore >= 70) return 'B2';
-    if (numericScore >= 60) return 'C4';
-    return 'F9';
-  }
-  if (config.gradeSystem === 'gpa_4') {
-    if (numericScore >= 80) return '4.0';
-    if (numericScore >= 70) return '3.5';
-    if (numericScore >= 60) return '3.0';
-    return '2.0';
-  }
-  return `${numericScore}%`;
+  return resolveGradeOutcome({
+    settings: ensureAcademicSettings(store.settings || {}),
+    levelCode,
+    score,
+  }).grade;
 };
 
 const saveScores = async ({ institutionId, userId, payload, ip }) => {
-  const rows = payload.scores.map((row) => ({
+  const settings = models.Institution
+    ? ensureAcademicSettings((await models.Institution.findByPk(institutionId, { attributes: ['settings'] }))?.settings)
+    : ensureAcademicSettings(store.settings || {});
+  const structure = await listAcademicStructure({ institutionId });
+  const offering = structure.offerings.find((item) => String(item.id) === String(payload.subject_id));
+  const creditHours = Number(offering?.credit_hours || payload.credit_hours || 0);
+
+  const rows = payload.scores.map((row) => {
+    const outcome = resolveGradeOutcome({
+      settings,
+      levelCode: payload.level_code,
+      score: row.score,
+      creditHours,
+    });
+
+    return {
     id: `score-${store.academics.scores.length + 1}-${row.student_id}`,
     institution_id: institutionId,
     class_id: payload.class_id,
@@ -1558,8 +1837,13 @@ const saveScores = async ({ institutionId, userId, payload, ip }) => {
     student_id: row.student_id,
     student_name: row.student_name,
     score: Number(row.score),
-    grade: calculateGrade({ levelCode: payload.level_code, score: row.score }),
-  }));
+      credit_hours: creditHours || null,
+      grade: outcome.grade,
+      gp: outcome.gp,
+      tgp: outcome.tgp,
+      remark: outcome.remark,
+    };
+  });
 
   store.academics.scores.push(...rows);
   await logAudit({
@@ -1573,7 +1857,229 @@ const saveScores = async ({ institutionId, userId, payload, ip }) => {
   return rows;
 };
 
-const publishReportCard = async ({ institutionId, reportCardId, userId, ip }) => {
+const publishReportCard = async ({ institutionId, reportCardId, userId, actor, ip }) =>
+  transitionReportCardWorkflow({
+    institutionId,
+    reportCardId,
+    action: 'publish',
+    actor: actor || { id: userId, role: 'institution_admin' },
+    ip,
+  });
+
+const getReportCardsFromDatabase = async ({ institutionId }) => {
+  const [institution, rows] = await Promise.all([
+    models.Institution.findByPk(institutionId),
+    models.ReportCard.findAll({
+      include: [
+        {
+          model: models.Student,
+          as: 'student',
+          required: true,
+          where: { institution_id: institutionId },
+          include: [{ model: models.User, as: 'user', required: false }],
+        },
+        { model: models.Class, as: 'class', required: false },
+        { model: models.TermSemester, as: 'term', required: false },
+      ],
+      order: [
+        ['updated_at', 'DESC'],
+        ['created_at', 'DESC'],
+      ],
+    }).catch(() => []),
+  ]);
+
+  const settings = ensureAcademicSettings(institution?.settings);
+  return rows.map((row) => {
+    const reportCard = row.toJSON();
+    const workflow = settings.academics.report_card_workflow?.[reportCard.id] || {};
+    const studentName =
+      `${reportCard.student?.user?.first_name || ''} ${reportCard.student?.user?.last_name || ''}`.trim() ||
+      reportCard.student_name ||
+      'Student';
+    return serializeReportCard({
+      reportCard: {
+        ...reportCard,
+        student: studentName,
+        student_name: studentName,
+        class_name: reportCard.class?.name || reportCard.class_name || 'Unassigned',
+        term_name: reportCard.term?.name || reportCard.term_name || 'Academic Term',
+      },
+      workflow,
+    });
+  });
+};
+
+const getReportCardsFromRuntime = async ({ institutionId }) => {
+  const settings = ensureAcademicSettings(store.settingsByInstitution[institutionId]);
+  return store.academics.reportCards
+    .filter((item) => item.institution_id === institutionId)
+    .map((reportCard) =>
+      serializeReportCard({
+        reportCard: {
+          ...reportCard,
+          student: reportCard.student_name || reportCard.student || 'Student',
+          term_name: reportCard.term || reportCard.term_name || 'Academic Term',
+        },
+        workflow: settings.academics.report_card_workflow?.[reportCard.id] || {},
+      })
+    );
+};
+
+const getReportCards = async ({ institutionId }) => {
+  if (models.ReportCard && models.Institution) {
+    return getReportCardsFromDatabase({ institutionId });
+  }
+  return getReportCardsFromRuntime({ institutionId });
+};
+
+const transitionReportCardWorkflowInDatabase = async ({
+  institutionId,
+  reportCardId,
+  action,
+  actor,
+  ip,
+  note,
+}) =>
+  sequelize.transaction(async (transaction) => {
+    const institution = await models.Institution.findByPk(institutionId, { transaction });
+    if (!institution) {
+      throw Object.assign(new Error('Institution not found.'), { statusCode: 404 });
+    }
+
+    const settings = ensureAcademicSettings(institution.settings);
+    const reportCard = await models.ReportCard.findOne({
+      where: {
+        id: reportCardId,
+      },
+      include: [
+        {
+          model: models.Student,
+          as: 'student',
+          required: true,
+          where: { institution_id: institutionId },
+        },
+      ],
+      transaction,
+    });
+
+    if (!reportCard) {
+      throw Object.assign(new Error('Report card not found.'), { statusCode: 404 });
+    }
+
+    const currentWorkflow = normalizeReportCardWorkflow(settings.academics.report_card_workflow?.[reportCardId]);
+    const currentStatus = resolveReportCardStatus({ reportCard, workflow: currentWorkflow });
+    const now = new Date().toISOString();
+
+    if (action === 'review') {
+      if (!canManageReportCardStage({ actor, stage: 'review' })) {
+        throw Object.assign(new Error('You do not have permission to review report cards.'), {
+          statusCode: 403,
+        });
+      }
+      if (currentStatus === 'published') {
+        throw Object.assign(new Error('Published report cards cannot be reviewed again.'), {
+          statusCode: 400,
+        });
+      }
+      settings.academics.report_card_workflow[reportCardId] = {
+        ...currentWorkflow,
+        report_card_id: reportCardId,
+        status: 'reviewed',
+        reviewed_by: actor.id,
+        reviewed_at: now,
+        review_note: note || null,
+      };
+    } else if (action === 'approve') {
+      if (!canManageReportCardStage({ actor, stage: 'approve' })) {
+        throw Object.assign(new Error('You do not have permission to approve report cards.'), {
+          statusCode: 403,
+        });
+      }
+      if (!currentWorkflow.reviewed_at) {
+        throw Object.assign(new Error('Review the report card before approval.'), { statusCode: 400 });
+      }
+      if (currentStatus === 'published') {
+        throw Object.assign(new Error('Published report cards cannot be approved again.'), {
+          statusCode: 400,
+        });
+      }
+      settings.academics.report_card_workflow[reportCardId] = {
+        ...currentWorkflow,
+        report_card_id: reportCardId,
+        status: 'approved',
+        approved_by: actor.id,
+        approved_at: now,
+        approval_note: note || null,
+      };
+    } else if (action === 'publish') {
+      if (!canManageReportCardStage({ actor, stage: 'publish' })) {
+        throw Object.assign(new Error('You do not have permission to publish report cards.'), {
+          statusCode: 403,
+        });
+      }
+      if (!currentWorkflow.approved_at) {
+        throw Object.assign(new Error('Approve the report card before publishing.'), {
+          statusCode: 400,
+        });
+      }
+      if (reportCard.is_published) {
+        throw Object.assign(new Error('This report card is already published.'), { statusCode: 400 });
+      }
+
+      await reportCard.update(
+        {
+          is_published: true,
+          published_at: new Date(),
+        },
+        { transaction }
+      );
+      settings.academics.report_card_workflow[reportCardId] = {
+        ...currentWorkflow,
+        report_card_id: reportCardId,
+        status: 'published',
+        published_by: actor.id,
+        published_at: now,
+        publish_note: note || null,
+      };
+    } else {
+      throw Object.assign(new Error('Unsupported report card action.'), { statusCode: 400 });
+    }
+
+    await institution.update({ settings }, { transaction });
+
+    const nextWorkflow = settings.academics.report_card_workflow[reportCardId];
+    const serialized = serializeReportCard({
+      reportCard: {
+        ...reportCard.toJSON(),
+      },
+      workflow: nextWorkflow,
+    });
+
+    await logAudit({
+      userId: actor.id,
+      action: 'UPDATE',
+      resourceType: 'report_card_workflow',
+      resourceId: reportCardId,
+      newValues: {
+        action,
+        workflow: nextWorkflow,
+      },
+      ip,
+    });
+
+    await analyticsService.invalidateAnalyticsCache(institutionId);
+    return serialized;
+  });
+
+const transitionReportCardWorkflowInRuntime = async ({
+  institutionId,
+  reportCardId,
+  action,
+  actor,
+  ip,
+  note,
+}) => {
+  const settings = ensureAcademicSettings(store.settingsByInstitution[institutionId]);
   const reportCard = store.academics.reportCards.find(
     (item) => item.id === reportCardId && item.institution_id === institutionId
   );
@@ -1581,21 +2087,109 @@ const publishReportCard = async ({ institutionId, reportCardId, userId, ip }) =>
     throw Object.assign(new Error('Report card not found.'), { statusCode: 404 });
   }
 
-  reportCard.is_published = true;
+  const currentWorkflow = normalizeReportCardWorkflow(settings.academics.report_card_workflow?.[reportCardId]);
+  const currentStatus = resolveReportCardStatus({ reportCard, workflow: currentWorkflow });
+  const now = new Date().toISOString();
+
+  if (action === 'review') {
+    if (!canManageReportCardStage({ actor, stage: 'review' })) {
+      throw Object.assign(new Error('You do not have permission to review report cards.'), {
+        statusCode: 403,
+      });
+    }
+    if (currentStatus === 'published') {
+      throw Object.assign(new Error('Published report cards cannot be reviewed again.'), {
+        statusCode: 400,
+      });
+    }
+    settings.academics.report_card_workflow[reportCardId] = {
+      ...currentWorkflow,
+      report_card_id: reportCardId,
+      status: 'reviewed',
+      reviewed_by: actor.id,
+      reviewed_at: now,
+      review_note: note || null,
+    };
+  } else if (action === 'approve') {
+    if (!canManageReportCardStage({ actor, stage: 'approve' })) {
+      throw Object.assign(new Error('You do not have permission to approve report cards.'), {
+        statusCode: 403,
+      });
+    }
+    if (!currentWorkflow.reviewed_at) {
+      throw Object.assign(new Error('Review the report card before approval.'), { statusCode: 400 });
+    }
+    if (currentStatus === 'published') {
+      throw Object.assign(new Error('Published report cards cannot be approved again.'), {
+        statusCode: 400,
+      });
+    }
+    settings.academics.report_card_workflow[reportCardId] = {
+      ...currentWorkflow,
+      report_card_id: reportCardId,
+      status: 'approved',
+      approved_by: actor.id,
+      approved_at: now,
+      approval_note: note || null,
+    };
+  } else if (action === 'publish') {
+    if (!canManageReportCardStage({ actor, stage: 'publish' })) {
+      throw Object.assign(new Error('You do not have permission to publish report cards.'), {
+        statusCode: 403,
+      });
+    }
+    if (!currentWorkflow.approved_at) {
+      throw Object.assign(new Error('Approve the report card before publishing.'), {
+        statusCode: 400,
+      });
+    }
+    if (reportCard.is_published) {
+      throw Object.assign(new Error('This report card is already published.'), { statusCode: 400 });
+    }
+
+    reportCard.is_published = true;
+    reportCard.published_at = new Date().toISOString();
+    settings.academics.report_card_workflow[reportCardId] = {
+      ...currentWorkflow,
+      report_card_id: reportCardId,
+      status: 'published',
+      published_by: actor.id,
+      published_at: now,
+      publish_note: note || null,
+    };
+  } else {
+    throw Object.assign(new Error('Unsupported report card action.'), { statusCode: 400 });
+  }
+
+  store.settingsByInstitution[institutionId] = settings;
   await logAudit({
-    userId,
+    userId: actor.id,
     action: 'UPDATE',
-    resourceType: 'report_card',
-    resourceId: reportCard.id,
-    newValues: reportCard,
+    resourceType: 'report_card_workflow',
+    resourceId: reportCardId,
+    newValues: {
+      action,
+      workflow: settings.academics.report_card_workflow[reportCardId],
+    },
     ip,
   });
   await analyticsService.invalidateAnalyticsCache(institutionId);
-  return reportCard;
+  return serializeReportCard({
+    reportCard: {
+      ...reportCard,
+      student: reportCard.student_name || reportCard.student || 'Student',
+      term_name: reportCard.term || reportCard.term_name || 'Academic Term',
+    },
+    workflow: settings.academics.report_card_workflow[reportCardId],
+  });
 };
 
-const getReportCards = async ({ institutionId }) =>
-  store.academics.reportCards.filter((item) => item.institution_id === institutionId);
+const transitionReportCardWorkflow = async (context) => {
+  if (models.ReportCard && models.Institution && sequelize?.transaction) {
+    return transitionReportCardWorkflowInDatabase(context);
+  }
+  return transitionReportCardWorkflowInRuntime(context);
+};
 
 const getRanking = async ({ className }) =>
   store.academics.reportCards
@@ -1615,9 +2209,12 @@ module.exports = {
   updateAcademicOffering,
   deleteAcademicOffering,
   listAssessments,
+  listGradeScales,
+  updateGradeScale,
   getGradebook,
   calculateGrade,
   saveScores,
+  transitionReportCardWorkflow,
   publishReportCard,
   getReportCards,
   getRanking,

@@ -96,6 +96,21 @@ module.exports = {
       institutionId: req.institutionId,
     })
   ),
+  listGradeScales: wrap((req) =>
+    academicsService.listGradeScales({
+      institutionId: req.institutionId,
+      levelCodes: req.query.level_code ? [req.query.level_code] : undefined,
+    })
+  ),
+  updateGradeScale: async (req, res) => {
+    const data = await academicsService.updateGradeScale({
+      institutionId: req.institutionId,
+      userId: req.user.id,
+      payload: req.body,
+      ip: req.ip,
+    });
+    res.status(200).json({ success: true, data });
+  },
   getGradebook: wrap((req) =>
     academicsService.getGradebook({
       institutionId: req.institutionId,
@@ -115,11 +130,22 @@ module.exports = {
       institutionId: req.institutionId,
     })
   ),
+  transitionReportCardWorkflow: wrap((req) =>
+    academicsService.transitionReportCardWorkflow({
+      institutionId: req.institutionId,
+      reportCardId: req.params.id,
+      action: req.body.action,
+      note: req.body.note,
+      actor: req.user,
+      ip: req.ip,
+    })
+  ),
   publishReportCard: wrap((req) =>
     academicsService.publishReportCard({
       institutionId: req.institutionId,
       reportCardId: req.params.id,
       userId: req.user.id,
+      actor: req.user,
       ip: req.ip,
     })
   ),

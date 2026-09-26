@@ -1,8 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { CheckCircle2, Download, FileBadge2, PencilLine } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 
+import { eduovaApi } from '../../api/eduovaApi';
 import Alert from '../../components/ui/Alert';
 import Avatar from '../../components/ui/Avatar';
 import Badge from '../../components/ui/Badge';
@@ -21,6 +23,179 @@ import { useUpdateStudent } from './hooks/useUpdateStudent';
 const attendanceColor = (value: number) =>
   value > 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700';
 
+interface TranscriptPayload {
+  branding?: {
+    institution_name?: string;
+    tagline?: string;
+    logo_url?: string;
+    address_line_1?: string;
+    address_line_2?: string;
+    phone_primary?: string;
+    phone_secondary?: string;
+    email?: string;
+    website?: string;
+    registrar_name?: string;
+    registrar_title?: string;
+    signature_url?: string;
+  };
+  transcript_title?: string;
+  generated_at?: string;
+  issued_on?: string;
+  degree_awarded?: string;
+  total_courses_taken?: number;
+  verification_code?: string;
+  student?: {
+    student_number?: string;
+    name?: string;
+    program_name?: string;
+    department_name?: string;
+    faculty_name?: string;
+  };
+  semesters: Array<Record<string, unknown>>;
+  cgpa?: number;
+  credit_hours?: number;
+  final_classification?: string;
+  grading_system?: {
+    rules?: Array<{
+      min_score: number;
+      max_score: number;
+      grade: string;
+      gp?: number | null;
+    }>;
+    class_designations?: Array<{
+      min_gpa: number;
+      max_gpa: number;
+      label: string;
+    }>;
+  };
+}
+
+interface TranscriptCourseRow {
+  key: string;
+  code: string;
+  name: string;
+  creditHours: number;
+  score: number | null;
+  grade: string;
+  gp: number | null;
+  tgp: number | null;
+}
+
+interface TranscriptSemesterSection {
+  key: string;
+  title: string;
+  courses: TranscriptCourseRow[];
+  courseCount: number;
+  totalCreditHours: number;
+  sgp: number | null;
+  gpa: number | null;
+  cgpa: number | null;
+}
+
+interface TranscriptGradeRule {
+  min_score: number;
+  max_score: number;
+  grade: string;
+  gp?: number | null;
+}
+
+interface TranscriptClassDesignation {
+  min_gpa: number;
+  max_gpa: number;
+  label: string;
+}
+
+const asObject = (value: unknown): Record<string, unknown> =>
+  value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
+
+const asArray = (value: unknown): unknown[] => (Array.isArray(value) ? value : []);
+
+const pickText = (...values: unknown[]) => {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim()) {
+      return value.trim();
+    }
+  }
+  return '';
+};
+
+const pickNumber = (...values: unknown[]) => {
+  for (const value of values) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+  return null;
+};
+
+const formatTranscriptDate = (value?: string) => {
+  if (!value) {
+    return 'Pending';
+  }
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+  return parsed.toLocaleDateString(undefined, {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+};
+
+const normalizeTranscriptCourse = (value: unknown, index: number): TranscriptCourseRow => {
+  const row = asObject(value);
+  return {
+    key: pickText(row.id, row.code, row.course_code, `course-${index + 1}`),
+    code: pickText(row.code, row.course_code, row.subject_code, row.offering_code, `COURSE ${index + 1}`),
+    name: pickText(row.name, row.course_name, row.subject_name, row.title, 'Untitled Course'),
+    creditHours:
+      pickNumber(row.credit_hours, row.creditHours, row.hrs, row.hours, row.credit) ?? 0,
+    score: pickNumber(row.score, row.final_score, row.total_score, row.mark, row.marks),
+    grade: pickText(row.grade, row.letter_grade, '—') || '—',
+    gp: pickNumber(row.gp, row.grade_point),
+    tgp: pickNumber(row.tgp, row.total_grade_points, row.sgp),
+  };
+};
+
+const normalizeTranscriptSemester = (value: unknown, index: number): TranscriptSemesterSection => {
+  const row = asObject(value);
+  const courseRows = asArray(row.courses).length
+    ? asArray(row.courses)
+    : asArray(row.results).length
+      ? asArray(row.results)
+      : asArray(row.offerings).length
+        ? asArray(row.offerings)
+        : asArray(row.course_rows);
+  const courses = courseRows.map(normalizeTranscriptCourse);
+  const levelLabel = pickText(row.level_name, row.level, row.group_name, row.class_name);
+  const periodLabel = pickText(row.semester, row.term, row.period_name, row.name, `Semester ${index + 1}`);
+  const title = [levelLabel, periodLabel].filter(Boolean).join(' - ') || `Semester ${index + 1}`;
+  const totalCreditHours =
+    pickNumber(row.credit_hours, row.total_credit_hours, row.thrs) ??
+    courses.reduce((sum, course) => sum + course.creditHours, 0);
+  const sgp =
+    pickNumber(row.sgp, row.total_grade_points, row.semester_grade_points) ??
+    (courses.some((course) => course.tgp !== null)
+      ? Number(
+          courses.reduce((sum, course) => sum + Number(course.tgp || 0), 0).toFixed(2)
+        )
+      : null);
+
+  return {
+    key: pickText(row.id, row.semester, row.term, `semester-${index + 1}`),
+    title,
+    courses,
+    courseCount:
+      pickNumber(row.course_count, row.completed_courses, row.total_courses) ?? courses.length,
+    totalCreditHours,
+    sgp,
+    gpa: pickNumber(row.gpa, row.semester_gpa),
+    cgpa: pickNumber(row.cgpa, row.cumulative_gpa),
+  };
+};
+
 const StudentDetailPage = () => {
   const { studentId = 'stu-001' } = useParams();
   const [activeTab, setActiveTab] = useState('profile');
@@ -35,7 +210,38 @@ const StudentDetailPage = () => {
     medicalNotes: '',
   });
   const { data, isLoading, isError, refetch } = useStudent(studentId);
+  const transcriptQuery = useQuery<TranscriptPayload>({
+    queryKey: ['student-transcript', studentId],
+    queryFn: () => eduovaApi.tertiary.transcript(studentId),
+    enabled: Boolean(studentId && data?.tertiary?.program_name),
+  });
   const updateStudent = useUpdateStudent();
+  const transcriptSections = useMemo(
+    () =>
+      (transcriptQuery.data?.semesters || []).map((semester, index) =>
+        normalizeTranscriptSemester(semester, index)
+      ),
+    [transcriptQuery.data]
+  );
+  const transcriptTotals = useMemo(() => {
+    const totalCourses =
+      transcriptQuery.data?.total_courses_taken ||
+      transcriptSections.reduce(
+        (sum: number, section: TranscriptSemesterSection) => sum + section.courseCount,
+        0
+      );
+    const totalCreditHours =
+      Number(transcriptQuery.data?.credit_hours || 0) ||
+      transcriptSections.reduce(
+        (sum: number, section: TranscriptSemesterSection) => sum + section.totalCreditHours,
+        0
+      );
+    return {
+      totalCourses,
+      totalCreditHours,
+      cgpa: Number(transcriptQuery.data?.cgpa || 0),
+    };
+  }, [transcriptQuery.data, transcriptSections]);
 
   useEffect(() => {
     if (!data) return;
@@ -98,6 +304,11 @@ const StudentDetailPage = () => {
   const resolvedIncidents = data.discipline.filter((item: StudentDetail['discipline'][number]) => item.status === 'resolved').length;
   const handleFieldChange = (key: keyof typeof formValues, value: string) =>
     setFormValues((current) => ({ ...current, [key]: value }));
+  const handleTranscriptExport = () => {
+    if (typeof window !== 'undefined') {
+      window.print();
+    }
+  };
   const handleEditSave = async () => {
     if (!isEditing) {
       setIsEditing(true);
@@ -170,6 +381,7 @@ const StudentDetailPage = () => {
         <TabsList>
           <TabsTrigger value="profile">Profile</TabsTrigger>
           <TabsTrigger value="academic">Academic</TabsTrigger>
+          {data.tertiary?.program_name ? <TabsTrigger value="transcript">Transcript</TabsTrigger> : null}
           <TabsTrigger value="roadmap">Road Map</TabsTrigger>
           <TabsTrigger value="attendance">Attendance</TabsTrigger>
           <TabsTrigger value="finance">Finance</TabsTrigger>
@@ -291,6 +503,272 @@ const StudentDetailPage = () => {
               </Card>
             </div>
 
+          </div>
+        </TabsContent>
+
+        <TabsContent value="transcript">
+          <div className="space-y-6">
+            {transcriptQuery.data ? (
+              <Card
+                title="Official Transcript"
+                description="Letterhead, grading system, and print-ready transcript layout for this tertiary student."
+                action={
+                  <Button
+                    variant="secondary"
+                    leftIcon={<Download className="h-4 w-4" />}
+                    onClick={handleTranscriptExport}
+                    className="print:hidden"
+                  >
+                    Print / Save PDF
+                  </Button>
+                }
+                className="print:overflow-visible print:rounded-none print:border-0 print:shadow-none"
+              >
+                <div className="mx-auto max-w-5xl space-y-6 rounded-3xl border border-slate-200 bg-white p-6 text-black print:max-w-none print:rounded-none print:border-0 print:p-0">
+                  <div className="relative overflow-hidden rounded-3xl border border-slate-200 p-6 print:rounded-none">
+                    {transcriptQuery.data.branding?.logo_url ? (
+                      <img
+                        src={transcriptQuery.data.branding.logo_url}
+                        alt=""
+                        className="pointer-events-none absolute inset-0 m-auto h-80 w-80 opacity-[0.04]"
+                      />
+                    ) : null}
+
+                    <div className="relative space-y-5">
+                      <div className="flex items-start gap-4 border-b-2 border-slate-300 pb-5">
+                        {transcriptQuery.data.branding?.logo_url ? (
+                          <img
+                            src={transcriptQuery.data.branding.logo_url}
+                            alt="Institution logo"
+                            className="h-20 w-20 rounded-2xl object-cover"
+                          />
+                        ) : null}
+                        <div className="flex-1 text-center">
+                          <p className="text-2xl font-bold uppercase tracking-[0.12em] text-brand-navy">
+                            {transcriptQuery.data.branding?.institution_name || 'Institution'}
+                          </p>
+                          <p className="mt-1 text-lg font-medium text-slate-600">
+                            {transcriptQuery.data.branding?.tagline || 'Official institution transcript'}
+                          </p>
+                          <p className="mt-4 text-base font-semibold uppercase tracking-[0.18em] text-slate-700">
+                            {transcriptQuery.data.transcript_title || 'Official Academic Transcript'}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="grid gap-4 border-b border-slate-300 pb-4 text-sm md:grid-cols-2">
+                        <div className="space-y-1">
+                          <p>{transcriptQuery.data.branding?.address_line_1 || '-'}</p>
+                          <p>{transcriptQuery.data.branding?.address_line_2 || '-'}</p>
+                          <p>{transcriptQuery.data.branding?.website || '-'}</p>
+                        </div>
+                        <div className="space-y-1 text-left md:text-right">
+                          <p>{transcriptQuery.data.branding?.phone_primary || '-'}</p>
+                          <p>{transcriptQuery.data.branding?.phone_secondary || '-'}</p>
+                          <p>{transcriptQuery.data.branding?.email || '-'}</p>
+                        </div>
+                      </div>
+
+                      <div className="grid gap-3 text-sm md:grid-cols-[1fr_auto]">
+                        <div className="space-y-2">
+                          <p>
+                            <span className="font-semibold uppercase">Student ID Number:</span>{' '}
+                            {transcriptQuery.data.student?.student_number || data.student_number}
+                          </p>
+                          <p>
+                            <span className="font-semibold uppercase">Student Name:</span>{' '}
+                            {transcriptQuery.data.student?.name || data.name}
+                          </p>
+                          <p>
+                            <span className="font-semibold uppercase">Program:</span>{' '}
+                            {transcriptQuery.data.student?.program_name || data.tertiary?.program_name || 'Not assigned'}
+                          </p>
+                        </div>
+                        <div className="space-y-2 text-left md:text-right">
+                          <p>
+                            <span className="font-semibold uppercase">Issued:</span>{' '}
+                            {formatTranscriptDate(transcriptQuery.data.issued_on || transcriptQuery.data.generated_at)}
+                          </p>
+                          <p>
+                            <span className="font-semibold uppercase">Classification:</span>{' '}
+                            {transcriptQuery.data.final_classification || 'Pending'}
+                          </p>
+                          <p>
+                            <span className="font-semibold uppercase">Code:</span>{' '}
+                            {transcriptQuery.data.verification_code || 'Pending'}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="space-y-5">
+                        {transcriptSections.map((section: TranscriptSemesterSection) => (
+                          <div key={section.key} className="border-t-2 border-slate-300 pt-4">
+                            <p className="text-base font-semibold uppercase tracking-[0.1em] text-slate-800">
+                              {section.title}
+                            </p>
+                            <div className="mt-3 overflow-x-auto">
+                              <table className="min-w-full text-sm">
+                                <thead>
+                                  <tr className="border-b border-slate-300">
+                                    {['Course(s)', 'Hrs', 'Score', 'Grade', 'GP', 'TGP'].map((label) => (
+                                      <th
+                                        key={label}
+                                        className="px-3 py-2 text-left font-semibold uppercase text-slate-700"
+                                      >
+                                        {label}
+                                      </th>
+                                    ))}
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {section.courses.length ? (
+                                    section.courses.map((course: TranscriptCourseRow) => (
+                                      <tr key={course.key} className="border-b border-slate-100">
+                                        <td className="px-3 py-2">
+                                          <span className="font-semibold">{course.code}</span>{' '}
+                                          {course.name}
+                                        </td>
+                                        <td className="px-3 py-2">{course.creditHours}</td>
+                                        <td className="px-3 py-2">
+                                          {course.score === null ? '—' : course.score}
+                                        </td>
+                                        <td className="px-3 py-2">{course.grade}</td>
+                                        <td className="px-3 py-2">
+                                          {course.gp === null ? '—' : course.gp.toFixed(2)}
+                                        </td>
+                                        <td className="px-3 py-2">
+                                          {course.tgp === null ? '—' : course.tgp.toFixed(2)}
+                                        </td>
+                                      </tr>
+                                    ))
+                                  ) : (
+                                    <tr>
+                                      <td className="px-3 py-4 text-slate-500" colSpan={6}>
+                                        No course rows were stored for this semester yet. The transcript summary is still available.
+                                      </td>
+                                    </tr>
+                                  )}
+                                </tbody>
+                              </table>
+                            </div>
+
+                            <div className="mt-3 grid gap-3 border-t border-slate-300 pt-3 text-sm font-medium md:grid-cols-4">
+                              <p>Course(s) Completed: {section.courseCount}</p>
+                              <p>THRS: {section.totalCreditHours}</p>
+                              <p>SGP: {section.sgp === null ? '—' : section.sgp.toFixed(2)}</p>
+                              <p>GPA: {(section.gpa ?? section.cgpa) === null ? '—' : Number(section.gpa ?? section.cgpa).toFixed(2)}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="grid gap-4 border-t-2 border-slate-300 pt-5 md:grid-cols-3">
+                        <div className="rounded-2xl bg-slate-50 p-4">
+                          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                            Total Courses Taken
+                          </p>
+                          <p className="mt-2 text-2xl font-semibold text-brand-navy">
+                            {transcriptTotals.totalCourses}
+                          </p>
+                        </div>
+                        <div className="rounded-2xl bg-slate-50 p-4">
+                          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                            Total Credit Hrs
+                          </p>
+                          <p className="mt-2 text-2xl font-semibold text-brand-navy">
+                            {transcriptTotals.totalCreditHours}
+                          </p>
+                        </div>
+                        <div className="rounded-2xl bg-slate-50 p-4">
+                          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                            Cumulative GPA
+                          </p>
+                          <p className="mt-2 text-2xl font-semibold text-brand-navy">
+                            {transcriptTotals.cgpa.toFixed(2)}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="grid gap-6 border-t border-slate-300 pt-5 md:grid-cols-[1fr_auto] md:items-end">
+                        <div className="space-y-3">
+                          <p className="text-sm font-semibold uppercase tracking-[0.14em] text-slate-700">
+                            Degree Awarded
+                          </p>
+                          <p className="text-lg font-semibold text-brand-navy">
+                            {transcriptQuery.data.degree_awarded || transcriptQuery.data.student?.program_name || 'Pending'}
+                          </p>
+                          <p className="text-base font-medium text-slate-700">
+                            {transcriptQuery.data.final_classification || 'Pending'}
+                          </p>
+                        </div>
+                        <div className="min-w-[240px] space-y-2 text-center">
+                          {transcriptQuery.data.branding?.signature_url ? (
+                            <img
+                              src={transcriptQuery.data.branding.signature_url}
+                              alt="Registrar signature"
+                              className="mx-auto h-20 object-contain"
+                            />
+                          ) : (
+                            <div className="h-20 border-b border-dashed border-slate-400" />
+                          )}
+                          <p className="font-semibold uppercase text-slate-700">
+                            {transcriptQuery.data.branding?.registrar_name || 'Registrar'}
+                          </p>
+                          <p className="text-sm uppercase tracking-[0.12em] text-slate-500">
+                            {transcriptQuery.data.branding?.registrar_title || 'Office Of Admissions And Records'}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="grid gap-4 border-t border-slate-300 pt-5 md:grid-cols-2">
+                        <div>
+                          <p className="text-sm font-semibold uppercase tracking-[0.14em] text-slate-700">
+                            Grading System
+                          </p>
+                          <div className="mt-3 space-y-2 text-sm">
+                            {(
+                              (transcriptQuery.data.grading_system?.rules || []) as TranscriptGradeRule[]
+                            ).map((rule: TranscriptGradeRule, index: number) => (
+                              <div key={`grade-rule-${index}`} className="flex items-center justify-between gap-4 border-b border-slate-100 pb-2">
+                                <span>
+                                  {rule.min_score} - {rule.max_score}%
+                                </span>
+                                <span className="font-semibold">
+                                  {rule.grade}
+                                  {rule.gp !== null && rule.gp !== undefined ? ` (${Number(rule.gp).toFixed(2)})` : ''}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold uppercase tracking-[0.14em] text-slate-700">
+                            Class Designation
+                          </p>
+                          <div className="mt-3 space-y-2 text-sm">
+                            {(
+                              (transcriptQuery.data.grading_system?.class_designations || []) as TranscriptClassDesignation[]
+                            ).map((item: TranscriptClassDesignation, index: number) => (
+                              <div key={`designation-${index}`} className="flex items-center justify-between gap-4 border-b border-slate-100 pb-2">
+                                <span>
+                                  {item.min_gpa.toFixed(2)} - {item.max_gpa.toFixed(2)}
+                                </span>
+                                <span className="font-semibold">{item.label}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </Card>
+            ) : (
+              <EmptyState
+                title="No transcript yet"
+                message="This tertiary student does not have a generated transcript record yet."
+              />
+            )}
           </div>
         </TabsContent>
 

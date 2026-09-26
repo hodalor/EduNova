@@ -89,12 +89,12 @@ const StudentRecycleBinPage = () => {
 
   const rows = useMemo(() => {
     const query = search.trim().toLowerCase();
-    const items = data || [];
+    const items: DeletedStudentRow[] = data || [];
     if (!query) {
       return items;
     }
     return items.filter(
-      (row) =>
+      (row: DeletedStudentRow) =>
         row.name.toLowerCase().includes(query) ||
         row.student_number.toLowerCase().includes(query) ||
         row.className.toLowerCase().includes(query)

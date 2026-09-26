@@ -92,6 +92,108 @@ const ensureTertiarySettings = (settings) => {
   return next;
 };
 
+const getTranscriptBranding = (settings, institution = null) => {
+  const branding = settings?.branding || {};
+  return {
+    institution_name: branding.letterhead_name || institution?.name || '',
+    tagline: branding.tagline || '',
+    logo_url: branding.logo_url || institution?.logo_url || '',
+    address_line_1: branding.address_line_1 || '',
+    address_line_2: branding.address_line_2 || '',
+    phone_primary: branding.phone_primary || '',
+    phone_secondary: branding.phone_secondary || '',
+    email: branding.email || '',
+    website: branding.website || '',
+    registrar_name: branding.registrar_name || '',
+    registrar_title: branding.registrar_title || '',
+    signature_url: branding.signature_url || '',
+  };
+};
+
+const defaultTranscriptGradeDefinition = {
+  rules: [
+    { min_score: 90, max_score: 100, grade: 'A+', gp: 4.0 },
+    { min_score: 85, max_score: 89, grade: 'A', gp: 4.0 },
+    { min_score: 80, max_score: 84, grade: 'A-', gp: 3.7 },
+    { min_score: 76, max_score: 79, grade: 'B+', gp: 3.3 },
+    { min_score: 72, max_score: 75, grade: 'B', gp: 3.0 },
+    { min_score: 68, max_score: 71, grade: 'B-', gp: 2.7 },
+    { min_score: 64, max_score: 67, grade: 'C+', gp: 2.3 },
+    { min_score: 60, max_score: 63, grade: 'C', gp: 2.0 },
+    { min_score: 57, max_score: 59, grade: 'C-', gp: 1.7 },
+    { min_score: 54, max_score: 56, grade: 'D+', gp: 1.3 },
+    { min_score: 51, max_score: 53, grade: 'D', gp: 1.0 },
+    { min_score: 49, max_score: 50, grade: 'D-', gp: 0.7 },
+    { min_score: 0, max_score: 48, grade: 'F', gp: 0 },
+  ],
+  class_designations: [
+    { min_gpa: 3.6, max_gpa: 4, label: 'First Class' },
+    { min_gpa: 3.25, max_gpa: 3.59, label: 'Second Class (Upper Division)' },
+    { min_gpa: 2.5, max_gpa: 3.24, label: 'Second Class (Lower Division)' },
+    { min_gpa: 2, max_gpa: 2.49, label: 'Third Class' },
+    { min_gpa: 0, max_gpa: 1.99, label: 'Pass' },
+  ],
+};
+
+const getTranscriptGradeDefinition = (settings) => {
+  const configured = settings?.academics?.grade_scales?.TR;
+  if (!configured) {
+    return defaultTranscriptGradeDefinition;
+  }
+
+  return {
+    rules: Array.isArray(configured.rules) ? configured.rules : defaultTranscriptGradeDefinition.rules,
+    class_designations: Array.isArray(configured.class_designations)
+      ? configured.class_designations
+      : defaultTranscriptGradeDefinition.class_designations,
+  };
+};
+
+const resolveClassDesignation = ({ settings, cgpa }) => {
+  const value = Number(cgpa || 0);
+  const definition = getTranscriptGradeDefinition(settings);
+  return (
+    definition.class_designations.find(
+      (item) => value >= Number(item.min_gpa || 0) && value <= Number(item.max_gpa || 0)
+    )?.label || ''
+  );
+};
+
+const getTranscriptCourseRows = (row = {}) => {
+  if (Array.isArray(row.courses)) {
+    return row.courses;
+  }
+  if (Array.isArray(row.results)) {
+    return row.results;
+  }
+  if (Array.isArray(row.offerings)) {
+    return row.offerings;
+  }
+  if (Array.isArray(row.course_rows)) {
+    return row.course_rows;
+  }
+  return [];
+};
+
+const countTranscriptCourses = (rows = []) =>
+  rows.reduce((sum, row) => sum + getTranscriptCourseRows(row).length, 0);
+
+const buildTranscriptVerificationCode = ({ institutionId, studentId, rows = [] }) =>
+  crypto
+    .createHash('sha1')
+    .update(
+      JSON.stringify({
+        institutionId,
+        studentId,
+        rowCount: rows.length,
+        latestSemester: rows[rows.length - 1]?.semester || rows[rows.length - 1]?.term || '',
+        latestCgpa: rows[rows.length - 1]?.cgpa || 0,
+      })
+    )
+    .digest('hex')
+    .slice(0, 12)
+    .toUpperCase();
+
 const getFinanceDefaults = (settings) => {
   const currencies =
     Array.isArray(settings?.finance?.currencies) && settings.finance.currencies.length
@@ -1750,6 +1852,10 @@ const getTranscript = async ({ institutionId, studentId }) => {
     }
 
     const settings = ensureTertiarySettings(institution.settings);
+    const studentProfile =
+      settings.admissions.student_profiles.find(
+        (item) => String(item.student_id || item.id) === String(studentId)
+      ) || {};
     const rows = settings.tertiary.transcripts.filter(
       (item) => item.student_id === studentId && item.institution_id === institutionId
     );
@@ -1760,9 +1866,30 @@ const getTranscript = async ({ institutionId, studentId }) => {
     const latest = rows[rows.length - 1];
     return {
       student_id: studentId,
+      branding: getTranscriptBranding(settings, institution),
+      transcript_title: 'Official Academic Transcript',
+      generated_at: new Date().toISOString(),
+      issued_on: new Date().toISOString(),
+      student: {
+        student_number: studentProfile.student_number || studentProfile.admission_number || '',
+        name: studentProfile.full_name || studentProfile.name || '',
+        program_name: studentProfile.tertiary?.program_name || studentProfile.program_name || '',
+        department_name: studentProfile.tertiary?.department_name || studentProfile.department_name || '',
+        faculty_name: studentProfile.tertiary?.faculty_name || studentProfile.faculty_name || '',
+      },
+      degree_awarded:
+        studentProfile.tertiary?.program_name || studentProfile.program_name || '',
       semesters: rows,
+      total_courses_taken: countTranscriptCourses(rows),
       cgpa: latest.cgpa,
       credit_hours: latest.credit_hours,
+      final_classification: resolveClassDesignation({ settings, cgpa: latest.cgpa }),
+      grading_system: getTranscriptGradeDefinition(settings),
+      verification_code: buildTranscriptVerificationCode({
+        institutionId,
+        studentId,
+        rows,
+      }),
     };
   }
 
@@ -1774,11 +1901,37 @@ const getTranscript = async ({ institutionId, studentId }) => {
   }
 
   const latest = rows[rows.length - 1];
+  const settings = ensureTertiarySettings(store.settings || {});
+  const studentProfile =
+    settings.admissions.student_profiles.find(
+      (item) => String(item.student_id || item.id) === String(studentId)
+    ) || {};
   return {
     student_id: studentId,
+    branding: getTranscriptBranding(settings, null),
+    transcript_title: 'Official Academic Transcript',
+    generated_at: new Date().toISOString(),
+    issued_on: new Date().toISOString(),
+    student: {
+      student_number: studentProfile.student_number || studentProfile.admission_number || '',
+      name: studentProfile.full_name || studentProfile.name || '',
+      program_name: studentProfile.tertiary?.program_name || studentProfile.program_name || '',
+      department_name: studentProfile.tertiary?.department_name || studentProfile.department_name || '',
+      faculty_name: studentProfile.tertiary?.faculty_name || studentProfile.faculty_name || '',
+    },
+    degree_awarded:
+      studentProfile.tertiary?.program_name || studentProfile.program_name || '',
     semesters: rows,
+    total_courses_taken: countTranscriptCourses(rows),
     cgpa: latest.cgpa,
     credit_hours: latest.credit_hours,
+    final_classification: resolveClassDesignation({ settings, cgpa: latest.cgpa }),
+    grading_system: getTranscriptGradeDefinition(settings),
+    verification_code: buildTranscriptVerificationCode({
+      institutionId,
+      studentId,
+      rows,
+    }),
   };
 };
 

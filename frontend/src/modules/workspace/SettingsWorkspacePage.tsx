@@ -23,12 +23,42 @@ interface FinanceSettings {
   currencies: string[];
   default_local_currency: string;
   default_international_currency: string;
+  branding?: BrandingSettings;
+}
+
+interface BrandingSettings {
+  letterhead_name: string;
+  tagline: string;
+  logo_url: string;
+  address_line_1: string;
+  address_line_2: string;
+  phone_primary: string;
+  phone_secondary: string;
+  email: string;
+  website: string;
+  registrar_name: string;
+  registrar_title: string;
+  signature_url: string;
 }
 
 const fallbackFinanceSettings: FinanceSettings = {
   currencies: ['GHS', 'ZMW', 'USD'],
   default_local_currency: 'GHS',
   default_international_currency: 'USD',
+  branding: {
+    letterhead_name: '',
+    tagline: '',
+    logo_url: '',
+    address_line_1: '',
+    address_line_2: '',
+    phone_primary: '',
+    phone_secondary: '',
+    email: '',
+    website: '',
+    registrar_name: '',
+    registrar_title: '',
+    signature_url: '',
+  },
 };
 
 const SettingsWorkspacePage = () => {
@@ -52,12 +82,17 @@ const SettingsWorkspacePage = () => {
   const [defaultInternationalCurrency, setDefaultInternationalCurrency] = useState(
     financeSettings.default_international_currency
   );
+  const [brandingForm, setBrandingForm] = useState<BrandingSettings>(
+    financeSettings.branding ?? fallbackFinanceSettings.branding!
+  );
 
   useEffect(() => {
     setCurrencyInput(financeSettings.currencies.join(', '));
     setDefaultLocalCurrency(financeSettings.default_local_currency);
     setDefaultInternationalCurrency(financeSettings.default_international_currency);
+    setBrandingForm(financeSettings.branding ?? fallbackFinanceSettings.branding!);
   }, [
+    financeSettings.branding,
     financeSettings.currencies,
     financeSettings.default_international_currency,
     financeSettings.default_local_currency,
@@ -90,6 +125,7 @@ const SettingsWorkspacePage = () => {
         currencies: currencyOptions,
         default_local_currency: defaultLocalCurrency,
         default_international_currency: defaultInternationalCurrency,
+        branding: brandingForm,
       }),
     onSuccess: () => {
       toast.success('Finance settings updated.');
@@ -115,9 +151,10 @@ const SettingsWorkspacePage = () => {
       />
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="general">General</TabsTrigger>
           <TabsTrigger value="features">Features</TabsTrigger>
+          <TabsTrigger value="branding">Branding</TabsTrigger>
           <TabsTrigger value="finance">Finance</TabsTrigger>
         </TabsList>
 
@@ -175,6 +212,167 @@ const SettingsWorkspacePage = () => {
                 <div className="rounded-2xl border border-slate-200 px-4 py-3">
                   <p className="font-semibold text-brand-navy">Institution code</p>
                   <p className="mt-2 text-sm text-slate-500">{activeInstitution?.code || '-'}</p>
+                </div>
+              </div>
+            </Card>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="branding" className="mt-6">
+          <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+            <Card
+              title="Letterhead Branding"
+              action={
+                <Button onClick={() => saveFinanceSettings.mutate()} loading={saveFinanceSettings.isPending}>
+                  Save Branding
+                </Button>
+              }
+            >
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="md:col-span-2">
+                  <Input
+                    label="Letterhead Name"
+                    value={brandingForm.letterhead_name}
+                    onChange={(event) =>
+                      setBrandingForm((current) => ({ ...current, letterhead_name: event.target.value }))
+                    }
+                    placeholder={activeInstitution?.name || 'Institution name'}
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <Input
+                    label="Tagline"
+                    value={brandingForm.tagline}
+                    onChange={(event) =>
+                      setBrandingForm((current) => ({ ...current, tagline: event.target.value }))
+                    }
+                    placeholder="The University of the Future"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <Input
+                    label="Logo URL"
+                    value={brandingForm.logo_url}
+                    onChange={(event) =>
+                      setBrandingForm((current) => ({ ...current, logo_url: event.target.value }))
+                    }
+                    placeholder="https://..."
+                  />
+                </div>
+                <Input
+                  label="Address Line 1"
+                  value={brandingForm.address_line_1}
+                  onChange={(event) =>
+                    setBrandingForm((current) => ({ ...current, address_line_1: event.target.value }))
+                  }
+                />
+                <Input
+                  label="Address Line 2"
+                  value={brandingForm.address_line_2}
+                  onChange={(event) =>
+                    setBrandingForm((current) => ({ ...current, address_line_2: event.target.value }))
+                  }
+                />
+                <Input
+                  label="Primary Phone"
+                  value={brandingForm.phone_primary}
+                  onChange={(event) =>
+                    setBrandingForm((current) => ({ ...current, phone_primary: event.target.value }))
+                  }
+                />
+                <Input
+                  label="Secondary Phone"
+                  value={brandingForm.phone_secondary}
+                  onChange={(event) =>
+                    setBrandingForm((current) => ({ ...current, phone_secondary: event.target.value }))
+                  }
+                />
+                <Input
+                  label="Email"
+                  value={brandingForm.email}
+                  onChange={(event) =>
+                    setBrandingForm((current) => ({ ...current, email: event.target.value }))
+                  }
+                />
+                <Input
+                  label="Website"
+                  value={brandingForm.website}
+                  onChange={(event) =>
+                    setBrandingForm((current) => ({ ...current, website: event.target.value }))
+                  }
+                />
+                <Input
+                  label="Registrar Name"
+                  value={brandingForm.registrar_name}
+                  onChange={(event) =>
+                    setBrandingForm((current) => ({ ...current, registrar_name: event.target.value }))
+                  }
+                />
+                <Input
+                  label="Registrar Title"
+                  value={brandingForm.registrar_title}
+                  onChange={(event) =>
+                    setBrandingForm((current) => ({ ...current, registrar_title: event.target.value }))
+                  }
+                />
+                <div className="md:col-span-2">
+                  <Input
+                    label="Signature Image URL"
+                    value={brandingForm.signature_url}
+                    onChange={(event) =>
+                      setBrandingForm((current) => ({ ...current, signature_url: event.target.value }))
+                    }
+                    placeholder="https://..."
+                  />
+                </div>
+              </div>
+            </Card>
+
+            <Card title="Transcript Preview Header">
+              <div className="space-y-4 rounded-3xl border border-slate-200 bg-white p-6">
+                <div className="flex items-start gap-4 border-b border-slate-200 pb-4">
+                  {brandingForm.logo_url ? (
+                    <img
+                      src={brandingForm.logo_url}
+                      alt="Institution logo"
+                      className="h-20 w-20 rounded-2xl object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-slate-100 text-xs font-semibold text-slate-500">
+                      LOGO
+                    </div>
+                  )}
+                  <div className="flex-1">
+                    <p className="text-xl font-bold text-brand-navy">
+                      {brandingForm.letterhead_name || activeInstitution?.name || 'Institution Name'}
+                    </p>
+                    <p className="mt-1 text-sm text-slate-500">
+                      {brandingForm.tagline || 'Institution tagline'}
+                    </p>
+                    <p className="mt-4 text-sm font-semibold uppercase tracking-[0.16em] text-slate-600">
+                      Official Academic Transcript
+                    </p>
+                  </div>
+                </div>
+                <div className="grid gap-4 text-sm text-slate-600 md:grid-cols-2">
+                  <div>
+                    <p>{brandingForm.address_line_1 || 'Address line 1'}</p>
+                    <p>{brandingForm.address_line_2 || 'Address line 2'}</p>
+                    <p>{brandingForm.website || 'Website'}</p>
+                  </div>
+                  <div>
+                    <p>{brandingForm.phone_primary || 'Primary phone'}</p>
+                    <p>{brandingForm.phone_secondary || 'Secondary phone'}</p>
+                    <p>{brandingForm.email || 'Email address'}</p>
+                  </div>
+                </div>
+                <div className="border-t border-slate-200 pt-4 text-right">
+                  <p className="font-semibold text-brand-navy">
+                    {brandingForm.registrar_name || 'Registrar name'}
+                  </p>
+                  <p className="text-sm text-slate-500">
+                    {brandingForm.registrar_title || 'Registrar title'}
+                  </p>
                 </div>
               </div>
             </Card>

@@ -32,6 +32,19 @@ const ensureFinanceSettings = (settings) => {
     'USD';
   next.access_control = next.access_control || {};
   next.access_control.finance_approval_grants = next.access_control.finance_approval_grants || {};
+  next.branding = next.branding || {};
+  next.branding.letterhead_name = next.branding.letterhead_name || '';
+  next.branding.tagline = next.branding.tagline || '';
+  next.branding.logo_url = next.branding.logo_url || '';
+  next.branding.address_line_1 = next.branding.address_line_1 || '';
+  next.branding.address_line_2 = next.branding.address_line_2 || '';
+  next.branding.phone_primary = next.branding.phone_primary || '';
+  next.branding.phone_secondary = next.branding.phone_secondary || '';
+  next.branding.email = next.branding.email || '';
+  next.branding.website = next.branding.website || '';
+  next.branding.registrar_name = next.branding.registrar_name || '';
+  next.branding.registrar_title = next.branding.registrar_title || '';
+  next.branding.signature_url = next.branding.signature_url || '';
   return next;
 };
 
@@ -1455,6 +1468,7 @@ const getFinanceSettings = async ({ institutionId }) => {
       currencies: settings.finance.currencies,
       default_local_currency: settings.finance.default_local_currency,
       default_international_currency: settings.finance.default_international_currency,
+      branding: settings.branding,
     };
   }
 
@@ -1464,6 +1478,7 @@ const getFinanceSettings = async ({ institutionId }) => {
     currencies: settings.finance.currencies,
     default_local_currency: settings.finance.default_local_currency,
     default_international_currency: settings.finance.default_international_currency,
+    branding: settings.branding,
   };
 };
 
@@ -1503,15 +1518,32 @@ const updateFinanceSettings = async ({ institutionId, userId, payload, ip }) => 
       currencies: settings.finance.currencies,
       default_local_currency: settings.finance.default_local_currency,
       default_international_currency: settings.finance.default_international_currency,
+      branding: settings.branding,
     };
     settings.finance.currencies = nextCurrencies;
     settings.finance.default_local_currency = defaultLocal;
     settings.finance.default_international_currency = defaultInternational;
+    settings.branding = {
+      ...settings.branding,
+      letterhead_name: String(payload.branding?.letterhead_name || '').trim(),
+      tagline: String(payload.branding?.tagline || '').trim(),
+      logo_url: String(payload.branding?.logo_url || '').trim(),
+      address_line_1: String(payload.branding?.address_line_1 || '').trim(),
+      address_line_2: String(payload.branding?.address_line_2 || '').trim(),
+      phone_primary: String(payload.branding?.phone_primary || '').trim(),
+      phone_secondary: String(payload.branding?.phone_secondary || '').trim(),
+      email: String(payload.branding?.email || '').trim(),
+      website: String(payload.branding?.website || '').trim(),
+      registrar_name: String(payload.branding?.registrar_name || '').trim(),
+      registrar_title: String(payload.branding?.registrar_title || '').trim(),
+      signature_url: String(payload.branding?.signature_url || '').trim(),
+    };
     await institution.update({ settings });
     const newValues = {
       currencies: settings.finance.currencies,
       default_local_currency: settings.finance.default_local_currency,
       default_international_currency: settings.finance.default_international_currency,
+      branding: settings.branding,
     };
     await logAudit({
       userId,
@@ -1530,15 +1562,32 @@ const updateFinanceSettings = async ({ institutionId, userId, payload, ip }) => 
     currencies: settings.finance.currencies,
     default_local_currency: settings.finance.default_local_currency,
     default_international_currency: settings.finance.default_international_currency,
+    branding: settings.branding,
   };
   settings.finance.currencies = nextCurrencies;
   settings.finance.default_local_currency = defaultLocal;
   settings.finance.default_international_currency = defaultInternational;
+  settings.branding = {
+    ...settings.branding,
+    letterhead_name: String(payload.branding?.letterhead_name || '').trim(),
+    tagline: String(payload.branding?.tagline || '').trim(),
+    logo_url: String(payload.branding?.logo_url || '').trim(),
+    address_line_1: String(payload.branding?.address_line_1 || '').trim(),
+    address_line_2: String(payload.branding?.address_line_2 || '').trim(),
+    phone_primary: String(payload.branding?.phone_primary || '').trim(),
+    phone_secondary: String(payload.branding?.phone_secondary || '').trim(),
+    email: String(payload.branding?.email || '').trim(),
+    website: String(payload.branding?.website || '').trim(),
+    registrar_name: String(payload.branding?.registrar_name || '').trim(),
+    registrar_title: String(payload.branding?.registrar_title || '').trim(),
+    signature_url: String(payload.branding?.signature_url || '').trim(),
+  };
   store.settings = settings;
   const newValues = {
     currencies: settings.finance.currencies,
     default_local_currency: settings.finance.default_local_currency,
     default_international_currency: settings.finance.default_international_currency,
+    branding: settings.branding,
   };
   await logAudit({
     userId,

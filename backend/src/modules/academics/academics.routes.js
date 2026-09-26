@@ -29,9 +29,16 @@ router.post('/offerings', controller.createAcademicOffering);
 router.put('/offerings/:id', controller.updateAcademicOffering);
 router.delete('/offerings/:id', controller.deleteAcademicOffering);
 router.get('/assessments', controller.listAssessments);
+router.get('/grade-scales', controller.listGradeScales);
+router.put('/grade-scales', controller.updateGradeScale);
 router.get('/gradebook', controller.getGradebook);
 router.post('/scores', controller.saveScores);
-router.get('/report-cards', withCacheHeaders({ maxAge: 86400, immutable: true }), controller.getReportCards);
+router.get('/report-cards', withCacheHeaders({ maxAge: 60 }), controller.getReportCards);
+router.post(
+  '/report-cards/:id/workflow',
+  reportGenerationRateLimiter,
+  controller.transitionReportCardWorkflow
+);
 router.put('/report-cards/:id/publish', reportGenerationRateLimiter, controller.publishReportCard);
 router.get('/ranking', controller.getRanking);
 

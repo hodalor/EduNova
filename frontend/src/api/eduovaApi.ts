@@ -289,7 +289,19 @@ export const eduovaApi = {
     saveScores: async (payload: Record<string, unknown>) =>
       (await axiosInstance.post('/v1/academics/scores', payload)).data.data,
     assessments: async () => (await axiosInstance.get('/v1/academics/assessments')).data.data,
+    gradeScales: async (levelCode?: string) =>
+      (
+        await axiosInstance.get('/v1/academics/grade-scales', {
+          params: levelCode ? { level_code: levelCode } : undefined,
+        })
+      ).data.data,
+    updateGradeScale: async (payload: Record<string, unknown>) =>
+      (await axiosInstance.put('/v1/academics/grade-scales', payload)).data.data,
     reportCards: async () => (await axiosInstance.get('/v1/academics/report-cards')).data.data,
+    transitionReportCard: async (id: string, payload: Record<string, unknown>) =>
+      (await axiosInstance.post(`/v1/academics/report-cards/${id}/workflow`, payload)).data.data,
+    publishReportCard: async (id: string) =>
+      (await axiosInstance.put(`/v1/academics/report-cards/${id}/publish`)).data.data,
     gradebook: async () => (await axiosInstance.get('/v1/academics/gradebook')).data.data,
   },
   attendance: {
@@ -348,6 +360,8 @@ export const eduovaApi = {
       (await axiosInstance.patch(`/v1/tertiary/student-progress/${studentId}`, payload)).data.data,
     studentRegistration: async (studentId: string) =>
       (await axiosInstance.get(`/v1/tertiary/student-registration/${studentId}`)).data.data,
+    transcript: async (studentId: string) =>
+      (await axiosInstance.get(`/v1/tertiary/transcript/${studentId}`)).data.data,
     registerCourses: async (payload: Record<string, unknown>) =>
       (await axiosInstance.post('/v1/tertiary/course-registration', payload)).data.data,
   },

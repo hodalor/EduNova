@@ -85,7 +85,29 @@ interface StructureResponse {
   progression_rules: string[];
 }
 
-type StructureTab = 'groups' | 'periods' | 'offerings';
+interface GradeScaleRule {
+  id: string;
+  min_score: number;
+  max_score: number;
+  grade: string;
+  gp: number | null;
+  remark?: string | null;
+}
+
+interface ClassDesignationRule {
+  id: string;
+  min_gpa: number;
+  max_gpa: number;
+  label: string;
+}
+
+interface GradeScaleDefinition {
+  level_code: string;
+  rules: GradeScaleRule[];
+  class_designations: ClassDesignationRule[];
+}
+
+type StructureTab = 'groups' | 'periods' | 'offerings' | 'grades';
 type DetailState =
   | { type: 'groups'; id: string }
   | { type: 'periods'; id: string }
@@ -217,6 +239,22 @@ const initialOfferingForm = {
   next_offering_codes: [] as string[],
 };
 
+const buildEmptyGradeRule = (): GradeScaleRule => ({
+  id: `rule-${Math.random().toString(36).slice(2, 10)}`,
+  min_score: 0,
+  max_score: 0,
+  grade: '',
+  gp: null,
+  remark: '',
+});
+
+const buildEmptyClassDesignation = (): ClassDesignationRule => ({
+  id: `designation-${Math.random().toString(36).slice(2, 10)}`,
+  min_gpa: 0,
+  max_gpa: 0,
+  label: '',
+});
+
 const AcademicStructurePage = () => {
   const role = useAuthStore((state) => state.role);
   const institution = useAuthStore((state) => state.institution);
@@ -228,6 +266,12 @@ const AcademicStructurePage = () => {
   const [activeTab, setActiveTab] = useState<StructureTab>('groups');
   const [selectedGroupId, setSelectedGroupId] = useState('');
   const [selectedProgramId, setSelectedProgramId] = useState('');
+  const [selectedGradeLevel, setSelectedGradeLevel] = useState<EducationLevelCode>('TR');
+  const [gradeScaleForm, setGradeScaleForm] = useState<GradeScaleDefinition>({
+    level_code: 'TR',
+    rules: [],
+    class_designations: [],
+  });
   const [detailState, setDetailState] = useState<DetailState>(null);
   const [groupModalMode, setGroupModalMode] = useState<ModalMode>('create');
   const [periodModalMode, setPeriodModalMode] = useState<ModalMode>('create');
@@ -259,6 +303,11 @@ const AcademicStructurePage = () => {
   const { data, isLoading } = useQuery<StructureResponse>({
     queryKey: ['academic-structure', activeInstitutionId],
     queryFn: eduovaApi.academics.structure,
+    enabled: Boolean(activeInstitutionId),
+  });
+  const gradeScalesQuery = useQuery<GradeScaleDefinition[]>({
+    queryKey: ['academic-grade-scales', activeInstitutionId],
+    queryFn: () => eduovaApi.academics.gradeScales(),
     enabled: Boolean(activeInstitutionId),
   });
   const { data: tertiaryOverview } = useQuery<TertiaryOverview>({
@@ -673,6 +722,49 @@ const AcademicStructurePage = () => {
     },
   });
 
+  const saveGradeScale = useMutation({
+    mutationFn: (payload: Record<string, unknown>) => eduovaApi.academics.updateGradeScale(payload),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['academic-grade-scales', activeInstitutionId] });
+      toast.success('Grade rules updated.');
+    },
+    onError: (error: unknown) => {
+      toast.error(resolveApiErrorMessage(error, 'Unable to update grade rules.'));
+    },
+  });
+
+  const activeOfferingPeriods = periods
+    .filter((period) => period.group_id === offeringForm.group_id)
+    .sort((a, b) => a.sequence - b.sequence);
+  const activeOfferingGroupLevelCode =
+    groups.find((group) => group.id === offeringForm.group_id)?.level_code || '';
+  const gradeScales = useMemo<GradeScaleDefinition[]>(
+    () => (gradeScalesQuery.data || []) as GradeScaleDefinition[],
+    [gradeScalesQuery.data]
+  );
+  const currentGradeScale = useMemo<GradeScaleDefinition>(() => {
+    return (
+      gradeScales.find((item) => item.level_code === selectedGradeLevel) || {
+        level_code: selectedGradeLevel,
+        rules: [],
+        class_designations: [],
+      }
+    );
+  }, [gradeScales, selectedGradeLevel]);
+
+  useEffect(() => {
+    const nextLevel = (allowedLevels.includes('TR') ? 'TR' : allowedLevels[0]) || 'TR';
+    setSelectedGradeLevel((current) => (allowedLevels.includes(current) ? current : nextLevel));
+  }, [allowedLevels]);
+
+  useEffect(() => {
+    setGradeScaleForm({
+      level_code: currentGradeScale.level_code,
+      rules: (currentGradeScale.rules || []).map((rule) => ({ ...rule })),
+      class_designations: (currentGradeScale.class_designations || []).map((item) => ({ ...item })),
+    });
+  }, [currentGradeScale]);
+
   if (isLoading) {
     return <PageLoader />;
   }
@@ -691,10 +783,18 @@ const AcademicStructurePage = () => {
     { id: 'groups', label: groupListLabel, count: groups.length },
     { id: 'periods', label: periodListLabel, count: filteredPeriods.length },
     { id: 'offerings', label: offeringListLabel, count: filteredOfferings.length },
+    { id: 'grades', label: 'Grades', count: gradeScaleForm.rules.length },
   ];
 
   const openCreateModal = (tab: StructureTab) => {
     setActiveTab(tab);
+    if (tab === 'grades') {
+      setGradeScaleForm((current) => ({
+        ...current,
+        rules: [...current.rules, buildEmptyGradeRule()],
+      }));
+      return;
+    }
     if (tab === 'groups') {
       setEditingGroupId('');
       setGroupModalMode('create');
@@ -798,12 +898,6 @@ const AcademicStructurePage = () => {
     });
   };
 
-  const activeOfferingPeriods = periods
-    .filter((period) => period.group_id === offeringForm.group_id)
-    .sort((a, b) => a.sequence - b.sequence);
-  const activeOfferingGroupLevelCode =
-    groups.find((group) => group.id === offeringForm.group_id)?.level_code || '';
-
   return (
     <div className="space-y-6">
       <PageHeader
@@ -836,11 +930,30 @@ const AcademicStructurePage = () => {
               ))}
             </div>
             <Button leftIcon={<PlusCircle className="h-4 w-4" />} onClick={() => openCreateModal(activeTab)}>
-              Add {activeTab === 'groups' ? groupLabel : activeTab === 'periods' ? periodLabel : offeringLabel}
+              {activeTab === 'grades'
+                ? 'Add Grade Rule'
+                : `Add ${activeTab === 'groups' ? groupLabel : activeTab === 'periods' ? periodLabel : offeringLabel}`}
             </Button>
           </div>
 
-          {activeTab !== 'groups' ? (
+          {activeTab === 'grades' ? (
+            <div className="grid gap-3 md:grid-cols-[minmax(0,280px)_1fr] md:items-end">
+              <Select
+                label="Education Level"
+                value={selectedGradeLevel}
+                onChange={(event) => setSelectedGradeLevel(event.target.value as EducationLevelCode)}
+              >
+                {levelOptions.map((level) => (
+                  <option key={level.code} value={level.code}>
+                    {level.label}
+                  </option>
+                ))}
+              </Select>
+              <p className="text-sm text-slate-500">
+                Define the score range, grade, GPA point, and transcript classification rules for each level.
+              </p>
+            </div>
+          ) : activeTab !== 'groups' ? (
             <div className="grid gap-3 md:grid-cols-[minmax(0,280px)_minmax(0,280px)_1fr] md:items-end">
               <Select
                 label={`${groupLabel} Filter`}
@@ -1068,6 +1181,220 @@ const AcademicStructurePage = () => {
                 No {offeringListLabel.toLowerCase()} found for the current filter yet.
               </p>
             )
+          ) : null}
+
+          {activeTab === 'grades' ? (
+            <div className="space-y-6">
+              <div className="rounded-3xl border border-slate-200 p-4">
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-lg font-semibold text-brand-navy">
+                      {educationLevelLabels[selectedGradeLevel] || selectedGradeLevel} Grade Rules
+                    </h3>
+                    <p className="text-sm text-slate-500">
+                      Scores entered for this level will auto-resolve grade, GP, and TGP from these ranges.
+                    </p>
+                  </div>
+                  <Button
+                    onClick={() =>
+                      saveGradeScale.mutate({
+                        level_code: gradeScaleForm.level_code,
+                        rules: gradeScaleForm.rules,
+                        class_designations: gradeScaleForm.class_designations,
+                      })
+                    }
+                    loading={saveGradeScale.isPending}
+                  >
+                    Save Grades
+                  </Button>
+                </div>
+
+                <div className="space-y-3">
+                  {gradeScaleForm.rules.map((rule, index) => (
+                    <div key={rule.id} className="grid gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 md:grid-cols-6">
+                      <Input
+                        label="Min Score"
+                        type="number"
+                        value={String(rule.min_score)}
+                        onChange={(event) =>
+                          setGradeScaleForm((current) => ({
+                            ...current,
+                            rules: current.rules.map((item, itemIndex) =>
+                              itemIndex === index ? { ...item, min_score: Number(event.target.value || 0) } : item
+                            ),
+                          }))
+                        }
+                      />
+                      <Input
+                        label="Max Score"
+                        type="number"
+                        value={String(rule.max_score)}
+                        onChange={(event) =>
+                          setGradeScaleForm((current) => ({
+                            ...current,
+                            rules: current.rules.map((item, itemIndex) =>
+                              itemIndex === index ? { ...item, max_score: Number(event.target.value || 0) } : item
+                            ),
+                          }))
+                        }
+                      />
+                      <Input
+                        label="Grade"
+                        value={rule.grade}
+                        onChange={(event) =>
+                          setGradeScaleForm((current) => ({
+                            ...current,
+                            rules: current.rules.map((item, itemIndex) =>
+                              itemIndex === index ? { ...item, grade: event.target.value.toUpperCase() } : item
+                            ),
+                          }))
+                        }
+                      />
+                      <Input
+                        label="GP"
+                        type="number"
+                        step="0.1"
+                        value={rule.gp === null ? '' : String(rule.gp)}
+                        onChange={(event) =>
+                          setGradeScaleForm((current) => ({
+                            ...current,
+                            rules: current.rules.map((item, itemIndex) =>
+                              itemIndex === index
+                                ? { ...item, gp: event.target.value === '' ? null : Number(event.target.value) }
+                                : item
+                            ),
+                          }))
+                        }
+                      />
+                      <Input
+                        label="Remark"
+                        value={rule.remark || ''}
+                        onChange={(event) =>
+                          setGradeScaleForm((current) => ({
+                            ...current,
+                            rules: current.rules.map((item, itemIndex) =>
+                              itemIndex === index ? { ...item, remark: event.target.value } : item
+                            ),
+                          }))
+                        }
+                      />
+                      <div className="flex items-end">
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          leftIcon={<Trash2 className="h-4 w-4" />}
+                          onClick={() =>
+                            setGradeScaleForm((current) => ({
+                              ...current,
+                              rules: current.rules.filter((item) => item.id !== rule.id),
+                            }))
+                          }
+                        >
+                          Remove
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                  {!gradeScaleForm.rules.length ? (
+                    <p className="rounded-2xl border border-dashed border-slate-200 px-4 py-6 text-center text-sm text-slate-500">
+                      No grade rules added yet for this level.
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+
+              {selectedGradeLevel === 'TR' ? (
+                <div className="rounded-3xl border border-slate-200 p-4">
+                  <div className="mb-4 flex items-center justify-between gap-3">
+                    <div>
+                      <h3 className="text-lg font-semibold text-brand-navy">Class Designation</h3>
+                      <p className="text-sm text-slate-500">
+                        Control the final transcript award label from cumulative GPA ranges.
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() =>
+                        setGradeScaleForm((current) => ({
+                          ...current,
+                          class_designations: [...current.class_designations, buildEmptyClassDesignation()],
+                        }))
+                      }
+                    >
+                      Add Designation
+                    </Button>
+                  </div>
+                  <div className="space-y-3">
+                    {gradeScaleForm.class_designations.map((item, index) => (
+                      <div key={item.id} className="grid gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 md:grid-cols-4">
+                        <Input
+                          label="Min GPA"
+                          type="number"
+                          step="0.01"
+                          value={String(item.min_gpa)}
+                          onChange={(event) =>
+                            setGradeScaleForm((current) => ({
+                              ...current,
+                              class_designations: current.class_designations.map((entry, entryIndex) =>
+                                entryIndex === index
+                                  ? { ...entry, min_gpa: Number(event.target.value || 0) }
+                                  : entry
+                              ),
+                            }))
+                          }
+                        />
+                        <Input
+                          label="Max GPA"
+                          type="number"
+                          step="0.01"
+                          value={String(item.max_gpa)}
+                          onChange={(event) =>
+                            setGradeScaleForm((current) => ({
+                              ...current,
+                              class_designations: current.class_designations.map((entry, entryIndex) =>
+                                entryIndex === index
+                                  ? { ...entry, max_gpa: Number(event.target.value || 0) }
+                                  : entry
+                              ),
+                            }))
+                          }
+                        />
+                        <Input
+                          label="Label"
+                          value={item.label}
+                          onChange={(event) =>
+                            setGradeScaleForm((current) => ({
+                              ...current,
+                              class_designations: current.class_designations.map((entry, entryIndex) =>
+                                entryIndex === index ? { ...entry, label: event.target.value } : entry
+                              ),
+                            }))
+                          }
+                        />
+                        <div className="flex items-end">
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            leftIcon={<Trash2 className="h-4 w-4" />}
+                            onClick={() =>
+                              setGradeScaleForm((current) => ({
+                                ...current,
+                                class_designations: current.class_designations.filter(
+                                  (entry) => entry.id !== item.id
+                                ),
+                              }))
+                            }
+                          >
+                            Remove
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </div>
           ) : null}
         </div>
       </Card>
