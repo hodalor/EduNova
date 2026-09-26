@@ -11,6 +11,7 @@ import PageLoader from '../../components/ui/PageLoader';
 import PageHeader from '../shared/PageHeader';
 import { useAuthStore } from '../../store/authStore';
 import { getInstitutionLevels, isTertiaryInstitution } from '../../lib/institution';
+import { formatCurrencyAmount, resolvePrimaryCurrencyCode } from '../../utils/currency';
 
 interface ReportCardRow {
   id: string;
@@ -34,6 +35,7 @@ interface TimetableRow {
 interface InvoiceRow {
   id: string;
   balance: number;
+  currency_code?: string;
 }
 
 const StudentWorkspacePage = () => {
@@ -65,6 +67,7 @@ const StudentWorkspacePage = () => {
       (sum: number, item: InvoiceRow) => sum + Number(item.balance || 0),
       0
     );
+    const primaryCurrencyCode = resolvePrimaryCurrencyCode(invoices);
 
     return [
       {
@@ -83,7 +86,7 @@ const StudentWorkspacePage = () => {
       },
       {
         label: 'Balance',
-        value: `GHS ${outstanding.toLocaleString()}`,
+        value: formatCurrencyAmount(primaryCurrencyCode, outstanding),
         helper: 'Current invoice balance across fees.',
         icon: CreditCard,
       },
@@ -234,12 +237,13 @@ const StudentWorkspacePage = () => {
             />
             <Alert
               title="Finance status"
-              message={`Outstanding fee balance is GHS ${invoices
-                .reduce(
+              message={`Outstanding fee balance is ${formatCurrencyAmount(
+                resolvePrimaryCurrencyCode(invoices),
+                invoices.reduce(
                   (sum: number, item: InvoiceRow) => sum + Number(item.balance || 0),
                   0
                 )
-                .toLocaleString()}.`}
+              )}.`}
               variant="info"
             />
           </div>

@@ -252,6 +252,8 @@ const findPaymentAccountInProfiles = ({ settings, identifier }) => {
     level_code: profile?.level_code || null,
     program_id: program?.id || programId || null,
     program_name: program?.name || null,
+    student_category: resolveStudentCategory(profile || {}),
+    currency_code: resolveInvoiceFinanceMeta({ settings, profile: profile || {}, invoice: {} }).currency_code,
   };
 };
 
@@ -325,6 +327,8 @@ const findStudentPaymentAccount = async ({ institutionId, identifier, actor }) =
         level_code: dbStudent.level?.level_code || profile?.level_code || null,
         program_id: program?.id || programId || null,
         program_name: program?.name || null,
+        student_category: resolveStudentCategory(profile || {}),
+        currency_code: resolveInvoiceFinanceMeta({ settings, profile: profile || {}, invoice: {} }).currency_code,
       };
     }
   }

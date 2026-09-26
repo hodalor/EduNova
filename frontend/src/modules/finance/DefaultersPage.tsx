@@ -9,6 +9,7 @@ import Table from '../../components/ui/Table';
 import PageHeader from '../shared/PageHeader';
 import { getInstitutionLevels } from '../../lib/institution';
 import { useAuthStore } from '../../store/authStore';
+import { formatCurrencyAmount, resolvePrimaryCurrencyCode } from '../../utils/currency';
 
 interface DefaulterRow {
   id: string;
@@ -17,6 +18,7 @@ interface DefaulterRow {
   daysOverdue: number;
   className: string;
   levelName?: string;
+  currency_code?: string;
 }
 
 const DefaultersPage = () => {
@@ -31,6 +33,7 @@ const DefaultersPage = () => {
   });
 
   const rows = (data || []) as DefaulterRow[];
+  const primaryCurrencyCode = resolvePrimaryCurrencyCode(rows);
 
   const exportToExcel = () => {
     const worksheet = XLSX.utils.json_to_sheet(
@@ -74,7 +77,14 @@ const DefaultersPage = () => {
               header: isPureTertiaryWorkspace ? 'Level' : 'Class',
               cell: ({ row }) => row.original.levelName || row.original.className,
             },
-          { header: 'Amount', cell: ({ row }) => `GHS ${row.original.amount.toLocaleString()}` },
+          {
+            header: 'Amount',
+            cell: ({ row }) =>
+              formatCurrencyAmount(
+                row.original.currency_code || primaryCurrencyCode,
+                row.original.amount
+              ),
+          },
           { header: 'Days Overdue', accessorKey: 'daysOverdue' },
           { header: 'Contact', cell: () => '+233 24 000 0111' },
           {

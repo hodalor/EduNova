@@ -10,6 +10,7 @@ import Input from '../../components/ui/Input';
 import PageLoader from '../../components/ui/PageLoader';
 import Select from '../../components/ui/Select';
 import Table from '../../components/ui/Table';
+import { formatCurrencyAmount, resolvePrimaryCurrencyCode } from '../../utils/currency';
 import PageHeader from '../shared/PageHeader';
 
 const feeStructureSchema = z.object({
@@ -34,6 +35,7 @@ interface FeeStructureRow {
   term: string;
   fee_type: string;
   amount: number;
+  currency_code?: string;
   due_date: string;
 }
 
@@ -57,6 +59,7 @@ const FeeStructurePage = () => {
     control,
     name: 'items',
   });
+  const primaryCurrencyCode = resolvePrimaryCurrencyCode((data || []) as FeeStructureRow[]);
 
   if (isLoading) {
     return <PageLoader />;
@@ -78,7 +81,14 @@ const FeeStructurePage = () => {
             { header: 'Class', accessorKey: 'className' },
             { header: 'Term', accessorKey: 'term' },
             { header: 'Fee Item', accessorKey: 'fee_type' },
-            { header: 'Amount', cell: ({ row }) => `GHS ${row.original.amount.toLocaleString()}` },
+            {
+              header: 'Amount',
+              cell: ({ row }) =>
+                formatCurrencyAmount(
+                  row.original.currency_code || primaryCurrencyCode,
+                  row.original.amount
+                ),
+            },
             { header: 'Due Date', accessorKey: 'due_date' },
           ]}
         />

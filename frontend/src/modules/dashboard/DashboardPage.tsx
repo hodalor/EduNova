@@ -29,6 +29,7 @@ import {
   supportsFinance,
 } from '../../lib/institution';
 import { useAuthStore } from '../../store/authStore';
+import { formatCurrencyAmount, resolvePrimaryCurrencyCode } from '../../utils/currency';
 import PageHeader from '../shared/PageHeader';
 import ParentWorkspacePage from '../workspace/ParentWorkspacePage';
 import StudentWorkspacePage from '../workspace/StudentWorkspacePage';
@@ -51,6 +52,7 @@ interface RecentPaymentRow {
   student: string;
   className: string;
   amount: number;
+  currencyCode?: string;
   method: string;
   receivedAt: string;
   status: string;
@@ -75,6 +77,8 @@ const DashboardPage = () => {
     queryFn: eduovaApi.analytics.getOverview,
     enabled: Boolean(institution?.id),
   });
+  const recentPayments = (data?.recentPayments as RecentPaymentRow[] | undefined) || [];
+  const primaryCurrencyCode = resolvePrimaryCurrencyCode(recentPayments);
 
   if (role === 'teacher') {
     return <TeacherWorkspacePage />;
@@ -160,12 +164,19 @@ const DashboardPage = () => {
       <div className="grid gap-6 xl:grid-cols-[1.55fr_1fr]">
         <Table<RecentPaymentRow>
           title="Recent Payments"
-          data={data.recentPayments as RecentPaymentRow[]}
+          data={recentPayments}
           columns={[
             { header: 'Student', accessorKey: 'student' },
             { header: isPureTertiaryWorkspace ? 'Level' : 'Class', accessorKey: 'className' },
             { header: 'Method', accessorKey: 'method' },
-            { header: 'Amount', cell: ({ row }) => `GHS ${row.original.amount.toLocaleString()}` },
+            {
+              header: 'Amount',
+              cell: ({ row }) =>
+                formatCurrencyAmount(
+                  row.original.currencyCode || primaryCurrencyCode,
+                  row.original.amount
+                ),
+            },
             { header: 'Received', accessorKey: 'receivedAt' },
             { header: 'Status', accessorKey: 'status' },
           ]}

@@ -20,6 +20,7 @@ import DatePicker from '../../components/ui/DatePicker';
 import PageLoader from '../../components/ui/PageLoader';
 import ProgressBar from '../../components/ui/ProgressBar';
 import Table from '../../components/ui/Table';
+import { formatCurrencyAmount, resolvePrimaryCurrencyCode } from '../../utils/currency';
 
 interface RevenuePoint {
   month: string;
@@ -38,6 +39,7 @@ interface DefaulterRow {
   amount: number;
   daysOverdue: number;
   className: string;
+  currency_code?: string;
 }
 
 const colors = ['#0F1B3C', '#F5A623', '#3B82F6', '#22C55E'];
@@ -72,9 +74,11 @@ const FinanceAnalyticsPage = () => {
         className: String(item.className || item.class_name || 'Unassigned'),
         amount: Number(item.amount ?? item.balance ?? 0),
         daysOverdue: Number(item.daysOverdue ?? item.days_overdue ?? 0),
+        currency_code: String(item.currency_code || ''),
       })),
     [data?.defaulters]
   );
+  const primaryCurrencyCode = resolvePrimaryCurrencyCode(defaulters);
 
   if (isLoading) {
     return <PageLoader />;
@@ -198,7 +202,7 @@ const FinanceAnalyticsPage = () => {
                   <span className="font-medium text-slate-700">{item.name}</span>
                 </div>
                 <span className="text-sm font-semibold text-brand-navy">
-                  GHS {item.value.toLocaleString()}
+                  {formatCurrencyAmount(primaryCurrencyCode, item.value)}
                 </span>
               </div>
             ))}
@@ -211,7 +215,14 @@ const FinanceAnalyticsPage = () => {
           columns={[
             { header: 'Student', accessorKey: 'student' },
             { header: 'Class', accessorKey: 'className' },
-            { header: 'Amount', cell: ({ row }) => `GHS ${row.original.amount.toLocaleString()}` },
+            {
+              header: 'Amount',
+              cell: ({ row }) =>
+                formatCurrencyAmount(
+                  row.original.currency_code || primaryCurrencyCode,
+                  row.original.amount
+                ),
+            },
             { header: 'Days Overdue', accessorKey: 'daysOverdue' },
             {
               header: 'Action',

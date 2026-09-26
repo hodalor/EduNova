@@ -217,6 +217,13 @@ const StudentsListPage = () => {
                   <Link to={`/students/${row.original.id}/id-card`}>
                     <Button size="sm">ID Card</Button>
                   </Link>
+                  {isPureTertiaryWorkspace ? (
+                    <Link to={`/students/${row.original.id}#transcript`}>
+                      <Button size="sm" variant="secondary">
+                        Transcript
+                      </Button>
+                    </Link>
+                  ) : null}
                   {canManageDeletion ? (
                     <Button
                       size="sm"

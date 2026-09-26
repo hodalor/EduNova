@@ -12,6 +12,7 @@ import Input from '../../components/ui/Input';
 import PageHeader from '../shared/PageHeader';
 import Select from '../../components/ui/Select';
 import { useAuthStore } from '../../store/authStore';
+import { formatCurrencyAmount, resolvePrimaryCurrencyCode } from '../../utils/currency';
 
 interface InvoiceRow {
   id: string;
@@ -21,6 +22,7 @@ interface InvoiceRow {
   balance: number | string;
   net_balance?: number | string;
   credit_balance?: number | string;
+  currency_code?: string | null;
   due_date?: string;
   status: string;
 }
@@ -31,6 +33,7 @@ interface PaymentAccountLookup {
   student_name?: string | null;
   class_name?: string | null;
   program_name?: string | null;
+  currency_code?: string | null;
   credit_balance?: number | string;
   outstanding_amount?: number | string;
   net_outstanding_amount?: number | string;
@@ -44,12 +47,6 @@ interface GatewayRequest {
   provider_message?: string | null;
   status: string;
 }
-
-const currency = (value: number | string | null | undefined) =>
-  Number(value || 0).toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
 
 const StudentFinancePage = () => {
   const user = useAuthStore((state) => state.user);
@@ -85,6 +82,10 @@ const StudentFinancePage = () => {
   const paymentRequest = initiatePayment.data as GatewayRequest | undefined;
   const payableInvoices = useMemo(
     () => (account?.invoices || []).filter((item) => Number(item.net_balance ?? item.balance ?? 0) > 0),
+    [account]
+  );
+  const primaryCurrencyCode = useMemo(
+    () => resolvePrimaryCurrencyCode(account?.invoices, account?.currency_code),
     [account]
   );
 
@@ -149,7 +150,7 @@ const StudentFinancePage = () => {
                     {account.program_name || account.class_name || 'Not assigned'}
                   </p>
                   <p className="mt-1 text-sm text-slate-500">
-                    Net outstanding {currency(account.net_outstanding_amount)}
+                    Net outstanding {formatCurrencyAmount(primaryCurrencyCode, account.net_outstanding_amount)}
                   </p>
                 </div>
               </>
@@ -186,8 +187,8 @@ const StudentFinancePage = () => {
                     : 'text-emerald-600'
                 }`}
               >
-                GHS{' '}
-                {currency(
+                {formatCurrencyAmount(
+                  primaryCurrencyCode,
                   Number(account?.net_outstanding_amount || 0) > 0
                     ? account?.net_outstanding_amount
                     : account?.credit_balance
@@ -231,7 +232,10 @@ const StudentFinancePage = () => {
                     <Badge
                       variant={Number(invoice.net_balance ?? invoice.balance ?? 0) > 0 ? 'inactive' : 'active'}
                     >
-                      {currency(invoice.net_balance ?? invoice.balance)}
+                      {formatCurrencyAmount(
+                        invoice.currency_code || primaryCurrencyCode,
+                        invoice.net_balance ?? invoice.balance
+                      )}
                     </Badge>
                   </div>
                 </button>
@@ -255,7 +259,11 @@ const StudentFinancePage = () => {
               <option value="">Select invoice…</option>
               {payableInvoices.map((invoice) => (
                 <option key={invoice.id} value={invoice.id}>
-                  {invoice.invoice_number} · {currency(invoice.net_balance ?? invoice.balance)}
+                  {invoice.invoice_number} ·{' '}
+                  {formatCurrencyAmount(
+                    invoice.currency_code || primaryCurrencyCode,
+                    invoice.net_balance ?? invoice.balance
+                  )}
                 </option>
               ))}
             </Select>

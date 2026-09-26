@@ -11,6 +11,7 @@ interface ReceiptPdfProps {
   className: string;
   paymentMethod: string;
   reference: string;
+  currencyCode?: string;
   items: ReceiptItem[];
 }
 
@@ -73,9 +74,15 @@ const ReceiptPDF = ({
   className,
   paymentMethod,
   reference,
+  currencyCode,
   items,
 }: ReceiptPdfProps) => {
   const total = items.reduce((sum, item) => sum + item.amount, 0);
+  const displayCurrencyCode = String(currencyCode || '').trim().toUpperCase();
+  const formatAmount = (amount: number) =>
+    displayCurrencyCode
+      ? `${displayCurrencyCode} ${amount.toLocaleString()}`
+      : amount.toLocaleString();
 
   return (
     <Document>
@@ -102,12 +109,12 @@ const ReceiptPDF = ({
           {items.map((item) => (
             <View key={item.label} style={styles.row}>
               <Text>{item.label}</Text>
-              <Text>GHS {item.amount.toLocaleString()}</Text>
+              <Text>{formatAmount(item.amount)}</Text>
             </View>
           ))}
         </View>
 
-        <Text style={styles.total}>Total: GHS {total.toLocaleString()}</Text>
+        <Text style={styles.total}>Total: {formatAmount(total)}</Text>
         <Text style={styles.signature}>Authorized Signature</Text>
       </Page>
     </Document>

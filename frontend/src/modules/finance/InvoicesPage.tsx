@@ -10,6 +10,7 @@ import Modal from '../../components/ui/Modal';
 import PageLoader from '../../components/ui/PageLoader';
 import Select from '../../components/ui/Select';
 import Table from '../../components/ui/Table';
+import { formatCurrencyAmount, resolvePrimaryCurrencyCode } from '../../utils/currency';
 import PageHeader from '../shared/PageHeader';
 
 interface InvoiceRow {
@@ -20,6 +21,7 @@ interface InvoiceRow {
   total: number;
   paid: number;
   balance: number;
+  currency_code?: string;
   status: 'pending' | 'partial' | 'paid' | 'overdue';
   due_date: string;
 }
@@ -43,6 +45,7 @@ const InvoicesPage = () => {
       return matchesStatus && matchesClass && item.due_date >= from && item.due_date <= to;
     });
   }, [className, data, from, status, to]);
+  const primaryCurrencyCode = resolvePrimaryCurrencyCode(rows);
 
   const classes = Array.from(new Set(((data || []) as InvoiceRow[]).map((item) => item.className)));
 
@@ -87,9 +90,21 @@ const InvoicesPage = () => {
           { header: 'Student', accessorKey: 'student' },
           { header: 'Class', accessorKey: 'className' },
           { header: 'Invoice', accessorKey: 'invoice_number' },
-          { header: 'Total', cell: ({ row }) => `GHS ${row.original.total.toLocaleString()}` },
-          { header: 'Paid', cell: ({ row }) => `GHS ${row.original.paid.toLocaleString()}` },
-          { header: 'Balance', cell: ({ row }) => `GHS ${row.original.balance.toLocaleString()}` },
+          {
+            header: 'Total',
+            cell: ({ row }) =>
+              formatCurrencyAmount(row.original.currency_code || primaryCurrencyCode, row.original.total),
+          },
+          {
+            header: 'Paid',
+            cell: ({ row }) =>
+              formatCurrencyAmount(row.original.currency_code || primaryCurrencyCode, row.original.paid),
+          },
+          {
+            header: 'Balance',
+            cell: ({ row }) =>
+              formatCurrencyAmount(row.original.currency_code || primaryCurrencyCode, row.original.balance),
+          },
           {
             header: 'Status',
             cell: ({ row }) => (

@@ -14,6 +14,7 @@ import Input from '../../components/ui/Input';
 import PageLoader from '../../components/ui/PageLoader';
 import SearchInput from '../../components/ui/SearchInput';
 import Select from '../../components/ui/Select';
+import { formatCurrencyAmount, resolvePrimaryCurrencyCode } from '../../utils/currency';
 import PageHeader from '../shared/PageHeader';
 import ReceiptPDF from './ReceiptPDF';
 
@@ -35,6 +36,7 @@ interface InvoiceRow {
   total: number;
   paid: number;
   balance: number;
+  currency_code?: string;
 }
 
 const PaymentFormPage = () => {
@@ -60,6 +62,7 @@ const PaymentFormPage = () => {
 
   const values = watch();
   const invoices = useMemo(() => (data || []) as InvoiceRow[], [data]);
+  const primaryCurrencyCode = resolvePrimaryCurrencyCode(invoices);
   const matchingStudents = useMemo(
     () =>
       invoices.filter((item) =>
@@ -95,7 +98,8 @@ const PaymentFormPage = () => {
                     >
                       <p className="font-semibold text-brand-navy">{item.student}</p>
                       <p className="text-sm text-slate-500">
-                        {item.className} · Balance GHS {item.balance.toLocaleString()}
+                        {item.className} · Balance{' '}
+                        {formatCurrencyAmount(item.currency_code || primaryCurrencyCode, item.balance)}
                       </p>
                     </button>
                   ))}
@@ -145,7 +149,11 @@ const PaymentFormPage = () => {
               <p>Method: {values.method}</p>
               <p>Reference: {values.reference || 'N/A'}</p>
               <p className="font-semibold text-brand-navy">
-                Total: GHS {Number(values.amount || 0).toLocaleString()}
+                Total:{' '}
+                {formatCurrencyAmount(
+                  selectedInvoice?.currency_code || primaryCurrencyCode,
+                  Number(values.amount || 0)
+                )}
               </p>
             </div>
           </div>
@@ -162,6 +170,7 @@ const PaymentFormPage = () => {
                   className={selectedInvoice?.className || 'Ad-hoc'}
                   paymentMethod={values.method}
                   reference={values.reference || ''}
+                  currencyCode={selectedInvoice?.currency_code || primaryCurrencyCode}
                   items={[
                     {
                       label: values.invoice || 'Ad-hoc payment',

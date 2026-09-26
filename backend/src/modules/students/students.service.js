@@ -408,6 +408,15 @@ const formatSequelizeCreateError = (error) => {
     return null;
   }
 
+  const rawDatabaseDetail = [
+    error?.parent?.detail,
+    error?.original?.detail,
+    error?.parent?.message,
+    error?.original?.message,
+  ]
+    .map((item) => String(item || '').trim())
+    .find(Boolean);
+
   if (error.name === 'SequelizeUniqueConstraintError') {
     const fields = Array.isArray(error.errors)
       ? error.errors
@@ -442,6 +451,16 @@ const formatSequelizeCreateError = (error) => {
 
     return Object.assign(
       new Error('The student record could not be created because one or more required fields are invalid.'),
+      { statusCode: 400 }
+    );
+  }
+
+  if (error.name === 'SequelizeDatabaseError' || error.name === 'SequelizeForeignKeyConstraintError') {
+    return Object.assign(
+      new Error(
+        rawDatabaseDetail ||
+          'The student record could not be saved because one of the related values is invalid or already in use.'
+      ),
       { statusCode: 400 }
     );
   }
@@ -717,15 +736,19 @@ const getStudentFromDatabase = async ({ institutionId, studentId }) => {
         value: item.status === 'present' || item.status === 'late' ? 1 : 0,
       }))
       .filter((item) => item.date),
-    invoices: invoiceRows.map((item) => ({
-      invoice_number: item.invoice_number,
-      total: Number(item.total_amount || 0),
-      paid: Number(item.paid_amount || 0),
-      balance: Number(item.balance || 0),
-      net_balance: Math.max(Number(item.balance || 0) - creditBalance, 0),
-      credit_balance: creditBalance,
-      status: item.status,
-    })),
+    invoices: invoiceRows.map((item) => {
+      const financeMeta = resolveInvoiceFinanceMeta({ settings, profile, invoice: item });
+      return {
+        invoice_number: item.invoice_number,
+        total: Number(item.total_amount || 0),
+        paid: Number(item.paid_amount || 0),
+        balance: Number(item.balance || 0),
+        net_balance: Math.max(Number(item.balance || 0) - creditBalance, 0),
+        credit_balance: creditBalance,
+        currency_code: item.currency_code || financeMeta.currency_code,
+        status: item.status,
+      };
+    }),
     discipline: disciplineRows.map((item) => ({
       id: item.id,
       category: item.category,

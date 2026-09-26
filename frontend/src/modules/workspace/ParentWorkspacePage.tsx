@@ -8,6 +8,7 @@ import Card from '../../components/ui/Card';
 import PageLoader from '../../components/ui/PageLoader';
 import PageHeader from '../shared/PageHeader';
 import { useAuthStore } from '../../store/authStore';
+import { formatCurrencyAmount, resolvePrimaryCurrencyCode } from '../../utils/currency';
 
 interface StudentDetail {
   name: string;
@@ -29,6 +30,7 @@ interface AttendanceRow {
 
 interface InvoiceRow {
   balance: number;
+  currency_code?: string;
 }
 
 const ParentWorkspacePage = () => {
@@ -54,6 +56,7 @@ const ParentWorkspacePage = () => {
     (sum: number, item: InvoiceRow) => sum + Number(item.balance || 0),
     0
   );
+  const primaryCurrencyCode = resolvePrimaryCurrencyCode(invoices);
 
   return (
     <div className="space-y-6">
@@ -78,7 +81,7 @@ const ParentWorkspacePage = () => {
           },
           {
             label: 'Outstanding Balance',
-            value: `GHS ${outstanding.toLocaleString()}`,
+            value: formatCurrencyAmount(primaryCurrencyCode, outstanding),
             helper: 'Fees that still require settlement.',
             icon: CreditCard,
           },
@@ -165,7 +168,10 @@ const ParentWorkspacePage = () => {
         <div className="space-y-3">
           <Alert
             title="Fee follow-up"
-            message={`Current outstanding balance is GHS ${outstanding.toLocaleString()}.`}
+            message={`Current outstanding balance is ${formatCurrencyAmount(
+              primaryCurrencyCode,
+              outstanding
+            )}.`}
             variant={outstanding > 0 ? 'warning' : 'success'}
           />
           <Alert

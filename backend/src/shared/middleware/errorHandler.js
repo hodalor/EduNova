@@ -12,6 +12,16 @@ const extractSequelizeMessage = (error) => {
   return messages.length ? messages.join(' | ') : null;
 };
 
+const extractDatabaseDetail = (error) =>
+  [
+    error?.parent?.detail,
+    error?.original?.detail,
+    error?.parent?.message,
+    error?.original?.message,
+  ]
+    .map((item) => String(item || '').trim())
+    .find(Boolean) || null;
+
 module.exports = (error, req, res, next) => {
   logger.error('Unhandled application error', {
     message: error.message,
@@ -26,9 +36,10 @@ module.exports = (error, req, res, next) => {
 
   const statusCode = error.statusCode || error.status || 500;
   const sequelizeMessage = extractSequelizeMessage(error);
+  const databaseDetail = extractDatabaseDetail(error);
   const responseMessage =
     statusCode === 500
-      ? sequelizeMessage || error.message || 'Internal server error'
+      ? sequelizeMessage || databaseDetail || error.message || 'Internal server error'
       : error.message;
 
   return res.status(statusCode).json({

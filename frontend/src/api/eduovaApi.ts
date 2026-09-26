@@ -109,6 +109,7 @@ const normalizeDashboardOverview = (payload: unknown) => {
           className: asString(item.className, '-'),
           levelName: asString(item.levelName, asString(item.className, '-')),
           amount: asNumber(item.amount),
+          currencyCode: asString(item.currencyCode, asString(item.currency_code, '')),
           method: asString(item.method, 'Bank'),
           receivedAt: asString(item.receivedAt, asString(item.date, '')),
           status: asString(item.status, 'verified'),

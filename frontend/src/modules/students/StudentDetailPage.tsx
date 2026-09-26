@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { CheckCircle2, Download, FileBadge2, PencilLine } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useLocation, useParams } from 'react-router-dom';
 import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 
 import { eduovaApi } from '../../api/eduovaApi';
@@ -16,6 +16,7 @@ import Input from '../../components/ui/Input';
 import PageLoader from '../../components/ui/PageLoader';
 import Table from '../../components/ui/Table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/Tabs';
+import { formatCurrencyAmount, resolvePrimaryCurrencyCode } from '../../utils/currency';
 import PageHeader from '../shared/PageHeader';
 import { type StudentDetail, useStudent } from './hooks/useStudent';
 import { useUpdateStudent } from './hooks/useUpdateStudent';
@@ -198,7 +199,9 @@ const normalizeTranscriptSemester = (value: unknown, index: number): TranscriptS
 
 const StudentDetailPage = () => {
   const { studentId = 'stu-001' } = useParams();
-  const [activeTab, setActiveTab] = useState('profile');
+  const location = useLocation();
+  const initialTab = location.hash.replace('#', '').trim() || 'profile';
+  const [activeTab, setActiveTab] = useState(initialTab);
   const [isEditing, setIsEditing] = useState(false);
   const [formValues, setFormValues] = useState({
     fullName: '',
@@ -210,10 +213,12 @@ const StudentDetailPage = () => {
     medicalNotes: '',
   });
   const { data, isLoading, isError, refetch } = useStudent(studentId);
+  const isTertiaryStudent = Boolean(data && (data.level === 'TR' || data.tertiary));
   const transcriptQuery = useQuery<TranscriptPayload>({
     queryKey: ['student-transcript', studentId],
     queryFn: () => eduovaApi.tertiary.transcript(studentId),
-    enabled: Boolean(studentId && data?.tertiary?.program_name),
+    enabled: Boolean(studentId && isTertiaryStudent),
+    retry: false,
   });
   const updateStudent = useUpdateStudent();
   const transcriptSections = useMemo(
@@ -257,6 +262,13 @@ const StudentDetailPage = () => {
     });
   }, [data]);
 
+  useEffect(() => {
+    const nextTab = location.hash.replace('#', '').trim();
+    if (nextTab) {
+      setActiveTab(nextTab);
+    }
+  }, [location.hash]);
+
   if (isLoading) {
     return <PageLoader />;
   }
@@ -282,6 +294,7 @@ const StudentDetailPage = () => {
     0
   );
   const netOutstandingBalance = Math.max(outstandingBalance - availableCredit, 0);
+  const primaryCurrencyCode = resolvePrimaryCurrencyCode(data.invoices);
   const tertiaryRoadmap = data.tertiary?.roadmap || null;
   const currentLevelId = data.tertiary?.current_level?.id || null;
   const currentPeriodId = data.tertiary?.current_period?.id || null;
@@ -378,7 +391,7 @@ const StudentDetailPage = () => {
           <div className="surface-muted p-4">
             <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Outstanding Balance</p>
             <p className="mt-2 text-3xl font-bold text-rose-500">
-              GHS {outstandingBalance.toLocaleString()}
+              {formatCurrencyAmount(primaryCurrencyCode, outstandingBalance)}
             </p>
           </div>
         </div>
@@ -388,7 +401,7 @@ const StudentDetailPage = () => {
         <TabsList>
           <TabsTrigger value="profile">Profile</TabsTrigger>
           <TabsTrigger value="academic">Academic</TabsTrigger>
-          {data.tertiary?.program_name ? <TabsTrigger value="transcript">Transcript</TabsTrigger> : null}
+          {isTertiaryStudent ? <TabsTrigger value="transcript">Transcript</TabsTrigger> : null}
           <TabsTrigger value="roadmap">Road Map</TabsTrigger>
           <TabsTrigger value="attendance">Attendance</TabsTrigger>
           <TabsTrigger value="finance">Finance</TabsTrigger>
@@ -517,7 +530,16 @@ const StudentDetailPage = () => {
 
         <TabsContent value="transcript">
           <div className="space-y-6">
-            {transcriptQuery.data ? (
+            {!isTertiaryStudent ? null : transcriptQuery.isLoading ? (
+              <PageLoader />
+            ) : transcriptQuery.isError ? (
+              <Alert
+                title="Transcript unavailable"
+                message="We could not load the transcript record for this tertiary student yet. Confirm the tertiary profile and result history, then try again."
+                variant="warning"
+                action={<Button onClick={() => transcriptQuery.refetch()}>Retry</Button>}
+              />
+            ) : transcriptQuery.data ? (
               <Card
                 title="Official Transcript"
                 description="Letterhead, grading system, and print-ready transcript layout for this tertiary student."
@@ -1045,13 +1067,24 @@ const StudentDetailPage = () => {
               data={data.invoices}
               columns={[
                 { header: 'Invoice', accessorKey: 'invoice_number' },
-                { header: 'Total', cell: ({ row }) => `GHS ${row.original.total.toLocaleString()}` },
-                { header: 'Paid', cell: ({ row }) => `GHS ${row.original.paid.toLocaleString()}` },
+                {
+                  header: 'Total',
+                  cell: ({ row }) =>
+                    formatCurrencyAmount(row.original.currency_code || primaryCurrencyCode, row.original.total),
+                },
+                {
+                  header: 'Paid',
+                  cell: ({ row }) =>
+                    formatCurrencyAmount(row.original.currency_code || primaryCurrencyCode, row.original.paid),
+                },
                 {
                   header: 'Balance',
                   cell: ({ row }) => {
                     const netBalance = Number(row.original.net_balance ?? row.original.balance ?? 0);
-                    return `GHS ${netBalance.toLocaleString()}`;
+                    return formatCurrencyAmount(
+                      row.original.currency_code || primaryCurrencyCode,
+                      netBalance
+                    );
                   },
                 },
                 {
@@ -1099,7 +1132,10 @@ const StudentDetailPage = () => {
                           : 'text-brand-navy'
                     }`}
                   >
-                    GHS {(netOutstandingBalance > 0 ? netOutstandingBalance : availableCredit).toLocaleString()}
+                    {formatCurrencyAmount(
+                      primaryCurrencyCode,
+                      netOutstandingBalance > 0 ? netOutstandingBalance : availableCredit
+                    )}
                   </p>
                 </div>
                 <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">

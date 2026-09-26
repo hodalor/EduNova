@@ -34,6 +34,7 @@ import {
   TabsList,
   TabsTrigger,
 } from '../../components/ui/Tabs';
+import { formatCurrencyAmount, resolvePrimaryCurrencyCode } from '../../utils/currency';
 import PageHeader from '../shared/PageHeader';
 import { useAuthStore } from '../../store/authStore';
 
@@ -101,6 +102,7 @@ interface PaymentRow {
   invoice_id: string;
   student_id?: string;
   amount: number | string;
+  currency_code?: string;
   payment_method: string;
   receipt_number?: string;
   transaction_ref?: string;
@@ -116,6 +118,7 @@ interface PaymentApprovalRow {
   student_name?: string;
   class_name?: string;
   amount: number | string;
+  currency_code?: string;
   payment_method: string;
   transaction_ref?: string;
   proof_reference?: string;
@@ -165,6 +168,7 @@ interface PaymentGatewayRequestRow {
   invoice_id: string;
   invoice_number?: string | null;
   amount: number | string;
+  currency_code?: string | null;
   channel: 'bank' | 'card' | 'mobile_money' | 'ussd' | string;
   status: 'pending_gateway' | 'success' | 'failed' | string;
   gateway_reference: string;
@@ -183,6 +187,7 @@ interface PaymentAccountLookup {
   class_name?: string | null;
   level_code?: string | null;
   program_name?: string | null;
+  currency_code?: string | null;
   credit_balance?: number | string;
   outstanding_amount?: number | string;
   net_outstanding_amount?: number | string;
@@ -218,13 +223,10 @@ const resolveApiErrorMessage = (error: unknown, fallback: string) => {
   return fallback;
 };
 
-const currency = (value: number | string | null | undefined) => {
-  const num = Number(value || 0);
-  return num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-};
-
-const formatMoney = (currencyCode: string | null | undefined, value: number | string | null | undefined) =>
-  `${currencyCode || ''} ${currency(value)}`.trim();
+const formatMoney = (
+  currencyCode: string | null | undefined,
+  value: number | string | null | undefined
+) => formatCurrencyAmount(currencyCode, value);
 
 const approvalLabel = (status: PaymentApprovalRow['status']) =>
   String(status || '').replaceAll('_', ' ');
@@ -281,12 +283,32 @@ const FinanceDashboardPage = () => {
     queryClient.invalidateQueries({ queryKey: ['finance-dashboard', activeInstitutionId] });
   };
 
+  const financeSettingsQuery = useQuery<FinanceSettings>({
+    queryKey: ['finance-settings', activeInstitutionId],
+    queryFn: eduovaApi.finance.settings,
+    enabled: Boolean(activeInstitutionId),
+  });
+
   const invoicesQuery = useQuery<InvoiceRow[]>({
     queryKey: ['finance-invoices', activeInstitutionId],
     queryFn: eduovaApi.finance.invoices,
     enabled: Boolean(activeInstitutionId),
   });
   const invoices = useMemo<InvoiceRow[]>(() => invoicesQuery.data ?? [], [invoicesQuery.data]);
+  const primaryInvoiceCurrencyCode = useMemo(
+    () => resolvePrimaryCurrencyCode(invoices, financeSettingsQuery.data?.default_local_currency),
+    [financeSettingsQuery.data?.default_local_currency, invoices]
+  );
+  const invoiceCurrencyById = useMemo(
+    () =>
+      new Map(
+        invoices.map((invoice) => [
+          String(invoice.id || invoice.invoice_number || ''),
+          invoice.currency_code || primaryInvoiceCurrencyCode,
+        ])
+      ),
+    [invoices, primaryInvoiceCurrencyCode]
+  );
   const invoicesLoading = invoicesQuery.isLoading;
   const invoicesError = invoicesQuery.isError;
   const refetchInvoices = invoicesQuery.refetch;
@@ -341,11 +363,6 @@ const FinanceDashboardPage = () => {
   const studentsQuery = useQuery<StudentLookupRow[]>({
     queryKey: ['finance-student-lookup', activeInstitutionId],
     queryFn: eduovaApi.students.list,
-    enabled: Boolean(activeInstitutionId),
-  });
-  const financeSettingsQuery = useQuery<FinanceSettings>({
-    queryKey: ['finance-settings', activeInstitutionId],
-    queryFn: eduovaApi.finance.settings,
     enabled: Boolean(activeInstitutionId),
   });
   const students = useMemo<StudentLookupRow[]>(
@@ -556,9 +573,9 @@ const FinanceDashboardPage = () => {
   });
 
   const summary = useMemo(() => {
-    const defaultLocalCurrency = financeSettingsQuery.data?.default_local_currency || 'GHS';
+    const defaultLocalCurrency = financeSettingsQuery.data?.default_local_currency || '';
     const defaultInternationalCurrency =
-      financeSettingsQuery.data?.default_international_currency || 'USD';
+      financeSettingsQuery.data?.default_international_currency || '';
     const base = {
       local: {
         billed: 0,
@@ -980,7 +997,7 @@ const FinanceDashboardPage = () => {
                               {String(inv.student_category || 'local')}
                             </Badge>
                             <span className="text-[11px] font-medium text-slate-500">
-                              {inv.currency_code || 'GHS'}
+                              {inv.currency_code || primaryInvoiceCurrencyCode}
                             </span>
                           </div>
                         </td>
@@ -1084,7 +1101,10 @@ const FinanceDashboardPage = () => {
                         </td>
                         <td className="px-5 py-4 text-slate-700">{pay.invoice_id}</td>
                         <td className="px-5 py-4 text-right font-medium text-emerald-700">
-                          {currency(pay.amount)}
+                          {formatMoney(
+                            pay.currency_code || invoiceCurrencyById.get(String(pay.invoice_id || '')),
+                            pay.amount
+                          )}
                         </td>
                         <td className="px-5 py-4 capitalize text-slate-600">
                           <Badge variant="info">
@@ -1119,7 +1139,13 @@ const FinanceDashboardPage = () => {
                             {item.student_name || 'Student'} · {item.invoice_number || item.invoice_id}
                           </p>
                           <p className="mt-1 text-sm text-slate-500">
-                            {String(item.payment_method).replace('_', ' ')} · {currency(item.amount)}
+                            {String(item.payment_method).replace('_', ' ')} ·{' '}
+                            {formatMoney(
+                              item.currency_code ||
+                                invoiceCurrencyById.get(String(item.invoice_id || '')) ||
+                                primaryInvoiceCurrencyCode,
+                              item.amount
+                            )}
                           </p>
                           <p className="mt-1 text-xs text-slate-400">
                             {item.proof_reference || item.transaction_ref || 'Awaiting proof reference'}
@@ -1173,7 +1199,13 @@ const FinanceDashboardPage = () => {
                               {item.student_name || 'Student'} · {item.invoice_number || item.invoice_id}
                             </p>
                             <p className="mt-1 text-sm text-slate-500">
-                              {String(item.payment_method).replace('_', ' ')} · {currency(item.amount)}
+                              {String(item.payment_method).replace('_', ' ')} ·{' '}
+                              {formatMoney(
+                                item.currency_code ||
+                                  invoiceCurrencyById.get(String(item.invoice_id || '')) ||
+                                  primaryInvoiceCurrencyCode,
+                                item.amount
+                              )}
                             </p>
                             <p className="mt-1 text-xs text-slate-400">
                               Director approved on {String(item.director_approval?.approved_at || '').slice(0, 10) || '—'}
@@ -1229,7 +1261,13 @@ const FinanceDashboardPage = () => {
                             {item.student_name || 'Student'} · {item.invoice_number || item.invoice_id}
                           </p>
                           <p className="mt-1 text-sm text-slate-500">
-                            {currency(item.amount)} · {String(item.payment_method).replace('_', ' ')}
+                            {formatMoney(
+                              item.currency_code ||
+                                invoiceCurrencyById.get(String(item.invoice_id || '')) ||
+                                primaryInvoiceCurrencyCode,
+                              item.amount
+                            )}{' '}
+                            · {String(item.payment_method).replace('_', ' ')}
                           </p>
                           <p className="mt-1 text-xs text-slate-400">
                             {item.posted_payment?.receipt_number
@@ -1290,7 +1328,11 @@ const FinanceDashboardPage = () => {
                         {paymentAccount.program_name || paymentAccount.class_name || 'Not assigned'}
                       </p>
                       <p className="mt-1 text-sm text-slate-500">
-                        Outstanding {currency(paymentAccount.net_outstanding_amount)}
+                        Outstanding{' '}
+                        {formatMoney(
+                          paymentAccount.currency_code || primaryInvoiceCurrencyCode,
+                          paymentAccount.net_outstanding_amount
+                        )}
                       </p>
                     </div>
                     <div className="md:col-span-2">
@@ -1311,7 +1353,14 @@ const FinanceDashboardPage = () => {
                           .filter((item) => Number(item.net_balance ?? item.balance ?? 0) > 0)
                           .map((item) => (
                             <option key={item.id} value={item.id}>
-                              {item.invoice_number} · {currency(item.net_balance ?? item.balance)} balance
+                              {item.invoice_number} ·{' '}
+                              {formatMoney(
+                                item.currency_code ||
+                                  paymentAccount.currency_code ||
+                                  primaryInvoiceCurrencyCode,
+                                item.net_balance ?? item.balance
+                              )}{' '}
+                              balance
                             </option>
                           ))}
                       </Select>
@@ -1399,7 +1448,14 @@ const FinanceDashboardPage = () => {
                               {request.student_name || request.student_number || request.student_id}
                             </p>
                             <p className="mt-1 text-sm text-slate-500">
-                              {request.invoice_number || request.invoice_id} · {currency(request.amount)}
+                              {request.invoice_number || request.invoice_id} ·{' '}
+                              {formatMoney(
+                                request.currency_code ||
+                                  invoiceCurrencyById.get(String(request.invoice_id || '')) ||
+                                  paymentAccount?.currency_code ||
+                                  primaryInvoiceCurrencyCode,
+                                request.amount
+                              )}
                             </p>
                             <p className="mt-1 text-xs text-slate-400">{request.gateway_reference}</p>
                             {request.ussd_code ? (
@@ -1489,7 +1545,7 @@ const FinanceDashboardPage = () => {
                               {String(d.student_category || 'local')}
                             </Badge>
                             <span className="text-[11px] font-medium text-slate-500">
-                              {d.currency_code || 'GHS'}
+                              {d.currency_code || primaryInvoiceCurrencyCode}
                             </span>
                           </div>
                         </td>
@@ -1820,7 +1876,11 @@ const FinanceDashboardPage = () => {
                 .map((inv) => (
                   <option key={inv.id} value={inv.id}>
                     {inv.invoice_number} · {inv.student_name || 'Student'} ·{' '}
-                    {currency(inv.net_balance ?? inv.balance)} balance
+                    {formatMoney(
+                      inv.currency_code || primaryInvoiceCurrencyCode,
+                      inv.net_balance ?? inv.balance
+                    )}{' '}
+                    balance
                   </option>
                 ))}
             </Select>
