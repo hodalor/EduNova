@@ -6,6 +6,7 @@ export interface StudentDetail {
   id: string;
   name: string;
   student_number: string;
+  email?: string;
   className: string;
   level: string;
   status: string;
@@ -13,6 +14,19 @@ export interface StudentDetail {
     name: string;
     phone: string;
     relation: string;
+  };
+  personal?: {
+    date_of_birth?: string | null;
+    nationality?: string;
+    id_type?: string;
+    id_number?: string;
+    marital_status?: string;
+    residential_address?: string;
+    postal_address?: string;
+  };
+  sponsorship?: {
+    sponsor_type?: string;
+    sponsor_name?: string;
   };
   medical: {
     allergies: string;

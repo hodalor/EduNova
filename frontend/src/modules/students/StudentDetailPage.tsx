@@ -14,6 +14,7 @@ import EmptyState from '../../components/ui/EmptyState';
 import FileUpload from '../../components/ui/FileUpload';
 import Input from '../../components/ui/Input';
 import PageLoader from '../../components/ui/PageLoader';
+import Select from '../../components/ui/Select';
 import Table from '../../components/ui/Table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/Tabs';
 import { formatCurrencyAmount, resolvePrimaryCurrencyCode } from '../../utils/currency';
@@ -23,6 +24,29 @@ import { useUpdateStudent } from './hooks/useUpdateStudent';
 
 const attendanceColor = (value: number) =>
   value > 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700';
+
+const studentIdTypeOptions = [
+  { value: 'national_id', label: 'National ID' },
+  { value: 'passport', label: 'Passport' },
+  { value: 'drivers_license', label: 'Driver License' },
+  { value: 'voters_id', label: 'Voter ID' },
+  { value: 'other', label: 'Other' },
+];
+
+const maritalStatusOptions = [
+  { value: 'single', label: 'Single' },
+  { value: 'married', label: 'Married' },
+  { value: 'divorced', label: 'Divorced' },
+  { value: 'widowed', label: 'Widowed' },
+];
+
+const sponsorTypeOptions = [
+  { value: 'self', label: 'Self Sponsored' },
+  { value: 'parent', label: 'Parent' },
+  { value: 'spouse', label: 'Spouse' },
+  { value: 'ngo', label: 'NGO' },
+  { value: 'other', label: 'Other' },
+];
 
 interface TranscriptPayload {
   branding?: {
@@ -205,9 +229,19 @@ const StudentDetailPage = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [formValues, setFormValues] = useState({
     fullName: '',
+    email: '',
+    nationality: '',
+    idType: '',
+    idNumber: '',
+    maritalStatus: 'single',
+    residentialAddress: '',
+    postalAddress: '',
     guardianName: '',
     guardianPhone: '',
     guardianRelation: '',
+    sponsorType: 'self',
+    sponsorName: '',
+    temporaryPassword: '',
     allergies: '',
     bloodGroup: '',
     medicalNotes: '',
@@ -253,9 +287,19 @@ const StudentDetailPage = () => {
     if (!data) return;
     setFormValues({
       fullName: data.name || '',
+      email: data.email || '',
+      nationality: data.personal?.nationality || '',
+      idType: data.personal?.id_type || '',
+      idNumber: data.personal?.id_number || '',
+      maritalStatus: data.personal?.marital_status || 'single',
+      residentialAddress: data.personal?.residential_address || '',
+      postalAddress: data.personal?.postal_address || '',
       guardianName: data.guardian?.name || '',
       guardianPhone: data.guardian?.phone || '',
       guardianRelation: data.guardian?.relation || '',
+      sponsorType: data.sponsorship?.sponsor_type || 'self',
+      sponsorName: data.sponsorship?.sponsor_name || '',
+      temporaryPassword: '',
       allergies: data.medical?.allergies || '',
       bloodGroup: data.medical?.bloodGroup || '',
       medicalNotes: data.medical?.notes || '',
@@ -338,13 +382,24 @@ const StudentDetailPage = () => {
       await updateStudent.mutateAsync({
         studentId: data.id,
         full_name: formValues.fullName,
+        email: formValues.email,
+        nationality: formValues.nationality,
+        id_type: formValues.idType,
+        id_number: formValues.idNumber,
+        marital_status: formValues.maritalStatus,
+        residential_address: formValues.residentialAddress,
+        postal_address: formValues.postalAddress,
         guardian_name: formValues.guardianName,
         guardian_phone: formValues.guardianPhone,
         guardian_relation: formValues.guardianRelation,
+        sponsor_type: formValues.sponsorType,
+        sponsor_name: formValues.sponsorName,
+        temporary_password: formValues.temporaryPassword || undefined,
         allergies: formValues.allergies,
         blood_group: formValues.bloodGroup,
         medical_notes: formValues.medicalNotes,
       });
+      setFormValues((current) => ({ ...current, temporaryPassword: '' }));
       setIsEditing(false);
     } catch (_error) {
       // Toast feedback is handled in the mutation hook.
@@ -419,8 +474,71 @@ const StudentDetailPage = () => {
                   onChange={(event) => handleFieldChange('fullName', event.target.value)}
                   disabled={!isEditing}
                 />
+                <Input
+                  label="Email"
+                  value={formValues.email}
+                  onChange={(event) => handleFieldChange('email', event.target.value)}
+                  disabled={!isEditing}
+                />
                 <Input label="Student Number" value={data.student_number} disabled />
                 <Input label="Current Class" value={data.className} disabled />
+                <Input
+                  label="Nationality"
+                  value={formValues.nationality}
+                  onChange={(event) => handleFieldChange('nationality', event.target.value)}
+                  disabled={!isEditing}
+                />
+                <Select
+                  label="ID Type"
+                  value={formValues.idType}
+                  onChange={(event) => handleFieldChange('idType', event.target.value)}
+                  disabled={!isEditing}
+                >
+                  <option value="">Select ID type</option>
+                  {studentIdTypeOptions.map((item) => (
+                    <option key={item.value} value={item.value}>
+                      {item.label}
+                    </option>
+                  ))}
+                </Select>
+                <Input
+                  label="ID Number"
+                  value={formValues.idNumber}
+                  onChange={(event) => handleFieldChange('idNumber', event.target.value)}
+                  disabled={!isEditing}
+                />
+                <Select
+                  label="Marital Status"
+                  value={formValues.maritalStatus}
+                  onChange={(event) => handleFieldChange('maritalStatus', event.target.value)}
+                  disabled={!isEditing}
+                >
+                  {maritalStatusOptions.map((item) => (
+                    <option key={item.value} value={item.value}>
+                      {item.label}
+                    </option>
+                  ))}
+                </Select>
+                <Input
+                  label="Residential Address"
+                  value={formValues.residentialAddress}
+                  onChange={(event) => handleFieldChange('residentialAddress', event.target.value)}
+                  disabled={!isEditing}
+                />
+                <Input
+                  label="Postal Address"
+                  value={formValues.postalAddress}
+                  onChange={(event) => handleFieldChange('postalAddress', event.target.value)}
+                  disabled={!isEditing}
+                />
+                <Input
+                  label="Reset Student Password"
+                  type="password"
+                  value={formValues.temporaryPassword}
+                  onChange={(event) => handleFieldChange('temporaryPassword', event.target.value)}
+                  disabled={!isEditing}
+                  placeholder={isEditing ? 'Leave blank to keep current password' : ''}
+                />
               </div>
             </Card>
             <Card title="Guardian Information" description="Primary guardian and emergency contact.">
@@ -441,6 +559,24 @@ const StudentDetailPage = () => {
                   label="Relationship"
                   value={formValues.guardianRelation}
                   onChange={(event) => handleFieldChange('guardianRelation', event.target.value)}
+                  disabled={!isEditing}
+                />
+                <Select
+                  label="Sponsor Type"
+                  value={formValues.sponsorType}
+                  onChange={(event) => handleFieldChange('sponsorType', event.target.value)}
+                  disabled={!isEditing}
+                >
+                  {sponsorTypeOptions.map((item) => (
+                    <option key={item.value} value={item.value}>
+                      {item.label}
+                    </option>
+                  ))}
+                </Select>
+                <Input
+                  label="Sponsor Name"
+                  value={formValues.sponsorName}
+                  onChange={(event) => handleFieldChange('sponsorName', event.target.value)}
                   disabled={!isEditing}
                 />
               </div>

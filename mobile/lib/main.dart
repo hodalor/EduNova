@@ -7,6 +7,7 @@ import 'core/cache/hive_cache.dart';
 import 'core/constants/app_colors.dart';
 import 'core/constants/app_routes.dart';
 import 'features/academics/presentation/pages/parent_results_page.dart';
+import 'features/academics/presentation/pages/student_courses_page.dart';
 import 'features/academics/presentation/pages/teacher_gradebook_page.dart';
 import 'features/attendance/presentation/pages/parent_attendance_page.dart';
 import 'features/attendance/presentation/pages/teacher_attendance_page.dart';
@@ -15,9 +16,12 @@ import 'features/auth/presentation/pages/login_page.dart';
 import 'features/auth/presentation/providers/auth_provider.dart';
 import 'features/communication/presentation/pages/chat_page.dart';
 import 'features/dashboard/presentation/pages/parent_home_page.dart';
+import 'features/dashboard/presentation/pages/student_home_page.dart';
 import 'features/dashboard/presentation/pages/teacher_home_page.dart';
 import 'features/finance/presentation/pages/parent_fees_page.dart';
+import 'features/finance/presentation/pages/student_finance_page.dart';
 import 'features/students/presentation/pages/children_page.dart';
+import 'features/students/presentation/pages/student_profile_page.dart';
 import 'shared/navigation/app_shells.dart';
 
 Future<void> main() async {
@@ -120,32 +124,31 @@ final routerProvider = Provider<GoRouter>((ref) {
             routes: [
               GoRoute(
                 path: AppRoutes.studentHome,
-                builder: (context, state) => const _SimpleHomePage(title: 'Student Home'),
+                builder: (context, state) => const StudentHomePage(),
               ),
             ],
           ),
           StatefulShellBranch(
             routes: [
               GoRoute(
-                path: AppRoutes.studentResults,
-                builder: (context, state) => const ParentResultsPage(),
+                path: AppRoutes.studentCourses,
+                builder: (context, state) => const StudentCoursesPage(),
               ),
             ],
           ),
           StatefulShellBranch(
             routes: [
               GoRoute(
-                path: AppRoutes.studentAttendance,
-                builder: (context, state) => const ParentAttendancePage(),
+                path: AppRoutes.studentFinance,
+                builder: (context, state) => const StudentFinancePage(),
               ),
             ],
           ),
           StatefulShellBranch(
             routes: [
               GoRoute(
-                path: AppRoutes.studentTimetable,
-                builder: (context, state) =>
-                    const _SimpleHomePage(title: 'Student Timetable'),
+                path: AppRoutes.studentProfile,
+                builder: (context, state) => const StudentProfilePage(),
               ),
             ],
           ),
@@ -243,18 +246,5 @@ class _LaunchGatePage extends ConsumerWidget {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
     return const SizedBox.shrink();
-  }
-}
-
-class _SimpleHomePage extends StatelessWidget {
-  const _SimpleHomePage({required this.title});
-
-  final String title;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Center(child: Text(title)),
-    );
   }
 }

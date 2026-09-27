@@ -63,7 +63,7 @@ class StudentShell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('EDUOVA Student')),
+      appBar: AppBar(title: const Text('EDUOVA Tertiary Student')),
       body: Column(
         children: [
           const OfflineBanner(),
@@ -74,9 +74,9 @@ class StudentShell extends StatelessWidget {
         selectedIndex: navigationShell.currentIndex,
         destinations: const [
           NavigationDestination(icon: Icon(Icons.home_outlined), label: 'Home'),
-          NavigationDestination(icon: Icon(Icons.analytics_outlined), label: 'Results'),
-          NavigationDestination(icon: Icon(Icons.event_available), label: 'Attendance'),
-          NavigationDestination(icon: Icon(Icons.schedule), label: 'Timetable'),
+          NavigationDestination(icon: Icon(Icons.menu_book_outlined), label: 'Courses'),
+          NavigationDestination(icon: Icon(Icons.account_balance_wallet_outlined), label: 'Finance'),
+          NavigationDestination(icon: Icon(Icons.person_outline), label: 'Profile'),
         ],
         onDestinationSelected: (index) {
           navigationShell.goBranch(

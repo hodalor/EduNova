@@ -169,7 +169,7 @@ const buildAutoInvoicePayload = ({ institutionId, student, profile, progress, se
     student_id: student.id,
     student_name: profile.full_name,
     class_name: profile.group_name || currentGroup.name,
-    invoice_number: createSequence('INV', new Date(), Number(student.id || 1), 3),
+    invoice_number: '',
     total_amount: totalAmount,
     paid_amount: 0,
     balance: totalAmount,
@@ -209,6 +209,11 @@ const createAutoSemesterInvoiceIfNeeded = async ({
   }
 
   if (models.StudentInvoice) {
+    const existingCount = await models.StudentInvoice.count({
+      where: { institution_id: institutionId },
+      transaction,
+    });
+    invoicePayload.invoice_number = createSequence('INV', new Date(), existingCount + 1, 3);
     const existing = await models.StudentInvoice.findOne({
       where: {
         institution_id: institutionId,
@@ -255,6 +260,12 @@ const createAutoSemesterInvoiceIfNeeded = async ({
       String(item.period_id || '') === String(invoicePayload.period_id || '')
   );
   if (!existsInRuntime) {
+    invoicePayload.invoice_number = createSequence(
+      'INV',
+      new Date(),
+      (store.finance.invoices.length || 0) + 1,
+      3
+    );
     store.finance.invoices.push({
       id: `inv-${(store.finance.invoices.length || 0) + 1}`,
       ...invoicePayload,
@@ -280,7 +291,7 @@ const sortBySequence = (items = []) =>
     return String(a.name || '').localeCompare(String(b.name || ''));
   });
 
-const buildRoadmapFromGroupIds = ({ settings, groupIds = [], progress = null }) => {
+const buildRoadmapFromGroupIds = ({ settings, groupIds = [], progress = null, programId = null }) => {
   const groups = (settings.academics?.groups || []).filter((item) => item.level_code === 'TR');
   const periods = settings.academics?.periods || [];
   const offerings = settings.academics?.offerings || [];
@@ -291,14 +302,33 @@ const buildRoadmapFromGroupIds = ({ settings, groupIds = [], progress = null }) 
 
   return {
     level_count: scopedGroups.length,
-    total_courses: offerings.filter((item) => scopedGroupIds.includes(item.group_id)).length,
+    total_courses: offerings.filter((item) => {
+      const group = scopedGroups.find((entry) => entry.id === item.group_id);
+      return (
+        scopedGroupIds.includes(item.group_id) &&
+        offeringMatchesProgram({
+          offering: item,
+          programId,
+          group,
+        })
+      );
+    }).length,
     levels: scopedGroups.map((group) => ({
       id: group.id,
       name: group.name,
       code: group.code,
       periods: sortBySequence(periods.filter((item) => item.group_id === group.id)).map((period) => {
         const periodCourses = offerings
-          .filter((item) => item.group_id === group.id && item.period_id === period.id)
+          .filter(
+            (item) =>
+              item.group_id === group.id &&
+              item.period_id === period.id &&
+              offeringMatchesProgram({
+                offering: item,
+                programId,
+                group,
+              })
+          )
           .map((offering) => ({
             id: offering.id,
             code: offering.code,
@@ -348,7 +378,12 @@ const buildStudentTertiaryProfile = ({ settings, profile, studentId }) => {
   const roadmapGroupIds = Array.from(
     new Set([...(program?.roadmap_group_ids || []), ...(currentGroupId ? [currentGroupId] : [])])
   );
-  const roadmap = buildRoadmapFromGroupIds({ settings, groupIds: roadmapGroupIds, progress });
+  const roadmap = buildRoadmapFromGroupIds({
+    settings,
+    groupIds: roadmapGroupIds,
+    progress,
+    programId,
+  });
   const currentLevel =
     roadmap?.levels?.find((item) => item.id === currentGroupId) ||
     (currentGroup
@@ -720,6 +755,7 @@ const getStudentFromDatabase = async ({ institutionId, studentId }) => {
     id: student.id,
     name: `${student.user?.first_name || ''} ${student.user?.last_name || ''}`.trim(),
     student_number: student.student_number,
+    email: student.user?.email || '',
     className:
       student.class?.name || profile.group_name || profile.class_name || profile.assigned_class || 'Unassigned',
     levelName:
@@ -730,6 +766,19 @@ const getStudentFromDatabase = async ({ institutionId, studentId }) => {
       name: guardianName,
       phone: student.guardian?.user?.phone || profile.guardian_phone || '',
       relation: student.guardian?.relation_to_student || 'Guardian',
+    },
+    personal: {
+      date_of_birth: student.date_of_birth || null,
+      nationality: student.nationality || profile.nationality || '',
+      id_type: profile.id_type || '',
+      id_number: profile.id_number || '',
+      marital_status: profile.marital_status || '',
+      residential_address: profile.residential_address || '',
+      postal_address: profile.postal_address || '',
+    },
+    sponsorship: {
+      sponsor_type: profile.sponsor_type || 'self',
+      sponsor_name: profile.sponsor_name || '',
     },
     medical: {
       allergies: (student.medicalProfile?.allergies || []).join(', '),
@@ -786,7 +835,45 @@ const getStudentFromRuntime = async ({ institutionId, studentId }) => {
   if (!student) {
     throw Object.assign(new Error('Student not found.'), { statusCode: 404 });
   }
-  return student;
+  return {
+    id: student.id,
+    name: student.full_name || `${student.first_name || ''} ${student.last_name || ''}`.trim(),
+    student_number: student.student_number,
+    email: student.email || '',
+    className: student.class_name || 'Unassigned',
+    levelName: student.class_name || 'Unassigned',
+    level: student.level_code || '',
+    status: student.status || 'active',
+    guardian: {
+      name: student.guardian_name || 'No guardian linked',
+      phone: student.guardian_phone || '',
+      relation: student.guardian_relation || 'Guardian',
+    },
+    personal: {
+      date_of_birth: student.date_of_birth || null,
+      nationality: student.nationality || '',
+      id_type: student.id_type || '',
+      id_number: student.id_number || '',
+      marital_status: student.marital_status || '',
+      residential_address: student.residential_address || '',
+      postal_address: student.postal_address || '',
+    },
+    sponsorship: {
+      sponsor_type: student.sponsor_type || 'self',
+      sponsor_name: student.sponsor_name || '',
+    },
+    medical: {
+      allergies: '',
+      bloodGroup: student.blood_group || '',
+      notes: student.medical_notes || '',
+    },
+    academicTrend: [],
+    attendanceCalendar: [],
+    invoices: [],
+    discipline: [],
+    documents: [],
+    tertiary: student.tertiary || null,
+  };
 };
 
 const getStudent = async (context) => {
@@ -836,6 +923,15 @@ const updateStudentInDatabase = async ({ institutionId, studentId, payload, acto
       currentProfile.full_name = payload.full_name;
     }
 
+    if (payload.email !== undefined && student.user) {
+      await student.user.update(
+        {
+          email: String(payload.email || '').trim() || null,
+        },
+        { transaction }
+      );
+    }
+
     if (payload.guardian_name && student.guardian?.user) {
       const names = splitFullName({ full_name: payload.guardian_name });
       await student.guardian.user.update(
@@ -855,8 +951,25 @@ const updateStudentInDatabase = async ({ institutionId, studentId, payload, acto
       await student.guardian.update({ relation_to_student: payload.guardian_relation }, { transaction });
     }
 
-    if (payload.blood_group) {
-      await student.update({ blood_group: payload.blood_group }, { transaction });
+    const studentUpdates = {};
+    if (payload.blood_group !== undefined) {
+      studentUpdates.blood_group = payload.blood_group || null;
+    }
+    if (payload.nationality !== undefined) {
+      studentUpdates.nationality = payload.nationality || null;
+    }
+    if (payload.date_of_birth !== undefined) {
+      studentUpdates.date_of_birth = payload.date_of_birth || null;
+    }
+    if (Object.keys(studentUpdates).length) {
+      await student.update(studentUpdates, { transaction });
+    }
+
+    if (payload.temporary_password && student.user) {
+      await student.user.update(
+        { password_hash: await hashPassword(String(payload.temporary_password)) },
+        { transaction }
+      );
     }
 
     if (models.StudentMedical) {
@@ -888,6 +1001,15 @@ const updateStudentInDatabase = async ({ institutionId, studentId, payload, acto
     currentProfile.guardian_name = payload.guardian_name ?? currentProfile.guardian_name ?? null;
     currentProfile.guardian_phone = payload.guardian_phone ?? currentProfile.guardian_phone ?? null;
     currentProfile.medical_notes = payload.medical_notes ?? currentProfile.medical_notes ?? null;
+    currentProfile.nationality = payload.nationality ?? currentProfile.nationality ?? student.nationality ?? null;
+    currentProfile.id_type = payload.id_type ?? currentProfile.id_type ?? null;
+    currentProfile.id_number = payload.id_number ?? currentProfile.id_number ?? null;
+    currentProfile.marital_status = payload.marital_status ?? currentProfile.marital_status ?? null;
+    currentProfile.residential_address =
+      payload.residential_address ?? currentProfile.residential_address ?? null;
+    currentProfile.postal_address = payload.postal_address ?? currentProfile.postal_address ?? null;
+    currentProfile.sponsor_type = payload.sponsor_type ?? currentProfile.sponsor_type ?? 'self';
+    currentProfile.sponsor_name = payload.sponsor_name ?? currentProfile.sponsor_name ?? null;
     if (payload.student_category !== undefined) {
       currentProfile.student_category =
         String(payload.student_category || 'local').trim().toLowerCase() === 'international'
@@ -929,16 +1051,47 @@ const updateStudentInRuntime = async ({ institutionId, studentId, payload }) => 
   if (payload.full_name) {
     student.full_name = payload.full_name;
   }
+  if (payload.email !== undefined) {
+    student.email = String(payload.email || '').trim() || null;
+  }
   if (payload.guardian_name) {
     student.guardian_name = payload.guardian_name;
   }
   if (payload.guardian_phone) {
     student.guardian_phone = payload.guardian_phone;
   }
+  if (payload.guardian_relation !== undefined) {
+    student.guardian_relation = payload.guardian_relation || 'Guardian';
+  }
+  if (payload.nationality !== undefined) {
+    student.nationality = payload.nationality || null;
+  }
+  if (payload.id_type !== undefined) {
+    student.id_type = payload.id_type || null;
+  }
+  if (payload.id_number !== undefined) {
+    student.id_number = payload.id_number || null;
+  }
+  if (payload.marital_status !== undefined) {
+    student.marital_status = payload.marital_status || null;
+  }
+  if (payload.residential_address !== undefined) {
+    student.residential_address = payload.residential_address || null;
+  }
+  if (payload.postal_address !== undefined) {
+    student.postal_address = payload.postal_address || null;
+  }
+  if (payload.sponsor_type !== undefined) {
+    student.sponsor_type = payload.sponsor_type || 'self';
+  }
+  if (payload.sponsor_name !== undefined) {
+    student.sponsor_name = payload.sponsor_name || null;
+  }
   return {
     id: student.id,
     name: student.full_name || `${student.first_name || ''} ${student.last_name || ''}`.trim(),
     student_number: student.student_number,
+    email: student.email || '',
     className: student.class_name || 'Unassigned',
     level: student.level_code || '',
     status: student.status || 'active',
@@ -946,6 +1099,19 @@ const updateStudentInRuntime = async ({ institutionId, studentId, payload }) => 
       name: student.guardian_name || 'No guardian linked',
       phone: student.guardian_phone || '',
       relation: student.guardian_relation || 'Guardian',
+    },
+    personal: {
+      date_of_birth: student.date_of_birth || null,
+      nationality: student.nationality || '',
+      id_type: student.id_type || '',
+      id_number: student.id_number || '',
+      marital_status: student.marital_status || '',
+      residential_address: student.residential_address || '',
+      postal_address: student.postal_address || '',
+    },
+    sponsorship: {
+      sponsor_type: student.sponsor_type || 'self',
+      sponsor_name: student.sponsor_name || '',
     },
     medical: {
       allergies: payload.allergies || '',
@@ -1121,6 +1287,14 @@ const createStudentInDatabase = async ({ institutionId, payload, actorId, ip }) 
       parent_link: payload.parent_link || payload.parentLink || null,
       guardian_name: payload.guardian_name || payload.guardianName || null,
       guardian_phone: payload.guardian_phone || payload.guardianPhone || null,
+      nationality: payload.nationality || null,
+      id_type: payload.id_type || null,
+      id_number: payload.id_number || null,
+      marital_status: payload.marital_status || null,
+      residential_address: payload.residential_address || null,
+      postal_address: payload.postal_address || null,
+      sponsor_type: payload.sponsor_type || 'self',
+      sponsor_name: payload.sponsor_name || null,
       previous_school: payload.previous_school || payload.previousSchool || null,
       previous_results: payload.previous_results || payload.previousResults || null,
       medical_notes: payload.medical_notes || payload.medicalNotes || null,
@@ -1212,6 +1386,7 @@ const createStudentInDatabase = async ({ institutionId, payload, actorId, ip }) 
       level: levelCode,
       className: profile.group_name,
       status: student.status,
+      email: studentEmail,
     };
   } catch (error) {
     await transaction.rollback();
@@ -1234,10 +1409,20 @@ const createStudentInRuntime = async ({ institutionId, payload }) => {
       payload.student_number || `EDU-${new Date().getFullYear()}-${String(store.students.profiles.length + 1).padStart(4, '0')}`,
     first_name: payload.first_name || payload.firstName,
     last_name: payload.last_name || payload.lastName,
+    email: payload.email || null,
     full_name: fullName,
     class_id: payload.class_id,
     class_name: payload.class_name || payload.assignedClass || null,
     level_code: payload.level_code || payload.level,
+    date_of_birth: payload.date_of_birth || payload.dateOfBirth || null,
+    nationality: payload.nationality || null,
+    id_type: payload.id_type || null,
+    id_number: payload.id_number || null,
+    marital_status: payload.marital_status || null,
+    residential_address: payload.residential_address || null,
+    postal_address: payload.postal_address || null,
+    sponsor_type: payload.sponsor_type || 'self',
+    sponsor_name: payload.sponsor_name || null,
     photo_url: payload.photo_url || null,
     attendance_percent: 0,
     balance_due: 0,

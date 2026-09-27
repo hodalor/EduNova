@@ -9,9 +9,9 @@ abstract final class AppRoutes {
   static const String parentMessages = '/app/parent/messages';
 
   static const String studentHome = '/app/student/home';
-  static const String studentResults = '/app/student/results';
-  static const String studentAttendance = '/app/student/attendance';
-  static const String studentTimetable = '/app/student/timetable';
+  static const String studentCourses = '/app/student/courses';
+  static const String studentFinance = '/app/student/finance';
+  static const String studentProfile = '/app/student/profile';
 
   static const String teacherHome = '/app/teacher/home';
   static const String teacherAttendance = '/app/teacher/attendance';

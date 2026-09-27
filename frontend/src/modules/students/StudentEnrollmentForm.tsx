@@ -32,8 +32,17 @@ const enrollmentSchema = z
     lastName: z.string().min(2, 'Last name is required'),
     email: z.string().optional(),
     dateOfBirth: z.string().min(1, 'Date of birth is required'),
+    nationality: z.string().min(2, 'Nationality is required'),
+    idType: z.string().min(1, 'ID type is required'),
+    idNumber: z.string().min(3, 'ID number is required'),
+    maritalStatus: z.string().min(1, 'Marital status is required'),
+    residentialAddress: z.string().min(5, 'Residential address is required'),
+    postalAddress: z.string().min(5, 'Postal address is required'),
+    temporaryPassword: z.string().min(8, 'Password must be at least 8 characters'),
     guardianName: z.string().min(3, 'Guardian name is required'),
     guardianPhone: z.string().min(6, 'Guardian phone is required'),
+    sponsorType: z.string().min(1, 'Sponsor type is required'),
+    sponsorName: z.string().min(2, 'Sponsor name is required'),
     parentLink: z.string().optional(),
     medicalNotes: z.string().optional(),
     dietaryRestrictions: z.string().optional(),
@@ -159,14 +168,46 @@ const steps = [
   'Review',
 ];
 
+const studentIdTypeOptions = [
+  { value: 'national_id', label: 'National ID' },
+  { value: 'passport', label: 'Passport' },
+  { value: 'drivers_license', label: 'Driver License' },
+  { value: 'voters_id', label: 'Voter ID' },
+  { value: 'other', label: 'Other' },
+];
+
+const maritalStatusOptions = [
+  { value: 'single', label: 'Single' },
+  { value: 'married', label: 'Married' },
+  { value: 'divorced', label: 'Divorced' },
+  { value: 'widowed', label: 'Widowed' },
+];
+
+const sponsorTypeOptions = [
+  { value: 'self', label: 'Self Sponsored' },
+  { value: 'parent', label: 'Parent' },
+  { value: 'spouse', label: 'Spouse' },
+  { value: 'ngo', label: 'NGO' },
+  { value: 'other', label: 'Other' },
+];
+
 const defaultValues: EnrollmentValues = {
   level: '',
   firstName: '',
   lastName: '',
   email: '',
   dateOfBirth: '',
+  nationality: '',
+  idType: '',
+  idNumber: '',
+  maritalStatus: 'single',
+  residentialAddress: '',
+  postalAddress: '',
+  temporaryPassword: '',
   guardianName: '',
   guardianPhone: '',
+  sponsorType: 'self',
+  sponsorName: '',
   parentLink: '',
   medicalNotes: '',
   dietaryRestrictions: '',
@@ -429,8 +470,20 @@ const StudentEnrollmentForm = () => {
   const nextStep = async () => {
     const fieldsByStep: Array<Array<keyof EnrollmentValues>> = [
       ['level'],
-      ['firstName', 'lastName', 'email', 'dateOfBirth'],
-      ['guardianName', 'guardianPhone'],
+      [
+        'firstName',
+        'lastName',
+        'email',
+        'dateOfBirth',
+        'nationality',
+        'idType',
+        'idNumber',
+        'maritalStatus',
+        'residentialAddress',
+        'postalAddress',
+        'temporaryPassword',
+      ],
+      ['guardianName', 'guardianPhone', 'sponsorType', 'sponsorName'],
       values.level === 'TR'
         ? ['facultyId', 'departmentId', 'programId', 'qualification', 'studentCategory']
         : [],
@@ -455,6 +508,15 @@ const StudentEnrollmentForm = () => {
           last_name: payload.lastName,
           email: payload.email || undefined,
           date_of_birth: payload.dateOfBirth,
+          nationality: payload.nationality,
+          id_type: payload.idType,
+          id_number: payload.idNumber,
+          marital_status: payload.maritalStatus,
+          residential_address: payload.residentialAddress,
+          postal_address: payload.postalAddress,
+          sponsor_type: payload.sponsorType,
+          sponsor_name: payload.sponsorName,
+          temporary_password: payload.temporaryPassword,
           guardian_name: payload.guardianName,
           guardian_phone: payload.guardianPhone,
           parent_link: payload.parentLink || undefined,
@@ -487,11 +549,27 @@ const StudentEnrollmentForm = () => {
         setStep(3);
       } else if (errorFields.some((field) => ['groupId', 'feePlan'].includes(field))) {
         setStep(4);
-      } else if (errorFields.some((field) => ['guardianName', 'guardianPhone'].includes(field))) {
+      } else if (
+        errorFields.some((field) =>
+          ['guardianName', 'guardianPhone', 'sponsorType', 'sponsorName'].includes(field)
+        )
+      ) {
         setStep(2);
       } else if (
         errorFields.some((field) =>
-          ['firstName', 'lastName', 'email', 'dateOfBirth'].includes(field)
+          [
+            'firstName',
+            'lastName',
+            'email',
+            'dateOfBirth',
+            'nationality',
+            'idType',
+            'idNumber',
+            'maritalStatus',
+            'residentialAddress',
+            'postalAddress',
+            'temporaryPassword',
+          ].includes(field)
         )
       ) {
         setStep(1);
@@ -567,7 +645,7 @@ const StudentEnrollmentForm = () => {
         ) : null}
 
         {step === 1 ? (
-          <Card title="Personal Information" description="Capture core student biodata and a profile photo.">
+          <Card title="Personal Information" description="Capture core student biodata and login credentials.">
             <div className="grid gap-4 xl:grid-cols-2">
               <Input label="First Name" error={errors.firstName?.message} {...register('firstName')} />
               <Input label="Last Name" error={errors.lastName?.message} {...register('lastName')} />
@@ -577,6 +655,47 @@ const StudentEnrollmentForm = () => {
                 type="date"
                 error={errors.dateOfBirth?.message}
                 {...register('dateOfBirth')}
+              />
+              <Input
+                label="Nationality"
+                error={errors.nationality?.message}
+                {...register('nationality')}
+              />
+              <Select label="ID Type" error={errors.idType?.message} {...register('idType')}>
+                <option value="">Select ID type</option>
+                {studentIdTypeOptions.map((item) => (
+                  <option key={item.value} value={item.value}>
+                    {item.label}
+                  </option>
+                ))}
+              </Select>
+              <Input label="ID Number" error={errors.idNumber?.message} {...register('idNumber')} />
+              <Select
+                label="Marital Status"
+                error={errors.maritalStatus?.message}
+                {...register('maritalStatus')}
+              >
+                {maritalStatusOptions.map((item) => (
+                  <option key={item.value} value={item.value}>
+                    {item.label}
+                  </option>
+                ))}
+              </Select>
+              <Input
+                label="Residential Address"
+                error={errors.residentialAddress?.message}
+                {...register('residentialAddress')}
+              />
+              <Input
+                label="Postal Address"
+                error={errors.postalAddress?.message}
+                {...register('postalAddress')}
+              />
+              <Input
+                label="Student Password"
+                type="password"
+                error={errors.temporaryPassword?.message}
+                {...register('temporaryPassword')}
               />
               <div className="xl:col-span-2">
                 <FileUpload multiple={false} />
@@ -597,6 +716,18 @@ const StudentEnrollmentForm = () => {
                 label="Guardian Phone"
                 error={errors.guardianPhone?.message}
                 {...register('guardianPhone')}
+              />
+              <Select label="Sponsor Type" error={errors.sponsorType?.message} {...register('sponsorType')}>
+                {sponsorTypeOptions.map((item) => (
+                  <option key={item.value} value={item.value}>
+                    {item.label}
+                  </option>
+                ))}
+              </Select>
+              <Input
+                label="Sponsor Name"
+                error={errors.sponsorName?.message}
+                {...register('sponsorName')}
               />
               <div className="xl:col-span-2">
                 <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -805,7 +936,12 @@ const StudentEnrollmentForm = () => {
                 <p className="mt-2 font-semibold text-brand-navy">
                   {[values.firstName, values.lastName].filter(Boolean).join(' ') || 'Not provided'}
                 </p>
-                <p className="mt-1 text-sm text-slate-500">{levelLabels[values.level as EducationLevelCode] || values.level}</p>
+                <p className="mt-1 text-sm text-slate-500">
+                  {levelLabels[values.level as EducationLevelCode] || values.level}
+                </p>
+                <p className="mt-1 text-sm text-slate-500">
+                  {values.nationality || 'Nationality pending'} · {values.idNumber || 'ID pending'}
+                </p>
               </div>
               <div className="surface-muted p-4">
                 <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Guardian</p>
@@ -813,9 +949,27 @@ const StudentEnrollmentForm = () => {
                 <p className="mt-1 text-sm text-slate-500">{values.guardianPhone || 'No phone yet'}</p>
               </div>
               <div className="surface-muted p-4">
+                <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Sponsor</p>
+                <p className="mt-2 font-semibold text-brand-navy">{values.sponsorName || 'Not provided'}</p>
+                <p className="mt-1 text-sm text-slate-500">
+                  {sponsorTypeOptions.find((item) => item.value === values.sponsorType)?.label ||
+                    values.sponsorType ||
+                    'Sponsor type pending'}
+                </p>
+              </div>
+              <div className="surface-muted p-4">
                 <p className="text-xs uppercase tracking-[0.14em] text-slate-400">{assignmentLabel} Assignment</p>
                 <p className="mt-2 font-semibold text-brand-navy">
                   {selectedGroup?.name || 'Pending assignment'}
+                </p>
+              </div>
+              <div className="surface-muted p-4">
+                <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Addresses</p>
+                <p className="mt-2 font-semibold text-brand-navy">
+                  {values.residentialAddress || 'Residential address pending'}
+                </p>
+                <p className="mt-1 text-sm text-slate-500">
+                  {values.postalAddress || 'Postal address pending'}
                 </p>
               </div>
               <div className="surface-muted p-4">

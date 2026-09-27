@@ -6,6 +6,8 @@ class UserEntity {
     required this.lastName,
     required this.role,
     required this.institutionId,
+    this.studentId,
+    this.studentNumber,
     this.phone,
     this.profilePhoto,
   });
@@ -16,6 +18,8 @@ class UserEntity {
   final String lastName;
   final String role;
   final String institutionId;
+  final String? studentId;
+  final String? studentNumber;
   final String? phone;
   final String? profilePhoto;
 
