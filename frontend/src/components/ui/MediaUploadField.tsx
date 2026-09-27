@@ -13,6 +13,7 @@ interface MediaUploadFieldProps {
   folder: string;
   helperText?: string;
   previewClassName?: string;
+  imageClassName?: string;
   onUploaded: (payload: UploadedMedia | null) => void;
 }
 
@@ -25,6 +26,7 @@ const MediaUploadField = ({
   folder,
   helperText,
   previewClassName,
+  imageClassName,
   onUploaded,
 }: MediaUploadFieldProps) => {
   const [isUploading, setIsUploading] = useState(false);
@@ -74,7 +76,7 @@ const MediaUploadField = ({
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
         <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</label>
         {value ? (
           <Button
@@ -97,7 +99,7 @@ const MediaUploadField = ({
 
       <label
         className={cn(
-          'flex cursor-pointer items-center justify-center rounded-3xl border border-dashed border-slate-300 bg-slate-50 px-5 py-6 text-center transition hover:border-brand-gold hover:bg-amber-50/40',
+          'flex min-h-[220px] cursor-pointer items-center justify-center rounded-3xl border border-dashed border-slate-300 bg-slate-50 px-5 py-6 text-center transition hover:border-brand-gold hover:bg-amber-50/40',
           previewClassName
         )}
       >
@@ -109,22 +111,25 @@ const MediaUploadField = ({
           </div>
         ) : previewUrl ? (
           isImage ? (
-            <div className="space-y-3">
+            <div className="w-full space-y-3">
               <img
                 src={previewUrl}
                 alt={label}
-                className="mx-auto h-32 w-32 rounded-2xl object-cover ring-1 ring-slate-200"
+                className={cn(
+                  'mx-auto max-h-44 w-full rounded-2xl bg-white object-contain ring-1 ring-slate-200',
+                  imageClassName
+                )}
               />
               <p className="text-sm font-medium text-brand-navy">Click to replace</p>
             </div>
           ) : (
-            <div className="space-y-3 text-slate-500">
+            <div className="w-full space-y-3 text-slate-500">
               <ImageIcon className="mx-auto h-8 w-8" />
               <p className="text-sm font-medium text-brand-navy">File uploaded. Click to replace.</p>
             </div>
           )
         ) : (
-          <div className="space-y-3 text-slate-500">
+          <div className="w-full space-y-3 text-slate-500">
             <UploadCloud className="mx-auto h-8 w-8" />
             <p className="text-sm font-medium text-brand-navy">Click to choose a file</p>
             <p className="text-xs text-slate-500">{helperText || 'Upload and preview before saving.'}</p>

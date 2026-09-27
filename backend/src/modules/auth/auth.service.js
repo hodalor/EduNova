@@ -122,7 +122,8 @@ const resolveInstitutionId = async ({ institution_id, institution_code }) => {
 };
 
 const login = async ({ email, identity, password, institution_id, institution_code, otp_code }) => {
-  const loginIdentity = (email || identity || '').trim().toLowerCase();
+  const rawIdentity = String(email || identity || '').trim();
+  const loginIdentity = rawIdentity.toLowerCase();
   const isPlatformLogin = String(institution_code || '').trim().toUpperCase() === PLATFORM_CODE;
 
   if (isPlatformLogin) {
@@ -158,7 +159,7 @@ const login = async ({ email, identity, password, institution_id, institution_co
     throw Object.assign(new Error(`Account locked. Try again in ${lock.retryIn} seconds.`), { status: 429 });
   }
 
-  const user = await models.User.findOne({
+  let user = await models.User.findOne({
     where: {
       institution_id: institutionId,
       [Op.or]: [
@@ -169,16 +170,40 @@ const login = async ({ email, identity, password, institution_id, institution_co
     include: [{ model: models.Institution, as: 'institution' }],
   });
 
+  if (!user && !email && models.Student) {
+    const identityVariants = Array.from(
+      new Set([rawIdentity, rawIdentity.toUpperCase(), rawIdentity.toLowerCase()].filter(Boolean))
+    );
+    const linkedStudent = await models.Student.findOne({
+      where: {
+        institution_id: institutionId,
+        [Op.or]: [
+          { student_number: { [Op.in]: identityVariants } },
+          { admission_number: { [Op.in]: identityVariants } },
+        ],
+      },
+      include: [
+        {
+          model: models.User,
+          as: 'user',
+          required: true,
+          include: [{ model: models.Institution, as: 'institution' }],
+        },
+      ],
+    }).catch(() => null);
+    user = linkedStudent?.user || null;
+  }
+
   if (!user) {
     await recordFailedLogin(loginIdentity, institutionId);
-    throw Object.assign(new Error('Invalid email or password.'), { status: 401 });
+    throw Object.assign(new Error('Invalid login details. Use email, phone, or student number with the correct password.'), { status: 401 });
   }
 
   const valid = await comparePassword(password, user.password_hash);
   if (!valid) {
     await recordFailedLogin(loginIdentity, institutionId);
     logger.warn('Failed login attempt', { identity: loginIdentity, institution_id: institutionId, user_id: user.id });
-    throw Object.assign(new Error('Invalid email or password.'), { status: 401 });
+    throw Object.assign(new Error('Invalid login details. Use email, phone, or student number with the correct password.'), { status: 401 });
   }
 
   if (user['2fa_enabled']) {

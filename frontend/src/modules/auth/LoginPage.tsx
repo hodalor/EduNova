@@ -7,6 +7,7 @@ import { useNavigate } from 'react-router-dom';
 import { z } from 'zod';
 
 import { eduovaApi } from '../../api/eduovaApi';
+import { getApiErrorMessage } from '../../api/axiosInstance';
 import AuthLayout from '../../components/layout/AuthLayout';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
@@ -47,7 +48,7 @@ const LoginPage = () => {
       toast.success('Welcome back to EDUOVA');
       navigate(payload.user.role === 'super_admin' ? '/super-admin' : '/');
     },
-    onError: () => toast.error('Unable to sign in.'),
+    onError: (error: unknown) => toast.error(getApiErrorMessage(error, 'Unable to sign in.')),
   });
 
   return (
@@ -72,7 +73,7 @@ const LoginPage = () => {
           {...register('institution_code')}
         />
         <Input
-          label="Email or Phone"
+          label="Email, Phone, or Student Number"
           error={errors.identity?.message}
           prefix={<Mail className="h-4 w-4" />}
           {...register('identity')}

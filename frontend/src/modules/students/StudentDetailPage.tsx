@@ -288,6 +288,7 @@ const StudentDetailPage = () => {
       cgpa: Number(transcriptQuery.data?.cgpa || 0),
     };
   }, [transcriptQuery.data, transcriptSections]);
+  const hasTranscriptRows = transcriptSections.length > 0 || transcriptTotals.totalCourses > 0;
 
   useEffect(() => {
     if (!data) return;
@@ -480,29 +481,6 @@ const StudentDetailPage = () => {
           <div className="grid gap-6 xl:grid-cols-3">
             <Card title="Personal Information" description={isEditing ? 'Editing is enabled. Save when you are done.' : 'Locked until you click Edit Profile.'}>
               <div className="space-y-4">
-                <div className="grid gap-4 md:grid-cols-3">
-                  <MediaUploadField
-                    label="Student Photo"
-                    value={photoUrl}
-                    folder="students/photos"
-                    helperText="Upload the actual student passport photo."
-                    onUploaded={(media) => setPhotoUrl(media?.url || '')}
-                  />
-                  <MediaUploadField
-                    label="ID Card Front"
-                    value={idCardFrontUrl}
-                    folder="students/id-cards"
-                    helperText="Upload the front side of the student ID card."
-                    onUploaded={(media) => setIdCardFrontUrl(media?.url || '')}
-                  />
-                  <MediaUploadField
-                    label="ID Card Back"
-                    value={idCardBackUrl}
-                    folder="students/id-cards"
-                    helperText="Upload the back side of the student ID card."
-                    onUploaded={(media) => setIdCardBackUrl(media?.url || '')}
-                  />
-                </div>
                 <Input
                   label="Full Name"
                   value={formValues.fullName}
@@ -573,6 +551,37 @@ const StudentDetailPage = () => {
                   onChange={(event) => handleFieldChange('temporaryPassword', event.target.value)}
                   disabled={!isEditing}
                   placeholder={isEditing ? 'Leave blank to keep current password' : ''}
+                />
+              </div>
+            </Card>
+            <Card title="Identity Documents" description="Student photo and ID card images for profile and ID outputs.">
+              <div className="space-y-4">
+                <MediaUploadField
+                  label="Student Photo"
+                  value={photoUrl}
+                  folder="students/photos"
+                  helperText="Upload the actual student passport photo."
+                  previewClassName="min-h-0 p-4"
+                  imageClassName="max-h-52"
+                  onUploaded={(media) => setPhotoUrl(media?.url || '')}
+                />
+                <MediaUploadField
+                  label="ID Card Front"
+                  value={idCardFrontUrl}
+                  folder="students/id-cards"
+                  helperText="Upload the front side of the student ID card."
+                  previewClassName="min-h-0 p-4"
+                  imageClassName="max-h-52"
+                  onUploaded={(media) => setIdCardFrontUrl(media?.url || '')}
+                />
+                <MediaUploadField
+                  label="ID Card Back"
+                  value={idCardBackUrl}
+                  folder="students/id-cards"
+                  helperText="Upload the back side of the student ID card."
+                  previewClassName="min-h-0 p-4"
+                  imageClassName="max-h-52"
+                  onUploaded={(media) => setIdCardBackUrl(media?.url || '')}
                 />
               </div>
             </Card>
@@ -710,7 +719,7 @@ const StudentDetailPage = () => {
                 variant="warning"
                 action={<Button onClick={() => transcriptQuery.refetch()}>Retry</Button>}
               />
-            ) : transcriptQuery.data ? (
+            ) : transcriptQuery.data && hasTranscriptRows ? (
               <Card
                 title="Official Transcript"
                 description="Letterhead, grading system, and print-ready transcript layout for this tertiary student."
@@ -1382,29 +1391,9 @@ const StudentDetailPage = () => {
               <div className="space-y-4">
                 <Button>Generate ID Card</Button>
                 <Button variant="secondary">Open Report Card Archive</Button>
-                <div className="grid gap-4 md:grid-cols-3">
-                  <MediaUploadField
-                    label="Student Photo"
-                    value={photoUrl}
-                    folder="students/photos"
-                    helperText="Upload the student photo used for profile and ID outputs."
-                    onUploaded={(media) => setPhotoUrl(media?.url || '')}
-                  />
-                  <MediaUploadField
-                    label="ID Card Front"
-                    value={idCardFrontUrl}
-                    folder="students/id-cards"
-                    helperText="Upload the front image of the ID card."
-                    onUploaded={(media) => setIdCardFrontUrl(media?.url || '')}
-                  />
-                  <MediaUploadField
-                    label="ID Card Back"
-                    value={idCardBackUrl}
-                    folder="students/id-cards"
-                    helperText="Upload the back image of the ID card."
-                    onUploaded={(media) => setIdCardBackUrl(media?.url || '')}
-                  />
-                </div>
+                <p className="text-sm text-slate-500">
+                  Update student photo and ID card images from the Profile tab so the preview stays clean.
+                </p>
               </div>
             </Card>
           </div>

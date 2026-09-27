@@ -44,7 +44,7 @@ class StudentHomePage extends ConsumerWidget {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  '${auth?.institution.name ?? 'EDUOVA'} tertiary portal for course registration, finance, and academic progress.',
+                  '${auth?.institution.name ?? 'EDUOVA'} tertiary portal for course registration, e-learning, finance, and academic progress.',
                   style: const TextStyle(color: AppColors.textMuted),
                 ),
               ],

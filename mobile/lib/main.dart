@@ -20,6 +20,7 @@ import 'features/dashboard/presentation/pages/student_home_page.dart';
 import 'features/dashboard/presentation/pages/teacher_home_page.dart';
 import 'features/finance/presentation/pages/parent_fees_page.dart';
 import 'features/finance/presentation/pages/student_finance_page.dart';
+import 'features/learning/presentation/pages/student_learning_page.dart';
 import 'features/students/presentation/pages/children_page.dart';
 import 'features/students/presentation/pages/student_profile_page.dart';
 import 'shared/navigation/app_shells.dart';
@@ -125,6 +126,14 @@ final routerProvider = Provider<GoRouter>((ref) {
               GoRoute(
                 path: AppRoutes.studentHome,
                 builder: (context, state) => const StudentHomePage(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: AppRoutes.studentLearning,
+                builder: (context, state) => const StudentLearningPage(),
               ),
             ],
           ),

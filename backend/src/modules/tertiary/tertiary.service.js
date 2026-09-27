@@ -244,6 +244,44 @@ const buildTranscriptVerificationResponse = ({
   };
 };
 
+const buildTranscriptPayload = ({
+  institutionId,
+  institution = null,
+  settings,
+  studentId,
+  studentProfile = {},
+  rows = [],
+}) => {
+  const latest = rows[rows.length - 1] || {};
+
+  return {
+    student_id: studentId,
+    branding: getTranscriptBranding(settings, institution),
+    transcript_title: 'Official Academic Transcript',
+    generated_at: new Date().toISOString(),
+    issued_on: latest.issued_on || latest.generated_at || new Date().toISOString(),
+    student: {
+      student_number: studentProfile.student_number || studentProfile.admission_number || '',
+      name: studentProfile.full_name || studentProfile.name || '',
+      program_name: studentProfile.tertiary?.program_name || studentProfile.program_name || '',
+      department_name: studentProfile.tertiary?.department_name || studentProfile.department_name || '',
+      faculty_name: studentProfile.tertiary?.faculty_name || studentProfile.faculty_name || '',
+    },
+    degree_awarded: studentProfile.tertiary?.program_name || studentProfile.program_name || '',
+    semesters: rows,
+    total_courses_taken: countTranscriptCourses(rows),
+    cgpa: Number(latest.cgpa || 0),
+    credit_hours: Number(latest.credit_hours || 0),
+    final_classification: resolveClassDesignation({ settings, cgpa: latest.cgpa }),
+    grading_system: getTranscriptGradeDefinition(settings),
+    verification_code: buildTranscriptVerificationCode({
+      institutionId,
+      studentId,
+      rows,
+    }),
+  };
+};
+
 const getFinanceDefaults = (settings) => {
   const currencies =
     Array.isArray(settings?.finance?.currencies) && settings.finance.currencies.length
@@ -1902,87 +1940,64 @@ const getTranscript = async ({ institutionId, studentId }) => {
     }
 
     const settings = ensureTertiarySettings(institution.settings);
+    const studentRecord = await models.Student.findOne({
+      where: { id: studentId, institution_id: institutionId },
+      include: [{ model: models.User, as: 'user', required: false }],
+    });
+    if (!studentRecord) {
+      throw Object.assign(new Error('Student not found.'), { statusCode: 404 });
+    }
+
     const studentProfile =
       settings.admissions.student_profiles.find(
         (item) => String(item.student_id || item.id) === String(studentId)
-      ) || {};
+      ) || {
+        student_id: studentRecord.id,
+        student_number: studentRecord.student_number || studentRecord.admission_number || '',
+        admission_number: studentRecord.admission_number || '',
+        full_name:
+          `${studentRecord.user?.first_name || ''} ${studentRecord.user?.last_name || ''}`.trim() ||
+          studentRecord.student_number ||
+          '',
+      };
     const rows = settings.tertiary.transcripts.filter(
-      (item) => item.student_id === studentId && item.institution_id === institutionId
+      (item) =>
+        String(item.student_id || '') === String(studentId) &&
+        String(item.institution_id || '') === String(institutionId)
     );
-    if (!rows.length) {
-      throw Object.assign(new Error('Transcript not found.'), { statusCode: 404 });
-    }
-
-    const latest = rows[rows.length - 1];
-    return {
-      student_id: studentId,
-      branding: getTranscriptBranding(settings, institution),
-      transcript_title: 'Official Academic Transcript',
-      generated_at: new Date().toISOString(),
-      issued_on: new Date().toISOString(),
-      student: {
-        student_number: studentProfile.student_number || studentProfile.admission_number || '',
-        name: studentProfile.full_name || studentProfile.name || '',
-        program_name: studentProfile.tertiary?.program_name || studentProfile.program_name || '',
-        department_name: studentProfile.tertiary?.department_name || studentProfile.department_name || '',
-        faculty_name: studentProfile.tertiary?.faculty_name || studentProfile.faculty_name || '',
-      },
-      degree_awarded:
-        studentProfile.tertiary?.program_name || studentProfile.program_name || '',
-      semesters: rows,
-      total_courses_taken: countTranscriptCourses(rows),
-      cgpa: latest.cgpa,
-      credit_hours: latest.credit_hours,
-      final_classification: resolveClassDesignation({ settings, cgpa: latest.cgpa }),
-      grading_system: getTranscriptGradeDefinition(settings),
-      verification_code: buildTranscriptVerificationCode({
-        institutionId,
-        studentId,
-        rows,
-      }),
-    };
+    return buildTranscriptPayload({
+      institutionId,
+      institution,
+      settings,
+      studentId,
+      studentProfile,
+      rows,
+    });
   }
 
   const rows = store.tertiary.transcripts.filter(
-    (item) => item.student_id === studentId && item.institution_id === institutionId
+    (item) =>
+      String(item.student_id || '') === String(studentId) &&
+      String(item.institution_id || '') === String(institutionId)
   );
-  if (!rows.length) {
-    throw Object.assign(new Error('Transcript not found.'), { statusCode: 404 });
-  }
 
-  const latest = rows[rows.length - 1];
   const settings = ensureTertiarySettings(store.settings || {});
   const studentProfile =
     settings.admissions.student_profiles.find(
       (item) => String(item.student_id || item.id) === String(studentId)
     ) || {};
-  return {
-    student_id: studentId,
-    branding: getTranscriptBranding(settings, null),
-    transcript_title: 'Official Academic Transcript',
-    generated_at: new Date().toISOString(),
-    issued_on: new Date().toISOString(),
-    student: {
-      student_number: studentProfile.student_number || studentProfile.admission_number || '',
-      name: studentProfile.full_name || studentProfile.name || '',
-      program_name: studentProfile.tertiary?.program_name || studentProfile.program_name || '',
-      department_name: studentProfile.tertiary?.department_name || studentProfile.department_name || '',
-      faculty_name: studentProfile.tertiary?.faculty_name || studentProfile.faculty_name || '',
-    },
-    degree_awarded:
-      studentProfile.tertiary?.program_name || studentProfile.program_name || '',
-    semesters: rows,
-    total_courses_taken: countTranscriptCourses(rows),
-    cgpa: latest.cgpa,
-    credit_hours: latest.credit_hours,
-    final_classification: resolveClassDesignation({ settings, cgpa: latest.cgpa }),
-    grading_system: getTranscriptGradeDefinition(settings),
-    verification_code: buildTranscriptVerificationCode({
-      institutionId,
-      studentId,
-      rows,
-    }),
-  };
+  if (!studentProfile.student_id && !rows.length) {
+    throw Object.assign(new Error('Student not found.'), { statusCode: 404 });
+  }
+
+  return buildTranscriptPayload({
+    institutionId,
+    institution: null,
+    settings,
+    studentId,
+    studentProfile,
+    rows,
+  });
 };
 
 const verifyTranscriptByCode = async ({ verificationCode }) => {

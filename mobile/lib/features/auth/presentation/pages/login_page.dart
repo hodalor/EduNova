@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -5,6 +6,19 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_routes.dart';
 import '../providers/auth_provider.dart';
+
+String _formatAuthError(Object error) {
+  if (error is DioException) {
+    final payload = error.response?.data;
+    if (payload is Map && payload['message'] is String) {
+      return payload['message'].toString();
+    }
+    if (payload is Map && payload['error'] is String) {
+      return payload['error'].toString();
+    }
+  }
+  return error.toString();
+}
 
 class LoginPage extends ConsumerStatefulWidget {
   const LoginPage({super.key});
@@ -95,7 +109,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                         TextFormField(
                           controller: _identityController,
                           decoration: const InputDecoration(
-                            labelText: 'Email or Phone',
+                            labelText: 'Email, Phone, or Student Number',
                           ),
                           validator: (value) =>
                               value == null || value.isEmpty ? 'Required' : null,
@@ -167,7 +181,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                               error: (error, _) => Padding(
                                 padding: const EdgeInsets.only(top: 16),
                                 child: Text(
-                                  error.toString(),
+                                  _formatAuthError(error),
                                   style:
                                       const TextStyle(color: AppColors.error),
                                 ),

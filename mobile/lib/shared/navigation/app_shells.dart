@@ -74,6 +74,7 @@ class StudentShell extends StatelessWidget {
         selectedIndex: navigationShell.currentIndex,
         destinations: const [
           NavigationDestination(icon: Icon(Icons.home_outlined), label: 'Home'),
+          NavigationDestination(icon: Icon(Icons.cast_for_education_outlined), label: 'Learn'),
           NavigationDestination(icon: Icon(Icons.menu_book_outlined), label: 'Courses'),
           NavigationDestination(icon: Icon(Icons.account_balance_wallet_outlined), label: 'Finance'),
           NavigationDestination(icon: Icon(Icons.person_outline), label: 'Profile'),
