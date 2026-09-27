@@ -37,6 +37,110 @@ interface AcademicAssessmentRecord {
   credit_hours?: number | null;
 }
 
+export interface UploadedMedia {
+  bucket: string;
+  path: string;
+  fullPath?: string;
+  fileName: string;
+  mimeType: string;
+  size: number;
+  visibility: string;
+  url: string;
+}
+
+export interface LearningCourse {
+  id: string;
+  code: string;
+  name: string;
+  course_type?: string;
+  credit_hours?: number;
+  program_id?: string | null;
+  program_name?: string | null;
+  group_id?: string;
+  group_name?: string;
+  period_id?: string;
+  period_name?: string;
+}
+
+export interface LearningMaterial {
+  id: string;
+  title: string;
+  description?: string | null;
+  material_type: string;
+  course_id: string;
+  course_code: string;
+  course_name: string;
+  program_name?: string | null;
+  group_name?: string | null;
+  period_name?: string | null;
+  attachment_url: string;
+  attachment_name?: string;
+  attachment_mime_type?: string;
+  uploaded_by_name?: string;
+  created_at?: string;
+}
+
+export interface LearningQuestion {
+  id: string;
+  type: 'objective' | 'theory' | string;
+  prompt: string;
+  options: string[];
+  correct_answer?: string;
+  model_answer?: string | null;
+  max_score: number;
+}
+
+export interface LearningAssessment {
+  id: string;
+  title: string;
+  instructions?: string | null;
+  assessment_type: string;
+  course_id: string;
+  course_code: string;
+  course_name: string;
+  program_name?: string | null;
+  group_name?: string | null;
+  period_name?: string | null;
+  duration_minutes?: number;
+  due_at?: string | null;
+  is_published?: boolean;
+  attempts_allowed?: number;
+  total_score?: number;
+  questions: LearningQuestion[];
+  created_at?: string;
+  created_by_name?: string;
+}
+
+export interface LearningSubmissionAnswer {
+  question_id: string;
+  prompt: string;
+  type: string;
+  response: string | string[];
+  max_score: number;
+  awarded_score: number | null;
+  is_correct: boolean | null;
+}
+
+export interface LearningSubmission {
+  id: string;
+  assessment_id: string;
+  assessment_title: string;
+  course_id: string;
+  course_code: string;
+  course_name: string;
+  student_id: string;
+  student_name: string;
+  submitted_at: string;
+  answers: LearningSubmissionAnswer[];
+  auto_score: number;
+  final_score: number | null;
+  max_score: number;
+  status: string;
+  feedback?: string | null;
+  graded_by?: string | null;
+  graded_at?: string | null;
+}
+
 const normalizeAcademicNames = (payload: unknown): Record<string, unknown> => {
   const item = asRecord(payload);
   const className = asString(item.className, asString(item.class_name, asString(item.levelName, '-')));
@@ -180,6 +284,71 @@ export const eduovaApi = {
     getAttendance: async () => (await axiosInstance.get('/analytics/attendance/rate')).data.data,
     getEnrollment: async () => (await axiosInstance.get('/analytics/enrollment-trend')).data.data,
     getAlerts: async () => (await axiosInstance.get('/analytics/alerts/active')).data.data,
+  },
+  media: {
+    upload: async (payload: {
+      file: File;
+      folder?: string;
+      bucketName?: string;
+      visibility?: 'public' | 'private';
+    }): Promise<UploadedMedia> => {
+      const formData = new FormData();
+      formData.append('file', payload.file);
+      if (payload.folder) {
+        formData.append('folder', payload.folder);
+      }
+      if (payload.bucketName) {
+        formData.append('bucketName', payload.bucketName);
+      }
+      formData.append('visibility', payload.visibility || 'public');
+
+      try {
+        return (await axiosInstance.post('/media/upload', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        })).data.data;
+      } catch (error) {
+        if (axios.isAxiosError(error) && error.response?.status === 404) {
+          return (await axiosInstance.post('/v1/media/upload', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+          })).data.data;
+        }
+        throw error;
+      }
+    },
+  },
+  learning: {
+    courses: async (): Promise<LearningCourse[]> =>
+      (await axiosInstance.get('/v1/learning/courses')).data.data,
+    materials: async (courseId?: string): Promise<LearningMaterial[]> =>
+      (
+        await axiosInstance.get('/v1/learning/materials', {
+          params: courseId ? { course_id: courseId } : undefined,
+        })
+      ).data.data,
+    createMaterial: async (payload: Record<string, unknown>): Promise<LearningMaterial> =>
+      (await axiosInstance.post('/v1/learning/materials', payload)).data.data,
+    assessments: async (courseId?: string): Promise<LearningAssessment[]> =>
+      (
+        await axiosInstance.get('/v1/learning/assessments', {
+          params: courseId ? { course_id: courseId } : undefined,
+        })
+      ).data.data,
+    createAssessment: async (payload: Record<string, unknown>): Promise<LearningAssessment> =>
+      (await axiosInstance.post('/v1/learning/assessments', payload)).data.data,
+    assessmentSubmissions: async (assessmentId: string): Promise<LearningSubmission[]> =>
+      (await axiosInstance.get(`/v1/learning/assessments/${assessmentId}/submissions`)).data.data,
+    submitAssessment: async (
+      assessmentId: string,
+      payload: Record<string, unknown>
+    ): Promise<LearningSubmission> =>
+      (await axiosInstance.post(`/v1/learning/assessments/${assessmentId}/submissions`, payload)).data.data,
+    gradeSubmission: async (
+      submissionId: string,
+      payload: Record<string, unknown>
+    ): Promise<LearningSubmission> =>
+      (await axiosInstance.post(`/v1/learning/submissions/${submissionId}/grade`, payload)).data.data,
+    myResults: async (): Promise<LearningSubmission[]> =>
+      (await axiosInstance.get('/v1/learning/results/me')).data.data,
   },
   students: {
     list: async () => {

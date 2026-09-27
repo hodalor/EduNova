@@ -8,12 +8,12 @@ import { z } from 'zod';
 import { Search, UserCircle2, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 
-import { eduovaApi } from '../../api/eduovaApi';
+import { eduovaApi, type UploadedMedia } from '../../api/eduovaApi';
 import Alert from '../../components/ui/Alert';
 import Button from '../../components/ui/Button';
 import Card from '../../components/ui/Card';
-import FileUpload from '../../components/ui/FileUpload';
 import Input from '../../components/ui/Input';
+import MediaUploadField from '../../components/ui/MediaUploadField';
 import PageLoader from '../../components/ui/PageLoader';
 import ProgressBar from '../../components/ui/ProgressBar';
 import Select from '../../components/ui/Select';
@@ -256,6 +256,9 @@ const StudentEnrollmentForm = () => {
   const [parentSearchOpen, setParentSearchOpen] = useState(false);
   const [selectedParent, setSelectedParent] = useState<ParentOption | null>(null);
   const [parentDebounceTimer, setParentDebounceTimer] = useState<number | null>(null);
+  const [studentPhoto, setStudentPhoto] = useState<UploadedMedia | null>(null);
+  const [idCardFront, setIdCardFront] = useState<UploadedMedia | null>(null);
+  const [idCardBack, setIdCardBack] = useState<UploadedMedia | null>(null);
 
   const parentsQuery = useQuery<ParentOption[]>({
     queryKey: ['parents-search', parentSearch, activeInstitutionId],
@@ -516,6 +519,9 @@ const StudentEnrollmentForm = () => {
           postal_address: payload.postalAddress,
           sponsor_type: payload.sponsorType,
           sponsor_name: payload.sponsorName,
+          photo_url: studentPhoto?.url || undefined,
+          id_card_front_url: idCardFront?.url || undefined,
+          id_card_back_url: idCardBack?.url || undefined,
           temporary_password: payload.temporaryPassword,
           guardian_name: payload.guardianName,
           guardian_phone: payload.guardianPhone,
@@ -698,7 +704,29 @@ const StudentEnrollmentForm = () => {
                 {...register('temporaryPassword')}
               />
               <div className="xl:col-span-2">
-                <FileUpload multiple={false} />
+                <div className="grid gap-4 md:grid-cols-3">
+                  <MediaUploadField
+                    label="Student Photo"
+                    value={studentPhoto?.url || ''}
+                    folder="students/photos"
+                    helperText="Upload the actual student passport photo."
+                    onUploaded={setStudentPhoto}
+                  />
+                  <MediaUploadField
+                    label="ID Card Front"
+                    value={idCardFront?.url || ''}
+                    folder="students/id-cards"
+                    helperText="Upload the front side of the student ID card."
+                    onUploaded={setIdCardFront}
+                  />
+                  <MediaUploadField
+                    label="ID Card Back"
+                    value={idCardBack?.url || ''}
+                    folder="students/id-cards"
+                    helperText="Upload the back side of the student ID card."
+                    onUploaded={setIdCardBack}
+                  />
+                </div>
               </div>
             </div>
           </Card>
@@ -829,9 +857,6 @@ const StudentEnrollmentForm = () => {
               {(values.level === 'JH' || values.level === 'SH') ? (
                 <>
                   <Input label="Previous Results Reference" {...register('previousResults')} />
-                  <div className="xl:col-span-2">
-                    <FileUpload multiple={false} />
-                  </div>
                 </>
               ) : null}
               {values.level === 'TR' ? (
@@ -885,9 +910,6 @@ const StudentEnrollmentForm = () => {
                       />
                     </div>
                   ) : null}
-                  <div className="xl:col-span-2">
-                    <FileUpload multiple={false} />
-                  </div>
                 </>
               ) : null}
               {values.level === 'PR' ? (
@@ -933,6 +955,13 @@ const StudentEnrollmentForm = () => {
             <div className="grid gap-4 md:grid-cols-2">
               <div className="surface-muted p-4">
                 <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Student</p>
+                {studentPhoto?.url ? (
+                  <img
+                    src={studentPhoto.url}
+                    alt="Student preview"
+                    className="mt-3 h-16 w-16 rounded-2xl object-cover ring-1 ring-slate-200"
+                  />
+                ) : null}
                 <p className="mt-2 font-semibold text-brand-navy">
                   {[values.firstName, values.lastName].filter(Boolean).join(' ') || 'Not provided'}
                 </p>
@@ -970,6 +999,16 @@ const StudentEnrollmentForm = () => {
                 </p>
                 <p className="mt-1 text-sm text-slate-500">
                   {values.postalAddress || 'Postal address pending'}
+                </p>
+              </div>
+              <div className="surface-muted p-4">
+                <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Identity Uploads</p>
+                <p className="mt-2 font-semibold text-brand-navy">
+                  {studentPhoto?.url ? 'Student photo uploaded' : 'Student photo pending'}
+                </p>
+                <p className="mt-1 text-sm text-slate-500">
+                  {idCardFront?.url ? 'Front ID uploaded' : 'Front ID pending'} ·{' '}
+                  {idCardBack?.url ? 'Back ID uploaded' : 'Back ID pending'}
                 </p>
               </div>
               <div className="surface-muted p-4">

@@ -11,8 +11,8 @@ import Badge from '../../components/ui/Badge';
 import Button from '../../components/ui/Button';
 import Card from '../../components/ui/Card';
 import EmptyState from '../../components/ui/EmptyState';
-import FileUpload from '../../components/ui/FileUpload';
 import Input from '../../components/ui/Input';
+import MediaUploadField from '../../components/ui/MediaUploadField';
 import PageLoader from '../../components/ui/PageLoader';
 import Select from '../../components/ui/Select';
 import Table from '../../components/ui/Table';
@@ -221,6 +221,9 @@ const normalizeTranscriptSemester = (value: unknown, index: number): TranscriptS
   };
 };
 
+const findStudentDocumentUrl = (documents: StudentDetail['documents'], documentId: string) =>
+  documents.find((item) => item.id === documentId)?.url || '';
+
 const StudentDetailPage = () => {
   const { studentId = 'stu-001' } = useParams();
   const location = useLocation();
@@ -246,6 +249,9 @@ const StudentDetailPage = () => {
     bloodGroup: '',
     medicalNotes: '',
   });
+  const [photoUrl, setPhotoUrl] = useState('');
+  const [idCardFrontUrl, setIdCardFrontUrl] = useState('');
+  const [idCardBackUrl, setIdCardBackUrl] = useState('');
   const { data, isLoading, isError, refetch } = useStudent(studentId);
   const isTertiaryStudent = Boolean(data && (data.level === 'TR' || data.tertiary));
   const transcriptQuery = useQuery<TranscriptPayload>({
@@ -304,6 +310,9 @@ const StudentDetailPage = () => {
       bloodGroup: data.medical?.bloodGroup || '',
       medicalNotes: data.medical?.notes || '',
     });
+    setPhotoUrl(data.photo || '');
+    setIdCardFrontUrl(findStudentDocumentUrl(data.documents, 'id-card-front'));
+    setIdCardBackUrl(findStudentDocumentUrl(data.documents, 'id-card-back'));
   }, [data]);
 
   useEffect(() => {
@@ -394,6 +403,9 @@ const StudentDetailPage = () => {
         guardian_relation: formValues.guardianRelation,
         sponsor_type: formValues.sponsorType,
         sponsor_name: formValues.sponsorName,
+        photo_url: photoUrl || null,
+        id_card_front_url: idCardFrontUrl || null,
+        id_card_back_url: idCardBackUrl || null,
         temporary_password: formValues.temporaryPassword || undefined,
         allergies: formValues.allergies,
         blood_group: formValues.bloodGroup,
@@ -433,7 +445,7 @@ const StudentDetailPage = () => {
 
       <Card>
         <div className="flex flex-col gap-5 md:flex-row md:items-center">
-          <Avatar name={data.name} size="xl" />
+          <Avatar name={data.name} src={data.photo} size="xl" />
           <div className="flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-2xl font-semibold text-brand-navy">{data.name}</h2>
@@ -468,6 +480,29 @@ const StudentDetailPage = () => {
           <div className="grid gap-6 xl:grid-cols-3">
             <Card title="Personal Information" description={isEditing ? 'Editing is enabled. Save when you are done.' : 'Locked until you click Edit Profile.'}>
               <div className="space-y-4">
+                <div className="grid gap-4 md:grid-cols-3">
+                  <MediaUploadField
+                    label="Student Photo"
+                    value={photoUrl}
+                    folder="students/photos"
+                    helperText="Upload the actual student passport photo."
+                    onUploaded={(media) => setPhotoUrl(media?.url || '')}
+                  />
+                  <MediaUploadField
+                    label="ID Card Front"
+                    value={idCardFrontUrl}
+                    folder="students/id-cards"
+                    helperText="Upload the front side of the student ID card."
+                    onUploaded={(media) => setIdCardFrontUrl(media?.url || '')}
+                  />
+                  <MediaUploadField
+                    label="ID Card Back"
+                    value={idCardBackUrl}
+                    folder="students/id-cards"
+                    helperText="Upload the back side of the student ID card."
+                    onUploaded={(media) => setIdCardBackUrl(media?.url || '')}
+                  />
+                </div>
                 <Input
                   label="Full Name"
                   value={formValues.fullName}
@@ -1328,11 +1363,18 @@ const StudentDetailPage = () => {
                 { header: 'Type', accessorKey: 'type' },
                 {
                   header: 'Action',
-                  cell: () => (
-                    <Button size="sm" variant="secondary" leftIcon={<Download className="h-4 w-4" />}>
-                      Download
-                    </Button>
-                  ),
+                  cell: ({ row }) =>
+                    row.original.url ? (
+                      <a href={row.original.url} target="_blank" rel="noreferrer">
+                        <Button size="sm" variant="secondary" leftIcon={<Download className="h-4 w-4" />}>
+                          Download
+                        </Button>
+                      </a>
+                    ) : (
+                      <Button size="sm" variant="secondary" leftIcon={<Download className="h-4 w-4" />} disabled>
+                        Download
+                      </Button>
+                    ),
                 },
               ]}
             />
@@ -1340,7 +1382,29 @@ const StudentDetailPage = () => {
               <div className="space-y-4">
                 <Button>Generate ID Card</Button>
                 <Button variant="secondary">Open Report Card Archive</Button>
-                <FileUpload />
+                <div className="grid gap-4 md:grid-cols-3">
+                  <MediaUploadField
+                    label="Student Photo"
+                    value={photoUrl}
+                    folder="students/photos"
+                    helperText="Upload the student photo used for profile and ID outputs."
+                    onUploaded={(media) => setPhotoUrl(media?.url || '')}
+                  />
+                  <MediaUploadField
+                    label="ID Card Front"
+                    value={idCardFrontUrl}
+                    folder="students/id-cards"
+                    helperText="Upload the front image of the ID card."
+                    onUploaded={(media) => setIdCardFrontUrl(media?.url || '')}
+                  />
+                  <MediaUploadField
+                    label="ID Card Back"
+                    value={idCardBackUrl}
+                    folder="students/id-cards"
+                    helperText="Upload the back image of the ID card."
+                    onUploaded={(media) => setIdCardBackUrl(media?.url || '')}
+                  />
+                </div>
               </div>
             </Card>
           </div>

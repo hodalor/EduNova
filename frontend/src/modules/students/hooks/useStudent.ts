@@ -7,6 +7,7 @@ export interface StudentDetail {
   name: string;
   student_number: string;
   email?: string;
+  photo?: string | null;
   className: string;
   level: string;
   status: string;
@@ -62,6 +63,7 @@ export interface StudentDetail {
     id: string;
     name: string;
     type: string;
+    url?: string;
   }>;
   tertiary?: {
     faculty_id?: string | null;

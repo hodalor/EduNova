@@ -53,6 +53,9 @@ const AcademicStructurePage = lazy(() => import('../modules/workspace/AcademicSt
 const StudentCourseRegistrationPage = lazy(
   () => import('../modules/workspace/StudentCourseRegistrationPage')
 );
+const LearningLibraryPage = lazy(() => import('../modules/learning/LearningLibraryPage'));
+const LearningAssessmentsPage = lazy(() => import('../modules/learning/LearningAssessmentsPage'));
+const LearningResultsPage = lazy(() => import('../modules/learning/LearningResultsPage'));
 
 const Loader = () => {
   return (
@@ -473,6 +476,39 @@ const AppRouter = () => {
               element={
                 <ProtectedRoute allowedRoles={['institution_admin', 'teacher']}>
                   <StudentCourseRegistrationPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/learning/library"
+              element={
+                <ProtectedRoute
+                  allowedRoles={['institution_admin', 'teacher', 'student']}
+                  allowedPermissions={['academics:read']}
+                >
+                  <LearningLibraryPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/learning/assessments"
+              element={
+                <ProtectedRoute
+                  allowedRoles={['institution_admin', 'teacher', 'student']}
+                  allowedPermissions={['academics:read']}
+                >
+                  <LearningAssessmentsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/learning/results"
+              element={
+                <ProtectedRoute
+                  allowedRoles={['student']}
+                  allowedPermissions={['academics:read']}
+                >
+                  <LearningResultsPage />
                 </ProtectedRoute>
               }
             />

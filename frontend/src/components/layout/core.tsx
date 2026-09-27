@@ -144,6 +144,35 @@ const institutionNavGroups: NavGroup[] = [
     ],
   },
   {
+    label: 'E-Learning',
+    items: [
+      {
+        name: 'E-Library',
+        to: '/learning/library',
+        icon: BookOpen,
+        roles: ['institution_admin', 'teacher', 'student'],
+        permissions: ['academics:read'],
+        visible: isTertiaryInstitution,
+      },
+      {
+        name: 'Assessments',
+        to: '/learning/assessments',
+        icon: ClipboardCheck,
+        roles: ['institution_admin', 'teacher', 'student'],
+        permissions: ['academics:read'],
+        visible: isTertiaryInstitution,
+      },
+      {
+        name: 'Results',
+        to: '/learning/results',
+        icon: FileBarChart2,
+        roles: ['student'],
+        permissions: ['academics:read'],
+        visible: isTertiaryInstitution,
+      },
+    ],
+  },
+  {
     label: 'Student',
     items: [
       {

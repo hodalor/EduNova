@@ -7,6 +7,7 @@ import Badge from '../../components/ui/Badge';
 import Button from '../../components/ui/Button';
 import Card from '../../components/ui/Card';
 import Input from '../../components/ui/Input';
+import MediaUploadField from '../../components/ui/MediaUploadField';
 import Select from '../../components/ui/Select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/Tabs';
 import PageHeader from '../shared/PageHeader';
@@ -250,13 +251,14 @@ const SettingsWorkspacePage = () => {
                   />
                 </div>
                 <div className="md:col-span-2">
-                  <Input
-                    label="Logo URL"
+                  <MediaUploadField
+                    label="Institution Logo"
                     value={brandingForm.logo_url}
-                    onChange={(event) =>
-                      setBrandingForm((current) => ({ ...current, logo_url: event.target.value }))
+                    folder="branding/logos"
+                    helperText="Upload the real institution logo with live preview."
+                    onUploaded={(media) =>
+                      setBrandingForm((current) => ({ ...current, logo_url: media?.url || '' }))
                     }
-                    placeholder="https://..."
                   />
                 </div>
                 <Input
@@ -316,13 +318,14 @@ const SettingsWorkspacePage = () => {
                   }
                 />
                 <div className="md:col-span-2">
-                  <Input
-                    label="Signature Image URL"
+                  <MediaUploadField
+                    label="Registrar Signature"
                     value={brandingForm.signature_url}
-                    onChange={(event) =>
-                      setBrandingForm((current) => ({ ...current, signature_url: event.target.value }))
+                    folder="branding/signatures"
+                    helperText="Upload the signature image used on transcript outputs."
+                    onUploaded={(media) =>
+                      setBrandingForm((current) => ({ ...current, signature_url: media?.url || '' }))
                     }
-                    placeholder="https://..."
                   />
                 </div>
               </div>
@@ -374,6 +377,18 @@ const SettingsWorkspacePage = () => {
                     {brandingForm.registrar_title || 'Registrar title'}
                   </p>
                 </div>
+                {brandingForm.signature_url ? (
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
+                      Registrar Signature Preview
+                    </p>
+                    <img
+                      src={brandingForm.signature_url}
+                      alt="Registrar signature"
+                      className="mt-3 h-16 max-w-[220px] object-contain"
+                    />
+                  </div>
+                ) : null}
               </div>
             </Card>
           </div>

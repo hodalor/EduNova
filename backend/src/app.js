@@ -16,6 +16,7 @@ const authRoutes = require('./modules/auth/auth.routes');
 const communicationRoutes = require('./modules/communication/communication.routes');
 const daycareRoutes = require('./modules/daycare/daycare.routes');
 const financeRoutes = require('./modules/finance/finance.routes');
+const learningRoutes = require('./modules/learning/learning.routes');
 const mediaRoutes = require('./modules/media/media.routes');
 const superAdminRoutes = require('./modules/super-admin/super-admin.routes');
 const studentsRoutes = require('./modules/students/students.routes');
@@ -105,6 +106,8 @@ const createApp = () => {
   app.use('/api/v1/analytics', analyticsRoutes);
   app.use('/api/finance', financeRoutes);
   app.use('/api/v1/finance', financeRoutes);
+  app.use('/api/learning', learningRoutes);
+  app.use('/api/v1/learning', learningRoutes);
   app.use('/api/academics', academicsRoutes);
   app.use('/api/v1/academics', academicsRoutes);
   app.use('/api/attendance', attendanceRoutes);
