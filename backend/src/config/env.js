@@ -53,7 +53,7 @@ const schema = Joi.object({
       }
       return value;
     })
-    .required(),
+    .default('https://eduova.netlify.app'),
   CORS_ORIGINS: Joi.string().allow('').optional(),
   MOBILE_API_KEY: Joi.string().required(),
   MAX_FILE_SIZE: Joi.number().integer().positive().default(5242880),

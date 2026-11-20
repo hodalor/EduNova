@@ -1,8 +1,19 @@
-const { models } = require('../../config/database');
+let registry;
+
+const resolveModels = (passed) => {
+  if (passed) {
+    registry = passed;
+  }
+  if (!registry) {
+    registry = require('../../config/database').models;
+  }
+  return registry || {};
+};
 
 const schoolName = () => process.env.SCHOOL_NAME || 'EDUOVA';
 
 const ensureSchool = async ({ transaction } = {}) => {
+  const models = resolveModels();
   if (!models.Institution) {
     return {
       id: 'school',
@@ -27,14 +38,15 @@ const ensureSchool = async ({ transaction } = {}) => {
   );
 };
 
-const installSingleSchoolLookup = () => {
-  if (!models.Institution || models.Institution.findByPk.__singleSchool) {
+const installSingleSchoolLookup = (models) => {
+  const active = resolveModels(models);
+  if (!active.Institution || active.Institution.findByPk.__singleSchool) {
     return;
   }
 
   const findSingleSchool = async (_id, options) => ensureSchool(options || {});
   findSingleSchool.__singleSchool = true;
-  models.Institution.findByPk = findSingleSchool;
+  active.Institution.findByPk = findSingleSchool;
 };
 
 module.exports = {
