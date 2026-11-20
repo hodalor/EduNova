@@ -1,6 +1,11 @@
 const { createClient } = require('@supabase/supabase-js');
+const WebSocket = require('ws');
 
 const env = require('./env');
+
+if (typeof global.WebSocket === 'undefined') {
+  global.WebSocket = WebSocket;
+}
 
 let supabaseAdmin = null;
 
@@ -18,6 +23,9 @@ const getSupabaseAdmin = () => {
       auth: {
         autoRefreshToken: false,
         persistSession: false,
+      },
+      realtime: {
+        transport: WebSocket,
       },
     });
   }

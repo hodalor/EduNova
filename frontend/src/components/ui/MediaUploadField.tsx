@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
 import { ImageIcon, Loader2, Trash2, UploadCloud } from 'lucide-react';
 import toast from 'react-hot-toast';
 
+import { getApiErrorMessage } from '../../api/axiosInstance';
 import { eduovaApi, type UploadedMedia } from '../../api/eduovaApi';
 import { cn } from '../../lib/cn';
 import Button from './Button';
@@ -67,7 +68,7 @@ const MediaUploadField = ({
       setLocalPreview('');
       toast.success(`${label} uploaded.`);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : `Unable to upload ${label.toLowerCase()}.`);
+      toast.error(getApiErrorMessage(error, `Unable to upload ${label.toLowerCase()}.`));
     } finally {
       setIsUploading(false);
       event.target.value = '';
