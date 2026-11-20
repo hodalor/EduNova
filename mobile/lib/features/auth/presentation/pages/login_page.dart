@@ -91,7 +91,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                         ),
                         const SizedBox(height: 8),
                         const Text(
-                          'Parents, students, and teachers sign in here with email, phone, or student number.',
+                          'Tertiary students sign in with email, phone, or student number.',
                           style: TextStyle(color: AppColors.textMuted),
                         ),
                         const SizedBox(height: 24),

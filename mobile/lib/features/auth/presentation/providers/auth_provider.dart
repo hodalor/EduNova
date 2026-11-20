@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/api/dio_client.dart';
+import '../../../../core/constants/api_config.dart';
 import '../../../../shared/services/notification_service.dart';
 import '../../../../shared/services/storage_service.dart';
 import '../../data/datasources/auth_remote_datasource.dart';
@@ -16,10 +17,7 @@ final storageServiceProvider = Provider<StorageService>((ref) {
 
 final dioClientProvider = Provider<DioClient>((ref) {
   return DioClient(
-    baseUrl: const String.fromEnvironment(
-      'EDUOVA_API_BASE_URL',
-      defaultValue: 'http://localhost:5000/api',
-    ),
+    baseUrl: tertiaryApiBaseUrl,
     storageService: ref.watch(storageServiceProvider),
     onUnauthorized: () {
       ref.invalidate(authProvider);

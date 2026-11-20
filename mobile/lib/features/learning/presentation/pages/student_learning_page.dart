@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -91,6 +92,7 @@ class StudentLearningPage extends ConsumerWidget {
                                   '${item['course_code'] ?? ''} ${item['course_name'] ?? ''}\n${item['material_type'] ?? 'Material'} · ${_formatDateTime(item['created_at'])}',
                                 ),
                                 isThreeLine: true,
+                                onTap: () => _openMaterial(context, item),
                               ),
                             ),
                           )
@@ -99,12 +101,26 @@ class StudentLearningPage extends ConsumerWidget {
                     _RecordList(
                       emptyTitle: 'No quizzes yet',
                       emptySubtitle: 'Published quizzes for your courses will show here.',
-                      children: quizzes.map((item) => _AssessmentTile(item: item)).toList(),
+                      children: quizzes
+                          .map(
+                            (item) => _AssessmentTile(
+                              item: item,
+                              onOpen: () => _openAssessment(context, ref, item),
+                            ),
+                          )
+                          .toList(),
                     ),
                     _RecordList(
                       emptyTitle: 'No assignments yet',
                       emptySubtitle: 'Published assignments for your courses will show here.',
-                      children: assignments.map((item) => _AssessmentTile(item: item)).toList(),
+                      children: assignments
+                          .map(
+                            (item) => _AssessmentTile(
+                              item: item,
+                              onOpen: () => _openAssessment(context, ref, item),
+                            ),
+                          )
+                          .toList(),
                     ),
                     _RecordList(
                       emptyTitle: 'No results yet',
@@ -169,10 +185,157 @@ class StudentLearningPage extends ConsumerWidget {
   }
 }
 
-class _AssessmentTile extends StatelessWidget {
-  const _AssessmentTile({required this.item});
+void _openMaterial(BuildContext context, Map<String, dynamic> item) {
+  final description = item['description']?.toString().trim() ?? '';
+  final attachment = item['attachment_url']?.toString().trim() ?? '';
+  showDialog<void>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Text(item['title']?.toString() ?? 'Library item'),
+      content: Text(
+        [
+          if (description.isNotEmpty) description,
+          if (attachment.isNotEmpty) attachment,
+          if (description.isEmpty && attachment.isEmpty) 'No file has been attached to this item yet.',
+        ].join('\n\n'),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Close')),
+      ],
+    ),
+  );
+}
+
+Future<void> _openAssessment(BuildContext context, WidgetRef ref, Map<String, dynamic> item) async {
+  final submitted = await Navigator.of(context).push<bool>(
+    MaterialPageRoute(builder: (_) => _AssessmentAttemptPage(item: item)),
+  );
+  if (submitted == true) {
+    ref.invalidate(studentLearningHubProvider);
+    ref.invalidate(reportCardsProvider);
+  }
+}
+
+class _AssessmentAttemptPage extends ConsumerStatefulWidget {
+  const _AssessmentAttemptPage({required this.item});
 
   final Map<String, dynamic> item;
+
+  @override
+  ConsumerState<_AssessmentAttemptPage> createState() => _AssessmentAttemptPageState();
+}
+
+class _AssessmentAttemptPageState extends ConsumerState<_AssessmentAttemptPage> {
+  final Map<String, String> _answers = {};
+  bool _submitting = false;
+
+  List<Map<String, dynamic>> get _questions => ((widget.item['questions'] as List?) ?? const [])
+      .whereType<Map>()
+      .map((item) => item.cast<String, dynamic>())
+      .toList();
+
+  Future<void> _submit() async {
+    final id = widget.item['id']?.toString() ?? '';
+    if (id.isEmpty) {
+      return;
+    }
+    setState(() => _submitting = true);
+    try {
+      await ref.read(studentLearningRepositoryProvider).submitAssessment(
+            assessmentId: id,
+            answers: _answers,
+          );
+      if (mounted) {
+        Navigator.of(context).pop(true);
+      }
+    } on DioException catch (error) {
+      final payload = error.response?.data;
+      final message = payload is Map && payload['message'] is String
+          ? payload['message'].toString()
+          : 'Unable to submit this assessment.';
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _submitting = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final questions = _questions;
+    return Scaffold(
+      appBar: AppBar(title: Text(widget.item['title']?.toString() ?? 'Assessment')),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Text(
+            '${widget.item['course_code'] ?? ''} ${widget.item['course_name'] ?? ''}'.trim(),
+            style: const TextStyle(color: AppColors.textMuted),
+          ),
+          if ((widget.item['instructions']?.toString() ?? '').isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(widget.item['instructions'].toString()),
+          ],
+          const SizedBox(height: 16),
+          if (questions.isEmpty)
+            const Text('This assessment has no questions yet.')
+          else
+            ...questions.map((question) {
+              final questionId = question['id']?.toString() ?? '';
+              final options = ((question['options'] as List?) ?? const []).map((item) => item.toString()).toList();
+              return Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(question['prompt']?.toString() ?? 'Question', style: const TextStyle(fontWeight: FontWeight.w700)),
+                      const SizedBox(height: 12),
+                      if (options.isEmpty)
+                        TextFormField(
+                          minLines: 3,
+                          maxLines: 6,
+                          decoration: const InputDecoration(labelText: 'Your answer'),
+                          onChanged: (value) => _answers[questionId] = value,
+                        )
+                      else
+                        ...options.map(
+                          (option) => ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: Icon(
+                              _answers[questionId] == option
+                                  ? Icons.radio_button_checked
+                                  : Icons.radio_button_off,
+                              color: AppColors.primary,
+                            ),
+                            title: Text(option),
+                            onTap: () => setState(() => _answers[questionId] = option),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              );
+            }),
+          const SizedBox(height: 16),
+          FilledButton(
+            onPressed: _submitting || questions.isEmpty ? null : _submit,
+            child: Text(_submitting ? 'Submitting...' : 'Submit'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AssessmentTile extends StatelessWidget {
+  const _AssessmentTile({required this.item, required this.onOpen});
+
+  final Map<String, dynamic> item;
+  final VoidCallback onOpen;
 
   @override
   Widget build(BuildContext context) {
@@ -184,6 +347,7 @@ class _AssessmentTile extends StatelessWidget {
           '${item['course_code'] ?? ''} ${item['course_name'] ?? ''}\nDue ${_formatDateTime(item['due_at'])} · ${item['assessment_type'] ?? 'Assessment'}',
         ),
         isThreeLine: true,
+        onTap: onOpen,
         trailing: Chip(
           label: Text('${item['total_score'] ?? 0} marks'),
           backgroundColor: AppColors.info.withOpacity(0.12),

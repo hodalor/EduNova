@@ -2,6 +2,7 @@ abstract final class AppRoutes {
   static const String login = '/login';
   static const String forgotPassword = '/forgot-password';
   static const String app = '/app';
+  static const String tertiaryOnly = '/app/tertiary-only';
 
   static const String parentHome = '/app/parent/home';
   static const String parentChildren = '/app/parent/children';

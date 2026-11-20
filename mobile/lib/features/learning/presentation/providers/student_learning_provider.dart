@@ -68,6 +68,21 @@ class StudentLearningRepository {
         ((_box.get('student_learning_hub') as Map?) ?? const {}).cast<String, dynamic>();
     return OfflineData(data: cached, isStale: true);
   }
+
+  Future<Map<String, dynamic>> submitAssessment({
+    required String assessmentId,
+    required Map<String, String> answers,
+  }) async {
+    final response = await _ref.read(dioClientProvider).dio.post(
+      '/v1/learning/assessments/$assessmentId/submissions',
+      data: {'answers': answers},
+    );
+    final data = response.data;
+    if (data is Map && data['data'] is Map) {
+      return (data['data'] as Map).cast<String, dynamic>();
+    }
+    return const {};
+  }
 }
 
 final studentLearningRepositoryProvider = Provider<StudentLearningRepository>((ref) {

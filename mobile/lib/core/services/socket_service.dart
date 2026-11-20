@@ -4,6 +4,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:socket_io_client/socket_io_client.dart' as io;
 
+import '../../core/constants/api_config.dart';
 import '../../features/auth/presentation/providers/auth_provider.dart';
 import '../../shared/services/storage_service.dart';
 
@@ -112,12 +113,7 @@ String _normalizeSocketBaseUrl(String value) {
 
 final socketServiceProvider = Provider<SocketService>((ref) {
   final service = SocketService(
-    baseUrl: _normalizeSocketBaseUrl(
-      const String.fromEnvironment(
-        'EDUOVA_API_BASE_URL',
-        defaultValue: 'http://localhost:5000/api',
-      ),
-    ),
+    baseUrl: _normalizeSocketBaseUrl(tertiaryApiBaseUrl),
     storageService: ref.watch(storageServiceProvider),
   );
   ref.onDispose(service.dispose);

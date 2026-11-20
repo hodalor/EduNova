@@ -7,7 +7,7 @@ import toast from 'react-hot-toast';
 import { useAuthStore } from '../store/authStore';
 import { tokenStorage } from '../utils/tokenStorage';
 
-const baseURL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+const baseURL = process.env.REACT_APP_API_URL || 'https://edunova-e4bo.onrender.com/api';
 
 const authApi = axios.create({
   baseURL,

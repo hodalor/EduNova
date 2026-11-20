@@ -6,22 +6,13 @@ import 'package:go_router/go_router.dart';
 import 'core/cache/hive_cache.dart';
 import 'core/constants/app_colors.dart';
 import 'core/constants/app_routes.dart';
-import 'features/academics/presentation/pages/parent_results_page.dart';
 import 'features/academics/presentation/pages/student_courses_page.dart';
-import 'features/academics/presentation/pages/teacher_gradebook_page.dart';
-import 'features/attendance/presentation/pages/parent_attendance_page.dart';
-import 'features/attendance/presentation/pages/teacher_attendance_page.dart';
 import 'features/auth/presentation/pages/forgot_password_page.dart';
 import 'features/auth/presentation/pages/login_page.dart';
 import 'features/auth/presentation/providers/auth_provider.dart';
-import 'features/communication/presentation/pages/chat_page.dart';
-import 'features/dashboard/presentation/pages/parent_home_page.dart';
 import 'features/dashboard/presentation/pages/student_home_page.dart';
-import 'features/dashboard/presentation/pages/teacher_home_page.dart';
-import 'features/finance/presentation/pages/parent_fees_page.dart';
 import 'features/finance/presentation/pages/student_finance_page.dart';
 import 'features/learning/presentation/pages/student_learning_page.dart';
-import 'features/students/presentation/pages/children_page.dart';
 import 'features/students/presentation/pages/student_profile_page.dart';
 import 'shared/navigation/app_shells.dart';
 
@@ -37,19 +28,9 @@ Future<void> main() async {
   runApp(const ProviderScope(child: EduovaMobileApp()));
 }
 
-String _homeForRole(String role) {
-  switch (role.toLowerCase()) {
-    case 'parent':
-    case 'guardian':
-      return AppRoutes.parentHome;
-    case 'student':
-    case 'tertiary_student':
-      return AppRoutes.studentHome;
-    case 'teacher':
-      return AppRoutes.teacherHome;
-    default:
-      return AppRoutes.teacherHome;
-  }
+bool _isTertiaryStudent(String role) {
+  final normalized = role.toLowerCase();
+  return normalized == 'student' || normalized == 'tertiary_student';
 }
 
 final routerProvider = Provider<GoRouter>((ref) {
@@ -66,23 +47,20 @@ final routerProvider = Provider<GoRouter>((ref) {
         return isAuthPage ? null : AppRoutes.login;
       }
 
-      final role = auth.user.role.toLowerCase();
       final location = state.matchedLocation;
-      final isStudent = role == 'student' || role == 'tertiary_student';
-      final isParent = role == 'parent' || role == 'guardian';
+      final isStudent = _isTertiaryStudent(auth.user.role);
 
-      if (isStudent && location.startsWith('/app/parent')) {
+      if (!isStudent) {
+        return location == AppRoutes.tertiaryOnly ? null : AppRoutes.tertiaryOnly;
+      }
+      if (location == AppRoutes.tertiaryOnly ||
+          location.startsWith('/app/parent') ||
+          location.startsWith('/app/teacher')) {
         return AppRoutes.studentHome;
-      }
-      if (isParent && (location.startsWith('/app/student') || location.startsWith('/app/teacher'))) {
-        return AppRoutes.parentHome;
-      }
-      if (!isStudent && !isParent && location.startsWith('/app/student')) {
-        return AppRoutes.teacherHome;
       }
 
       if (location == AppRoutes.app) {
-        return _homeForRole(role);
+        return AppRoutes.studentHome;
       }
 
       if (isAuthPage) {
@@ -104,44 +82,9 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: AppRoutes.app,
         builder: (context, state) => const _LaunchGatePage(),
       ),
-      StatefulShellRoute.indexedStack(
-        builder: (context, state, navigationShell) {
-          return ParentShell(navigationShell: navigationShell);
-        },
-        branches: [
-          StatefulShellBranch(
-            routes: [
-              GoRoute(
-                path: AppRoutes.parentHome,
-                builder: (context, state) => const ParentHomePage(),
-              ),
-            ],
-          ),
-          StatefulShellBranch(
-            routes: [
-              GoRoute(
-                path: AppRoutes.parentChildren,
-                builder: (context, state) => const ChildrenPage(),
-              ),
-            ],
-          ),
-          StatefulShellBranch(
-            routes: [
-              GoRoute(
-                path: AppRoutes.parentFees,
-                builder: (context, state) => const ParentFeesPage(),
-              ),
-            ],
-          ),
-          StatefulShellBranch(
-            routes: [
-              GoRoute(
-                path: AppRoutes.parentMessages,
-                builder: (context, state) => const ChatPage(),
-              ),
-            ],
-          ),
-        ],
+      GoRoute(
+        path: AppRoutes.tertiaryOnly,
+        builder: (context, state) => const _TertiaryOnlyPage(),
       ),
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) {
@@ -190,45 +133,6 @@ final routerProvider = Provider<GoRouter>((ref) {
           ),
         ],
       ),
-      StatefulShellRoute.indexedStack(
-        builder: (context, state, navigationShell) {
-          return TeacherShell(navigationShell: navigationShell);
-        },
-        branches: [
-          StatefulShellBranch(
-            routes: [
-              GoRoute(
-                path: AppRoutes.teacherHome,
-                builder: (context, state) => const TeacherHomePage(),
-              ),
-            ],
-          ),
-          StatefulShellBranch(
-            routes: [
-              GoRoute(
-                path: AppRoutes.teacherAttendance,
-                builder: (context, state) => const TeacherAttendancePage(),
-              ),
-            ],
-          ),
-          StatefulShellBranch(
-            routes: [
-              GoRoute(
-                path: AppRoutes.teacherGradebook,
-                builder: (context, state) => const TeacherGradebookPage(),
-              ),
-            ],
-          ),
-          StatefulShellBranch(
-            routes: [
-              GoRoute(
-                path: AppRoutes.teacherMessages,
-                builder: (context, state) => const ChatPage(),
-              ),
-            ],
-          ),
-        ],
-      ),
     ],
   );
 });
@@ -265,6 +169,46 @@ class EduovaMobileApp extends ConsumerWidget {
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(16),
             borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TertiaryOnlyPage extends ConsumerWidget {
+  const _TertiaryOnlyPage();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Scaffold(
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'This app is for tertiary students.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Parents use the basic education app. Sign in with a tertiary student account to open courses, learning, finance, and results.',
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+              FilledButton(
+                onPressed: () async {
+                  await ref.read(authProvider.notifier).logout();
+                  if (context.mounted) {
+                    context.go(AppRoutes.login);
+                  }
+                },
+                child: const Text('Sign out'),
+              ),
+            ],
           ),
         ),
       ),
