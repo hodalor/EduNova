@@ -8,15 +8,7 @@ module.exports = (sequelize, DataTypes) => {
       primaryKey: true,
       defaultValue: DataTypes.UUIDV4,
     },
-    "institution_id": {
-      type: DataTypes.UUID,
-      allowNull: false,
-      references: {
-        model: "institutions",
-        key: "id",
-      },
-    },
-    "supplier_name": {
+        "supplier_name": {
       type: DataTypes.STRING,
       allowNull: false,
     },
@@ -55,14 +47,12 @@ module.exports = (sequelize, DataTypes) => {
       timestamps: true,
       freezeTableName: true,
       indexes: [
-      { fields: ["institution_id"] },
       { fields: ["ordered_by"] },
       ],
     }
   );
 
   PurchaseOrder.associate = (models) => {
-  PurchaseOrder.belongsTo(models.Institution, { foreignKey: 'institution_id', as: 'institution' });
   PurchaseOrder.belongsTo(models.User, { foreignKey: 'ordered_by', as: 'orderedBy' });
   };
 

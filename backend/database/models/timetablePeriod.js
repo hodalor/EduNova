@@ -8,15 +8,7 @@ module.exports = (sequelize, DataTypes) => {
       primaryKey: true,
       defaultValue: DataTypes.UUIDV4,
     },
-    "institution_id": {
-      type: DataTypes.UUID,
-      allowNull: false,
-      references: {
-        model: "institutions",
-        key: "id",
-      },
-    },
-    "name": {
+        "name": {
       type: DataTypes.STRING,
       allowNull: false,
     },
@@ -41,14 +33,12 @@ module.exports = (sequelize, DataTypes) => {
       timestamps: true,
       freezeTableName: true,
       indexes: [
-      { fields: ["institution_id", "name"], unique: true },
-      { fields: ["institution_id"] },
+      { fields: ["name"], unique: true },
       ],
     }
   );
 
   TimetablePeriod.associate = (models) => {
-  TimetablePeriod.belongsTo(models.Institution, { foreignKey: 'institution_id', as: 'institution' });
   TimetablePeriod.hasMany(models.TimetableSlot, { foreignKey: 'period_id', as: 'slots' });
   };
 

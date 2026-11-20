@@ -8,15 +8,7 @@ module.exports = (sequelize, DataTypes) => {
       primaryKey: true,
       defaultValue: DataTypes.UUIDV4,
     },
-    "institution_id": {
-      type: DataTypes.UUID,
-      allowNull: false,
-      references: {
-        model: "institutions",
-        key: "id",
-      },
-    },
-    "name": {
+        "name": {
       type: DataTypes.STRING,
       allowNull: false,
     },
@@ -55,15 +47,13 @@ module.exports = (sequelize, DataTypes) => {
       timestamps: true,
       freezeTableName: true,
       indexes: [
-      { fields: ["institution_id"] },
-      { fields: ["institution_id", "code"], unique: true },
+      { fields: ["code"], unique: true },
       { fields: ["is_active"] },
       ],
     }
   );
 
   PaymentTerm.associate = (models) => {
-  PaymentTerm.belongsTo(models.Institution, { foreignKey: 'institution_id', as: 'institution' });
   };
 
   return PaymentTerm;

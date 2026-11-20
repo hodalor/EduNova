@@ -8,15 +8,7 @@ module.exports = (sequelize, DataTypes) => {
       primaryKey: true,
       defaultValue: DataTypes.UUIDV4,
     },
-    "institution_id": {
-      type: DataTypes.UUID,
-      allowNull: false,
-      references: {
-        model: "institutions",
-        key: "id",
-      },
-    },
-    "created_by": {
+        "created_by": {
       type: DataTypes.UUID,
       references: {
         model: "users",
@@ -37,7 +29,7 @@ module.exports = (sequelize, DataTypes) => {
       defaultValue: [],
     },
     "target_levels": {
-      type: DataTypes.ARRAY(DataTypes.ENUM("DC", "PR", "JH", "SH", "TR")),
+      type: DataTypes.ARRAY(DataTypes.ENUM("TR")),
       allowNull: false,
       defaultValue: [],
     },
@@ -65,14 +57,12 @@ module.exports = (sequelize, DataTypes) => {
       timestamps: true,
       freezeTableName: true,
       indexes: [
-      { fields: ["institution_id"] },
       { fields: ["created_by"] },
       ],
     }
   );
 
   Announcement.associate = (models) => {
-  Announcement.belongsTo(models.Institution, { foreignKey: 'institution_id', as: 'institution' });
   Announcement.belongsTo(models.User, { foreignKey: 'created_by', as: 'createdBy' });
   };
 

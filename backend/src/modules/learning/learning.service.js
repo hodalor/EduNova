@@ -109,7 +109,7 @@ const resolveStudentContext = async ({ institutionId, userId, settings, authStud
 
   if (!studentId && models.Student) {
     const linkedStudent = await models.Student.findOne({
-      where: { institution_id: institutionId, user_id: userId },
+      where: { user_id: userId },
       attributes: ['id'],
     }).catch(() => null);
     studentId = linkedStudent?.id || null;
@@ -117,7 +117,7 @@ const resolveStudentContext = async ({ institutionId, userId, settings, authStud
 
   if (!studentId) {
     const runtimeStudent = (store.students?.profiles || []).find(
-      (item) => item.institution_id === institutionId && item.user_id === userId
+      (item) => item.user_id === userId
     );
     studentId = runtimeStudent?.id || null;
   }

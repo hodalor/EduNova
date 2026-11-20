@@ -23,7 +23,7 @@ module.exports = {
     if (req.user?.role === 'student') {
       const linkedStudent = models.Student
         ? await models.Student.findOne({
-            where: { user_id: req.user.id, institution_id: req.institutionId },
+            where: { user_id: req.user.id, },
             attributes: ['id'],
           }).catch(() => null)
         : null;

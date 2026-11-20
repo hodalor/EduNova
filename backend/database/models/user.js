@@ -8,15 +8,7 @@ module.exports = (sequelize, DataTypes) => {
       primaryKey: true,
       defaultValue: DataTypes.UUIDV4,
     },
-    "institution_id": {
-      type: DataTypes.UUID,
-      allowNull: false,
-      references: {
-        model: "institutions",
-        key: "id",
-      },
-    },
-    "email": {
+        "email": {
       type: DataTypes.STRING,
       allowNull: false,
     },
@@ -76,15 +68,13 @@ module.exports = (sequelize, DataTypes) => {
       timestamps: true,
       freezeTableName: true,
       indexes: [
-      { fields: ["email", "institution_id"], unique: true },
-      { fields: ["institution_id", "phone"] },
-      { fields: ["institution_id"] },
+      { fields: ["email"], unique: true },
+      { fields: ["phone"] },
       ],
     }
   );
 
   User.associate = (models) => {
-  User.belongsTo(models.Institution, { foreignKey: 'institution_id', as: 'institution' });
   User.hasOne(models.Student, { foreignKey: 'user_id', as: 'studentProfile' });
   User.hasOne(models.Guardian, { foreignKey: 'user_id', as: 'guardianProfile' });
   User.hasOne(models.Staff, { foreignKey: 'user_id', as: 'staffProfile' });

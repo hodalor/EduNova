@@ -8,15 +8,7 @@ module.exports = (sequelize, DataTypes) => {
       primaryKey: true,
       defaultValue: DataTypes.UUIDV4,
     },
-    "institution_id": {
-      type: DataTypes.UUID,
-      allowNull: false,
-      references: {
-        model: "institutions",
-        key: "id",
-      },
-    },
-    "level_id": {
+        "level_id": {
       type: DataTypes.UUID,
       references: {
         model: "education_levels",
@@ -53,15 +45,13 @@ module.exports = (sequelize, DataTypes) => {
       timestamps: true,
       freezeTableName: true,
       indexes: [
-      { fields: ["institution_id", "level_id", "name", "grade"], unique: true },
-      { fields: ["institution_id"] },
+      { fields: ["level_id", "name", "grade"], unique: true },
       { fields: ["level_id"] },
       ],
     }
   );
 
   GradeScale.associate = (models) => {
-  GradeScale.belongsTo(models.Institution, { foreignKey: 'institution_id', as: 'institution' });
   GradeScale.belongsTo(models.EducationLevel, { foreignKey: 'level_id', as: 'level' });
   };
 

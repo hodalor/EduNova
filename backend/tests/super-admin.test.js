@@ -5,10 +5,9 @@ jest.mock('../src/modules/auth/auth.middleware', () => ({
     req.user = {
       id: 'super-admin-1',
       role: 'super_admin',
-      institution_id: 'platform',
       institution: { id: 'platform', subscription_plan: 'enterprise' },
     };
-    req.auth = { institution_id: 'platform' };
+    req.auth = { };
     next();
   },
   resolveInstitution: (req, _res, next) => {

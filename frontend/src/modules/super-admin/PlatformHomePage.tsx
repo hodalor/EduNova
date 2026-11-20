@@ -9,25 +9,15 @@ const PlatformHomePage = () => {
     <div className="space-y-6">
       <PageHeader
         title="Super Admin Control Plane"
-        description="Manage institutions, platform users, tenant databases, subscriptions, analytics, and school scope from the control plane."
+        description="Manage platform users, analytics, and the audit trail for this school."
       />
 
       <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
         {[
           {
-            title: 'Institutions',
-            description: 'Monitor school lifecycle, plan status, and operational health.',
-            to: '/super-admin/institutions',
-          },
-          {
             title: 'Platform Users',
             description: 'Create and manage super admin accounts for the control plane.',
             to: '/super-admin/users',
-          },
-          {
-            title: 'Onboard School',
-            description: 'Provision a new institution and first admin account.',
-            to: '/super-admin/institutions/new',
           },
           {
             title: 'Platform Analytics',

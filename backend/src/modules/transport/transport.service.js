@@ -3,11 +3,11 @@ const { store } = require('../../shared/store/runtime-store');
 const socketService = require('../notifications/socket.service');
 
 const listVehicles = async ({ institutionId }) =>
-  store.transport.vehicles.filter((vehicle) => vehicle.institution_id === institutionId);
+  store.transport.vehicles.filter((vehicle) => true);
 
 const getVehicleLocation = async ({ institutionId, vehicleId }) => {
   const vehicle = store.transport.vehicles.find(
-    (item) => item.vehicle_id === vehicleId && item.institution_id === institutionId
+    (item) => item.vehicle_id === vehicleId
   );
   if (!vehicle) {
     throw Object.assign(new Error('Vehicle not found.'), { statusCode: 404 });

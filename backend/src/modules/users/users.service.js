@@ -43,7 +43,6 @@ const setCustomPermissionsInSettings = ({ settings, userId, permissions }) => {
 
 const serializeRuntimeUser = (item) => ({
   id: item.id,
-  institution_id: item.institution_id,
   email: item.email,
   phone: item.phone,
   role: item.role,
@@ -66,12 +65,12 @@ const listUsersFromRuntime = async ({ institutionId, role }) =>
   store.users.accounts
     .filter(
       (item) =>
-        item.institution_id === institutionId && (!role || item.role === role)
+        (!role || item.role === role)
     )
     .map(serializeRuntimeUser);
 
 const listUsersFromDatabase = async ({ institutionId, role }) => {
-  const where = { institution_id: institutionId };
+  const where = { };
   if (role) {
     where.role = role;
   }
@@ -95,7 +94,6 @@ const listUsersFromDatabase = async ({ institutionId, role }) => {
       });
       return {
         id: user.id,
-        institution_id: user.institution_id,
         email: user.email,
         phone: user.phone,
         role: user.role,
@@ -147,7 +145,7 @@ const incrementInstitutionStaffCount = (institutionId) => {
 const createUserInRuntime = async ({ institutionId, payload, actorId, ip }) => {
   const email = String(payload.email || '').trim().toLowerCase();
   const duplicateEmail = store.users.accounts.find(
-    (item) => item.institution_id === institutionId && item.email === email
+    (item) => item.email === email
   );
   if (duplicateEmail) {
     throw Object.assign(new Error('A user with this email already exists.'), { statusCode: 409 });
@@ -155,7 +153,6 @@ const createUserInRuntime = async ({ institutionId, payload, actorId, ip }) => {
 
   const duplicateStaffNumber = store.users.accounts.find(
     (item) =>
-      item.institution_id === institutionId &&
       item.staff_number.toLowerCase() === String(payload.staff_number || '').trim().toLowerCase()
   );
   if (duplicateStaffNumber) {
@@ -166,7 +163,6 @@ const createUserInRuntime = async ({ institutionId, payload, actorId, ip }) => {
 
   const account = {
     id: `usr-${String(store.users.accounts.length + 1).padStart(3, '0')}`,
-    institution_id: institutionId,
     email,
     phone: payload.phone || null,
     role: payload.role,
@@ -205,14 +201,14 @@ const createUserInDatabase = async ({ institutionId, payload, actorId, ip }) => 
   const normalizedStaffNumber = String(payload.staff_number || '').trim();
 
   const existingUser = await models.User.findOne({
-    where: { institution_id: institutionId, email },
+    where: { email },
   });
   if (existingUser) {
     throw Object.assign(new Error('A user with this email already exists.'), { statusCode: 409 });
   }
 
   const existingStaff = await models.Staff.findOne({
-    where: { institution_id: institutionId, staff_number: normalizedStaffNumber },
+    where: { staff_number: normalizedStaffNumber },
   });
   if (existingStaff) {
     throw Object.assign(new Error('A user with this staff number already exists.'), {
@@ -229,7 +225,6 @@ const createUserInDatabase = async ({ institutionId, payload, actorId, ip }) => 
     });
     const user = await models.User.create(
       {
-        institution_id: institutionId,
         email,
         phone: payload.phone || null,
         password_hash: await hashPassword(payload.temporary_password),
@@ -244,7 +239,6 @@ const createUserInDatabase = async ({ institutionId, payload, actorId, ip }) => 
     const staff = await models.Staff.create(
       {
         user_id: user.id,
-        institution_id: institutionId,
         staff_number: normalizedStaffNumber,
         department: payload.department,
         designation: payload.designation,
@@ -272,7 +266,6 @@ const createUserInDatabase = async ({ institutionId, payload, actorId, ip }) => 
 
     const response = {
       id: user.id,
-      institution_id: institutionId,
       email: user.email,
       phone: user.phone,
       role: user.role,
@@ -332,7 +325,7 @@ const updateUser = async ({ institutionId, userId, payload, actorId, ip }) => {
         transaction,
       });
       const user = await models.User.findOne({
-        where: { id: userId, institution_id: institutionId },
+        where: { id: userId, },
         include: [{ model: models.Staff, as: 'staffProfile', required: false }],
         transaction,
       });
@@ -343,7 +336,6 @@ const updateUser = async ({ institutionId, userId, payload, actorId, ip }) => {
       const email = String(payload.email || '').trim().toLowerCase();
       const duplicateEmail = await models.User.findOne({
         where: {
-          institution_id: institutionId,
           email,
           id: { [Op.ne]: userId },
         },
@@ -356,7 +348,6 @@ const updateUser = async ({ institutionId, userId, payload, actorId, ip }) => {
       const normalizedStaffNumber = String(payload.staff_number || '').trim();
       const duplicateStaff = await models.Staff.findOne({
         where: {
-          institution_id: institutionId,
           staff_number: normalizedStaffNumber,
           user_id: { [Op.ne]: userId },
         },
@@ -405,7 +396,6 @@ const updateUser = async ({ institutionId, userId, payload, actorId, ip }) => {
 
       const response = {
         id: user.id,
-        institution_id: institutionId,
         email: user.email,
         phone: user.phone,
         role: user.role,
@@ -441,7 +431,7 @@ const updateUser = async ({ institutionId, userId, payload, actorId, ip }) => {
   }
 
   const runtimeUser = store.users.accounts.find(
-    (item) => item.id === userId && item.institution_id === institutionId
+    (item) => item.id === userId
   );
   if (!runtimeUser) {
     throw Object.assign(new Error('User not found.'), { statusCode: 404 });
@@ -481,7 +471,7 @@ const updateUserAccess = async ({ institutionId, userId, payload, actorId, ip })
       throw Object.assign(new Error('Institution not found.'), { statusCode: 404 });
     }
     const user = await models.User.findOne({
-      where: { id: userId, institution_id: institutionId },
+      where: { id: userId, },
     });
     if (!user) {
       throw Object.assign(new Error('User not found.'), { statusCode: 404 });
@@ -514,7 +504,7 @@ const updateUserAccess = async ({ institutionId, userId, payload, actorId, ip })
   }
 
   const runtimeUser = store.users.accounts.find(
-    (item) => item.id === userId && item.institution_id === institutionId
+    (item) => item.id === userId
   );
   if (!runtimeUser) {
     throw Object.assign(new Error('User not found.'), { statusCode: 404 });
@@ -543,7 +533,7 @@ const deleteUser = async ({ institutionId, userId, actorId, ip }) => {
     try {
       const institution = await models.Institution.findByPk(institutionId, { transaction });
       const user = await models.User.findOne({
-        where: { id: userId, institution_id: institutionId },
+        where: { id: userId, },
         include: [{ model: models.Staff, as: 'staffProfile', required: false }],
         transaction,
       });
@@ -582,7 +572,7 @@ const deleteUser = async ({ institutionId, userId, actorId, ip }) => {
   }
 
   const index = store.users.accounts.findIndex(
-    (item) => item.id === userId && item.institution_id === institutionId
+    (item) => item.id === userId
   );
   if (index < 0) {
     throw Object.assign(new Error('User not found.'), { statusCode: 404 });
@@ -601,7 +591,6 @@ const deleteUser = async ({ institutionId, userId, actorId, ip }) => {
 
 const serializeParent = (item) => ({
   id: item.id,
-  institution_id: item.institution_id,
   email: item.email,
   phone: item.phone,
   role: item.role,
@@ -616,7 +605,7 @@ const searchParentsFromRuntime = async ({ institutionId, search, limit = 20 }) =
   const query = String(search || '').trim().toLowerCase();
   const matches = store.users.accounts
     .filter((item) => {
-      if (item.institution_id !== institutionId || item.role !== 'parent') return false;
+      if (item.role !== 'parent') return false;
       if (!query) return true;
       const full = `${item.first_name || ''} ${item.last_name || ''}`.toLowerCase();
       return (
@@ -630,7 +619,7 @@ const searchParentsFromRuntime = async ({ institutionId, search, limit = 20 }) =
 };
 
 const searchParentsFromDatabase = async ({ institutionId, search, limit = 20 }) => {
-  const where = { institution_id: institutionId, role: 'parent' };
+  const where = { role: 'parent' };
   const query = String(search || '').trim();
   if (query) {
     where[Op.or] = [

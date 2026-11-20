@@ -8,7 +8,7 @@ const { parsePagination, successMeta } = require('../../shared/helpers/common');
 const { enqueueNotification } = require('./notification.queue');
 
 const pickRecipients = async ({ institutionId, roles = [], targetIds = [] }) => {
-  const where = { institution_id: institutionId };
+  const where = { };
 
   if (targetIds.length) {
     where.id = { [Op.in]: targetIds };
@@ -33,7 +33,6 @@ const saveAndDispatch = async ({
 }) => {
   const recipients = await pickRecipients({ institutionId, roles: targetRoles, targetIds });
   const notification = await models.Notification.create({
-    institution_id: institutionId,
     sender_id: senderId,
     title,
     body,
@@ -85,7 +84,6 @@ const broadcast = async ({ institutionId, senderId, payload }) =>
 const getInbox = async ({ user, query }) => {
   const { page, limit, offset } = parsePagination(query);
   const where = {
-    institution_id: user.institution_id,
     [Op.or]: [
       { target_ids: { [Op.contains]: [user.id] } },
       { target_roles: { [Op.contains]: [user.role] } },
@@ -110,7 +108,6 @@ const markAsRead = async ({ id }) => ({ id, success: true });
 const unreadCount = async ({ user }) => {
   const unread = await models.Notification.count({
     where: {
-      institution_id: user.institution_id,
       [Op.or]: [
         { target_ids: { [Op.contains]: [user.id] } },
         { target_roles: { [Op.contains]: [user.role] } },
@@ -123,20 +120,19 @@ const unreadCount = async ({ user }) => {
 
 const createAnnouncement = async ({ institutionId, userId, payload }) =>
   models.Announcement.create({
-    institution_id: institutionId,
     created_by: userId,
     ...payload,
   });
 
 const listAnnouncements = async ({ institutionId }) =>
   models.Announcement.findAll({
-    where: { institution_id: institutionId },
+    where: { },
     order: [['publish_at', 'DESC']],
   });
 
 const getAnnouncement = async ({ institutionId, id }) =>
   models.Announcement.findOne({
-    where: { institution_id: institutionId, id },
+    where: { id },
   });
 
 const publishAnnouncement = async ({ institutionId, id }) => {
@@ -150,7 +146,6 @@ const publishAnnouncement = async ({ institutionId, id }) => {
 
 const sendMessage = async ({ institutionId, senderId, payload }) => {
   const message = await models.Message.create({
-    institution_id: institutionId,
     sender_id: senderId,
     ...payload,
   });
@@ -171,7 +166,6 @@ const sendMessage = async ({ institutionId, senderId, payload }) => {
 const listThreads = async ({ institutionId, userId }) =>
   models.Message.findAll({
     where: {
-      institution_id: institutionId,
       [Op.or]: [{ sender_id: userId }, { recipient_id: userId }],
     },
     order: [['created_at', 'DESC']],
@@ -180,7 +174,6 @@ const listThreads = async ({ institutionId, userId }) =>
 const getThreadMessages = async ({ institutionId, threadId, userId }) =>
   models.Message.findAll({
     where: {
-      institution_id: institutionId,
       thread_id: threadId,
       [Op.or]: [{ sender_id: userId }, { recipient_id: userId }],
     },
@@ -189,7 +182,7 @@ const getThreadMessages = async ({ institutionId, threadId, userId }) =>
 
 const deleteMessage = async ({ institutionId, id, userId }) => {
   const message = await models.Message.findOne({
-    where: { institution_id: institutionId, id },
+    where: { id },
   });
   if (!message) {
     throw Object.assign(new Error('Message not found.'), { status: 404 });

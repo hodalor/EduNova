@@ -7,12 +7,10 @@ class LoginUseCase {
   final AuthRemoteDataSource _remoteDataSource;
 
   Future<AuthModel> call({
-    required String institutionCode,
     required String identity,
     required String password,
   }) {
     return _remoteDataSource.login(
-      institutionCode: institutionCode,
       identity: identity,
       password: password,
     );

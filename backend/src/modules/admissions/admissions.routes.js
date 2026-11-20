@@ -7,8 +7,8 @@ const { generalApiRateLimiter } = require('../../shared/middleware/rateLimits');
 
 const router = express.Router();
 
-router.get('/public/:code', generalApiRateLimiter, controller.getPublicCatalog);
-router.post('/public/:code/applications', generalApiRateLimiter, controller.submitApplication);
+router.get('/public', generalApiRateLimiter, controller.getPublicCatalog);
+router.post('/public/applications', generalApiRateLimiter, controller.submitApplication);
 
 router.use(
   authenticate,

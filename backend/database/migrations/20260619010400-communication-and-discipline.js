@@ -21,7 +21,7 @@ module.exports = {
         IF NOT EXISTS (
           SELECT 1 FROM pg_type WHERE typname = 'enum_announcements_target_levels'
         ) THEN
-          CREATE TYPE "enum_announcements_target_levels" AS ENUM ('DC', 'PR', 'JH', 'SH', 'TR');
+          CREATE TYPE "enum_announcements_target_levels" AS ENUM ('TR');
         END IF;
       END $$;
     `);
@@ -45,17 +45,7 @@ module.exports = {
       "deleted_at": {
         type: Sequelize.DATE,
       },
-      "institution_id": {
-        type: Sequelize.UUID,
-        allowNull: false,
-        references: {
-          model: "institutions",
-          key: "id",
-        },
-        onUpdate: "CASCADE",
-        onDelete: "CASCADE",
-      },
-      "sender_id": {
+            "sender_id": {
         type: Sequelize.UUID,
         references: {
           model: "users",
@@ -101,7 +91,6 @@ module.exports = {
         defaultValue: "draft",
       },
     });
-    await queryInterface.addIndex("notifications", ["institution_id"]);
     await queryInterface.addIndex("notifications", ["sender_id"]);
     await queryInterface.createTable("messages", {
       "id": {
@@ -123,17 +112,7 @@ module.exports = {
       "deleted_at": {
         type: Sequelize.DATE,
       },
-      "institution_id": {
-        type: Sequelize.UUID,
-        allowNull: false,
-        references: {
-          model: "institutions",
-          key: "id",
-        },
-        onUpdate: "CASCADE",
-        onDelete: "CASCADE",
-      },
-      "sender_id": {
+            "sender_id": {
         type: Sequelize.UUID,
         allowNull: false,
         references: {
@@ -180,7 +159,6 @@ module.exports = {
       },
     });
     await queryInterface.addIndex("messages", ["thread_id"]);
-    await queryInterface.addIndex("messages", ["institution_id"]);
     await queryInterface.addIndex("messages", ["sender_id"]);
     await queryInterface.addIndex("messages", ["recipient_id"]);
     await queryInterface.createTable("announcements", {
@@ -203,17 +181,7 @@ module.exports = {
       "deleted_at": {
         type: Sequelize.DATE,
       },
-      "institution_id": {
-        type: Sequelize.UUID,
-        allowNull: false,
-        references: {
-          model: "institutions",
-          key: "id",
-        },
-        onUpdate: "CASCADE",
-        onDelete: "CASCADE",
-      },
-      "created_by": {
+            "created_by": {
         type: Sequelize.UUID,
         references: {
           model: "users",
@@ -257,7 +225,6 @@ module.exports = {
         defaultValue: false,
       },
     });
-    await queryInterface.addIndex("announcements", ["institution_id"]);
     await queryInterface.addIndex("announcements", ["created_by"]);
     await queryInterface.createTable("discipline_incidents", {
       "id": {
@@ -279,17 +246,7 @@ module.exports = {
       "deleted_at": {
         type: Sequelize.DATE,
       },
-      "institution_id": {
-        type: Sequelize.UUID,
-        allowNull: false,
-        references: {
-          model: "institutions",
-          key: "id",
-        },
-        onUpdate: "CASCADE",
-        onDelete: "CASCADE",
-      },
-      "student_id": {
+            "student_id": {
         type: Sequelize.UUID,
         allowNull: false,
         references: {
@@ -346,7 +303,6 @@ module.exports = {
         defaultValue: "open",
       },
     });
-    await queryInterface.addIndex("discipline_incidents", ["institution_id"]);
     await queryInterface.addIndex("discipline_incidents", ["student_id"]);
     await queryInterface.addIndex("discipline_incidents", ["reported_by"]);
     await queryInterface.createTable("demerit_points", {

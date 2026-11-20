@@ -8,15 +8,7 @@ module.exports = (sequelize, DataTypes) => {
       primaryKey: true,
       defaultValue: DataTypes.UUIDV4,
     },
-    "institution_id": {
-      type: DataTypes.UUID,
-      allowNull: false,
-      references: {
-        model: "institutions",
-        key: "id",
-      },
-    },
-    "name": {
+        "name": {
       type: DataTypes.STRING,
       allowNull: false,
     },
@@ -43,15 +35,13 @@ module.exports = (sequelize, DataTypes) => {
       timestamps: true,
       freezeTableName: true,
       indexes: [
-      { fields: ["institution_id", "name"], unique: true },
-      { fields: ["institution_id"] },
+      { fields: ["name"], unique: true },
       { fields: ["warden_id"] },
       ],
     }
   );
 
   Hostel.associate = (models) => {
-  Hostel.belongsTo(models.Institution, { foreignKey: 'institution_id', as: 'institution' });
   Hostel.belongsTo(models.Staff, { foreignKey: 'warden_id', as: 'warden' });
   Hostel.hasMany(models.HostelRoom, { foreignKey: 'hostel_id', as: 'rooms' });
   Hostel.hasMany(models.HostelAllocation, { foreignKey: 'hostel_id', as: 'allocations' });

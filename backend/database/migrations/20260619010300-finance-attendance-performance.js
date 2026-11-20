@@ -22,17 +22,7 @@ module.exports = {
       "deleted_at": {
         type: Sequelize.DATE,
       },
-      "institution_id": {
-        type: Sequelize.UUID,
-        allowNull: false,
-        references: {
-          model: "institutions",
-          key: "id",
-        },
-        onUpdate: "CASCADE",
-        onDelete: "CASCADE",
-      },
-      "level_id": {
+            "level_id": {
         type: Sequelize.UUID,
         references: {
           model: "education_levels",
@@ -96,9 +86,8 @@ module.exports = {
         defaultValue: 0,
       },
     });
-    await queryInterface.addIndex("fee_structures", ["institution_id", "academic_year_id"]);
-    await queryInterface.addIndex("fee_structures", ["institution_id", "academic_year_id", "fee_type", "level_id", "class_id", "term_id"], { unique: true });
-    await queryInterface.addIndex("fee_structures", ["institution_id"]);
+    await queryInterface.addIndex("fee_structures", ["academic_year_id"]);
+    await queryInterface.addIndex("fee_structures", ["academic_year_id", "fee_type", "level_id", "class_id", "term_id"], { unique: true });
     await queryInterface.addIndex("fee_structures", ["level_id"]);
     await queryInterface.addIndex("fee_structures", ["class_id"]);
     await queryInterface.addIndex("fee_structures", ["academic_year_id"]);
@@ -133,17 +122,7 @@ module.exports = {
         onUpdate: "CASCADE",
         onDelete: "CASCADE",
       },
-      "institution_id": {
-        type: Sequelize.UUID,
-        allowNull: false,
-        references: {
-          model: "institutions",
-          key: "id",
-        },
-        onUpdate: "CASCADE",
-        onDelete: "CASCADE",
-      },
-      "academic_year_id": {
+            "academic_year_id": {
         type: Sequelize.UUID,
         allowNull: false,
         references: {
@@ -193,10 +172,9 @@ module.exports = {
         defaultValue: [],
       },
     });
-    await queryInterface.addIndex("student_invoices", ["institution_id", "academic_year_id"]);
-    await queryInterface.addIndex("student_invoices", ["institution_id", "invoice_number"], { unique: true });
+    await queryInterface.addIndex("student_invoices", ["academic_year_id"]);
+    await queryInterface.addIndex("student_invoices", ["invoice_number"], { unique: true });
     await queryInterface.addIndex("student_invoices", ["student_id"]);
-    await queryInterface.addIndex("student_invoices", ["institution_id"]);
     await queryInterface.addIndex("student_invoices", ["academic_year_id"]);
     await queryInterface.addIndex("student_invoices", ["term_id"]);
     await queryInterface.createTable("payments", {
@@ -300,17 +278,7 @@ module.exports = {
       "deleted_at": {
         type: Sequelize.DATE,
       },
-      "institution_id": {
-        type: Sequelize.UUID,
-        allowNull: false,
-        references: {
-          model: "institutions",
-          key: "id",
-        },
-        onUpdate: "CASCADE",
-        onDelete: "CASCADE",
-      },
-      "name": {
+            "name": {
         type: Sequelize.STRING,
         allowNull: false,
       },
@@ -318,8 +286,7 @@ module.exports = {
         type: Sequelize.TEXT,
       },
     });
-    await queryInterface.addIndex("expense_categories", ["institution_id", "name"], { unique: true });
-    await queryInterface.addIndex("expense_categories", ["institution_id"]);
+    await queryInterface.addIndex("expense_categories", ["name"], { unique: true });
     await queryInterface.createTable("expenses", {
       "id": {
         type: Sequelize.UUID,
@@ -340,17 +307,7 @@ module.exports = {
       "deleted_at": {
         type: Sequelize.DATE,
       },
-      "institution_id": {
-        type: Sequelize.UUID,
-        allowNull: false,
-        references: {
-          model: "institutions",
-          key: "id",
-        },
-        onUpdate: "CASCADE",
-        onDelete: "CASCADE",
-      },
-      "category_id": {
+            "category_id": {
         type: Sequelize.UUID,
         allowNull: false,
         references: {
@@ -396,7 +353,6 @@ module.exports = {
         defaultValue: "pending",
       },
     });
-    await queryInterface.addIndex("expenses", ["institution_id"]);
     await queryInterface.addIndex("expenses", ["category_id"]);
     await queryInterface.addIndex("expenses", ["approved_by"]);
     await queryInterface.createTable("attendance_sessions", {
@@ -754,17 +710,7 @@ module.exports = {
       "deleted_at": {
         type: Sequelize.DATE,
       },
-      "institution_id": {
-        type: Sequelize.UUID,
-        allowNull: false,
-        references: {
-          model: "institutions",
-          key: "id",
-        },
-        onUpdate: "CASCADE",
-        onDelete: "CASCADE",
-      },
-      "level_id": {
+            "level_id": {
         type: Sequelize.UUID,
         references: {
           model: "education_levels",
@@ -796,8 +742,7 @@ module.exports = {
         type: Sequelize.STRING,
       },
     });
-    await queryInterface.addIndex("grade_scales", ["institution_id", "level_id", "name", "grade"], { unique: true });
-    await queryInterface.addIndex("grade_scales", ["institution_id"]);
+    await queryInterface.addIndex("grade_scales", ["level_id", "name", "grade"], { unique: true });
     await queryInterface.addIndex("grade_scales", ["level_id"]);
     await queryInterface.createTable("report_cards", {
       "id": {

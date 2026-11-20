@@ -54,7 +54,6 @@ const buildProfile = async (user) => {
 
     return {
       id: user.id,
-      institution_id: user.institution_id,
       email: user.email,
       username: resolvePlatformUsername(user),
       phone: null,
@@ -70,7 +69,7 @@ const buildProfile = async (user) => {
     };
   }
 
-  const institution = user.institution || (await models.Institution.findByPk(user.institution_id));
+  const institution = user.institution || (await models.Institution.findOne());
   const customPermissions = getCustomPermissionsForUser({ institution, userId: user.id });
   const linkedStudent =
     user.role === 'student' && models.Student
@@ -84,7 +83,6 @@ const buildProfile = async (user) => {
     id: user.id,
     student_id: linkedStudent?.id || null,
     student_number: linkedStudent?.student_number || null,
-    institution_id: user.institution_id,
     email: user.email,
     phone: user.phone,
     role: user.role,
@@ -99,61 +97,10 @@ const buildProfile = async (user) => {
   };
 };
 
-const resolveInstitutionId = async ({ institution_id, institution_code }) => {
-  const normalizedCode = String(institution_code || '').trim().toUpperCase();
-
-  if (normalizedCode === PLATFORM_CODE) {
-    const platformInstitution = await ensurePlatformInstitution();
-    return platformInstitution.id;
-  }
-
-  if (institution_id) {
-    return institution_id;
-  }
-
-  const institution = await models.Institution.findOne({
-    where: { code: normalizedCode },
-  });
-  if (!institution) {
-    throw Object.assign(new Error('Institution not found.'), { status: 404 });
-  }
-
-  return institution.id;
-};
-
-const login = async ({ email, identity, password, institution_id, institution_code, otp_code }) => {
+const login = async ({ email, identity, password, otp_code }) => {
   const rawIdentity = String(email || identity || '').trim();
   const loginIdentity = rawIdentity.toLowerCase();
-  const isPlatformLogin = String(institution_code || '').trim().toUpperCase() === PLATFORM_CODE;
-
-  if (isPlatformLogin) {
-    const superAdmin = await findPlatformUserByIdentity(loginIdentity);
-    if (!superAdmin || !superAdmin.is_active) {
-      throw Object.assign(new Error('Invalid super admin credentials.'), { status: 401 });
-    }
-    const valid = await comparePassword(password, superAdmin.password_hash);
-    if (!valid) {
-      throw Object.assign(new Error('Invalid super admin credentials.'), { status: 401 });
-    }
-
-    await superAdmin.update({ last_login: new Date() });
-
-    const access_token = signAccessToken(superAdmin);
-    const refresh_token = await signRefreshToken(superAdmin);
-
-    return {
-      user: await buildProfile(superAdmin),
-      institution: serializePlatformInstitution(superAdmin.institution),
-      permissions: getPermissionsForRole(superAdmin.role),
-      tokens: {
-        access_token,
-        refresh_token,
-        expires_in: 15 * 60,
-      },
-    };
-  }
-
-  const institutionId = await resolveInstitutionId({ institution_id, institution_code });
+  const institutionId = 'school';
   const lock = await isLocked(loginIdentity, institutionId);
   if (lock.locked) {
     throw Object.assign(new Error(`Account locked. Try again in ${lock.retryIn} seconds.`), { status: 429 });
@@ -161,13 +108,11 @@ const login = async ({ email, identity, password, institution_id, institution_co
 
   let user = await models.User.findOne({
     where: {
-      institution_id: institutionId,
       [Op.or]: [
         { email: email || loginIdentity },
         ...(email ? [] : [{ phone: loginIdentity }]),
       ],
     },
-    include: [{ model: models.Institution, as: 'institution' }],
   });
 
   if (!user && !email && models.Student) {
@@ -176,7 +121,6 @@ const login = async ({ email, identity, password, institution_id, institution_co
     );
     const linkedStudent = await models.Student.findOne({
       where: {
-        institution_id: institutionId,
         [Op.or]: [
           { student_number: { [Op.in]: identityVariants } },
           { admission_number: { [Op.in]: identityVariants } },
@@ -187,7 +131,6 @@ const login = async ({ email, identity, password, institution_id, institution_co
           model: models.User,
           as: 'user',
           required: true,
-          include: [{ model: models.Institution, as: 'institution' }],
         },
       ],
     }).catch(() => null);
@@ -202,7 +145,7 @@ const login = async ({ email, identity, password, institution_id, institution_co
   const valid = await comparePassword(password, user.password_hash);
   if (!valid) {
     await recordFailedLogin(loginIdentity, institutionId);
-    logger.warn('Failed login attempt', { identity: loginIdentity, institution_id: institutionId, user_id: user.id });
+    logger.warn('Failed login attempt', { identity: loginIdentity, user_id: user.id });
     throw Object.assign(new Error('Invalid login details. Use email, phone, or student number with the correct password.'), { status: 401 });
   }
 
@@ -230,7 +173,7 @@ const login = async ({ email, identity, password, institution_id, institution_co
   const access_token = signAccessToken(user, profile.permissions);
   const refresh_token = await signRefreshToken(user);
 
-  logger.info('User logged in', { user_id: user.id, institution_id: user.institution_id });
+  logger.info('User logged in', { user_id: user.id, });
 
   return {
     user: profile,
@@ -279,7 +222,7 @@ const refresh = async ({ refresh_token }) => {
           hypothesisId: 'A',
           location: 'backend/src/modules/auth/auth.service.js:refresh-entry',
           msg: '[DEBUG] refresh entry',
-          data: { sub: payload.sub, role: payload.role, institution_id: payload.institution_id, jti: payload.jti },
+          data: { sub: payload.sub, role: payload.role, jti: payload.jti },
           ts: Date.now(),
         }),
       }).catch(() => {});
@@ -322,8 +265,7 @@ const refresh = async ({ refresh_token }) => {
       payload.role === 'super_admin'
         ? await findPlatformUserById(payload.sub)
         : await models.User.findByPk(payload.sub, {
-            include: [{ model: models.Institution, as: 'institution' }],
-          });
+                      });
     // #region debug-point C:refresh-user
     (() => {
       const fs = require('fs');
@@ -452,9 +394,8 @@ const logout = async ({ token, refresh_token }) => {
   return { success: true };
 };
 
-const forgotPassword = async ({ email, institution_id, institution_code }) => {
-  const institutionId = await resolveInstitutionId({ institution_id, institution_code });
-  const user = await models.User.findOne({ where: { email, institution_id: institutionId } });
+const forgotPassword = async ({ email }) => {
+  const user = await models.User.findOne({ where: { email } });
   if (!user) {
     return { success: true };
   }
@@ -464,7 +405,7 @@ const forgotPassword = async ({ email, institution_id, institution_code }) => {
     purpose: 'reset-password',
     userId: user.id,
     value: otp,
-    metadata: { institution_id: institutionId },
+    metadata: { },
   });
 
   await sendEmail({

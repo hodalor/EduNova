@@ -159,7 +159,7 @@ const ensureCurrentAcademicYear = async ({ institutionId, transaction }) => {
   }
 
   const existing = await models.AcademicYear.findOne({
-    where: { institution_id: institutionId, is_current: true },
+    where: { is_current: true },
     transaction,
   });
   if (existing) {
@@ -169,7 +169,6 @@ const ensureCurrentAcademicYear = async ({ institutionId, transaction }) => {
   const year = new Date().getFullYear();
   return models.AcademicYear.create(
     {
-      institution_id: institutionId,
       name: `${year}/${year + 1}`,
       start_date: `${year}-01-01`,
       end_date: `${year}-12-31`,
@@ -271,7 +270,7 @@ const findStudentPaymentAccount = async ({ institutionId, identifier, actor }) =
   let restrictedStudentId = null;
   if (actor?.role === 'student' && models.Student) {
     const linkedStudent = await models.Student.findOne({
-      where: { user_id: actor.id, institution_id: institutionId },
+      where: { user_id: actor.id, },
       attributes: ['id', 'student_number'],
     }).catch(() => null);
     if (!linkedStudent) {
@@ -284,7 +283,6 @@ const findStudentPaymentAccount = async ({ institutionId, identifier, actor }) =
   if (models.Student && models.User) {
     const dbStudent = await models.Student.findOne({
       where: {
-        institution_id: institutionId,
         ...(restrictedStudentId
           ? { id: restrictedStudentId }
           : {
@@ -394,7 +392,7 @@ const scopeRowsForStudentActor = async ({ institutionId, actor, rows }) => {
   }
 
   const linkedStudent = await models.Student.findOne({
-    where: { user_id: actor.id, institution_id: institutionId },
+    where: { user_id: actor.id, },
     attributes: ['id'],
   }).catch(() => null);
 
@@ -407,7 +405,7 @@ const scopeRowsForStudentActor = async ({ institutionId, actor, rows }) => {
 
 const listInvoices = async ({ institutionId, query }) => {
   const runtimeItems = (store.finance.invoices || []).filter(
-    (invoice) => invoice.institution_id === institutionId
+    (invoice) => true
   );
 
   if (models.StudentInvoice) {
@@ -419,7 +417,7 @@ const listInvoices = async ({ institutionId, query }) => {
       const profileMap = new Map(
         settings.admissions.student_profiles.map((item) => [item.student_id, item])
       );
-      const where = { institution_id: institutionId };
+      const where = { };
       if (query.status) where.status = query.status;
       const rows = await models.StudentInvoice.findAll({
         where,
@@ -510,7 +508,6 @@ const listInvoices = async ({ institutionId, query }) => {
 const createInvoice = async ({ institutionId, userId, payload, ip }) => {
   const totalAmount = Number(payload.total_amount || 0);
   const baseInvoice = {
-    institution_id: institutionId,
     student_id: payload.student_id,
     student_name: payload.student_name,
     class_name: payload.class_name,
@@ -535,7 +532,6 @@ const createInvoice = async ({ institutionId, userId, payload, ip }) => {
         });
         const row = await models.StudentInvoice.create(
           {
-            institution_id: institutionId,
             student_id: payload.student_id,
             academic_year_id: academicContext.academic_year_id,
             term_id: academicContext.term_id,
@@ -599,7 +595,6 @@ const recordPayment = async ({ institutionId, userId, payload, ip }) => {
     try {
       invoiceModel = await models.StudentInvoice.findOne({
         where: {
-          institution_id: institutionId,
           [Op.or]: [
             ...(invoiceIdentifier ? [{ id: invoiceIdentifier }] : []),
             ...(invoiceNumber ? [{ invoice_number: invoiceNumber }] : []),
@@ -677,7 +672,6 @@ const recordPayment = async ({ institutionId, userId, payload, ip }) => {
 
   invoice = store.finance.invoices.find(
     (item) =>
-      item.institution_id === institutionId &&
       (String(item.id) === invoiceIdentifier ||
         (invoiceNumber && String(item.invoice_number) === invoiceNumber))
   );
@@ -762,7 +756,7 @@ const listPaymentApprovals = async ({ institutionId, query = {} }) => {
   return (store.finance.paymentApprovals || [])
     .filter(
       (item) =>
-        item.institution_id === institutionId && (!query.status || item.status === query.status)
+        (!query.status || item.status === query.status)
     )
     .sort((a, b) => String(b.requested_at || '').localeCompare(String(a.requested_at || '')));
 };
@@ -782,7 +776,7 @@ const listPaymentGatewayRequests = async ({ institutionId, query = {} }) => {
   return (store.finance.paymentGatewayRequests || [])
     .filter(
       (item) =>
-        item.institution_id === institutionId && (!query.status || item.status === query.status)
+        (!query.status || item.status === query.status)
     )
     .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
 };
@@ -815,7 +809,6 @@ const initiateGatewayPayment = async ({ institutionId, userId, payload, actor, i
 
   const request = {
     id: `pgr-${Date.now()}`,
-    institution_id: institutionId,
     student_id: account.student_id,
     student_number: account.student_number,
     student_name: account.student_name,
@@ -955,7 +948,7 @@ const handleGatewayCallback = async ({ institutionId, payload, userId, ip }) => 
   ensureFinanceRuntimeState();
   const index = store.finance.paymentGatewayRequests.findIndex(
     (item) =>
-      item.institution_id === institutionId && String(item.gateway_reference) === reference
+      String(item.gateway_reference) === reference
   );
   if (index < 0) {
     throw Object.assign(new Error('Gateway payment request not found.'), { statusCode: 404 });
@@ -984,7 +977,6 @@ const initiatePaymentApproval = async ({ institutionId, userId, payload, ip }) =
 
   const approval = {
     id: `payapp-${Date.now()}`,
-    institution_id: institutionId,
     invoice_id: invoice.id,
     invoice_number: invoice.invoice_number,
     student_id: invoice.student_id,
@@ -1111,7 +1103,7 @@ const approvePaymentApproval = async ({ institutionId, approvalId, payload, user
 
   ensureFinanceRuntimeState();
   const index = store.finance.paymentApprovals.findIndex(
-    (item) => item.id === approvalId && item.institution_id === institutionId
+    (item) => item.id === approvalId
   );
   if (index < 0) {
     throw Object.assign(new Error('Payment approval request not found.'), { statusCode: 404 });
@@ -1181,13 +1173,13 @@ const approvePaymentApproval = async ({ institutionId, approvalId, payload, user
 const listFeeStructures = async ({ institutionId }) => {
   if (models.FeeStructure) {
     try {
-      const rows = await models.FeeStructure.findAll({ where: { institution_id: institutionId } });
+      const rows = await models.FeeStructure.findAll({ where: { } });
       if (rows.length) return rows.map((r) => r.toJSON());
     } catch (_error) {
       // fall through
     }
   }
-  return store.finance.feeStructures.filter((item) => item.institution_id === institutionId);
+  return store.finance.feeStructures.filter((item) => true);
 };
 
 const getOverdueInvoices = async ({ institutionId, referenceDate = new Date().toISOString().slice(0, 10) }) => {
@@ -1236,7 +1228,7 @@ const listPaymentTerms = async ({ institutionId }) => {
   if (models.PaymentTerm) {
     try {
       const rows = await models.PaymentTerm.findAll({
-        where: { institution_id: institutionId },
+        where: { },
         order: [['created_at', 'ASC']],
       });
       return rows.map((r) => r.toJSON());
@@ -1244,7 +1236,7 @@ const listPaymentTerms = async ({ institutionId }) => {
       // fall through
     }
   }
-  const items = (store.finance.paymentTerms || []).filter((item) => item.institution_id === institutionId);
+  const items = (store.finance.paymentTerms || []).filter((item) => true);
   return JSON.parse(JSON.stringify(items));
 };
 
@@ -1259,10 +1251,9 @@ const createPaymentTerm = async ({ institutionId, userId, payload, ip }) => {
 
   if (models.PaymentTerm) {
     try {
-      const existing = await models.PaymentTerm.findOne({ where: { institution_id: institutionId, code } });
+      const existing = await models.PaymentTerm.findOne({ where: { code } });
       if (existing) throw Object.assign(new Error('Payment term with this code already exists.'), { statusCode: 409 });
       const row = await models.PaymentTerm.create({
-        institution_id: institutionId,
         name: payload.name,
         code,
         description: payload.description || null,
@@ -1287,13 +1278,12 @@ const createPaymentTerm = async ({ institutionId, userId, payload, ip }) => {
   }
 
   const existing = (store.finance.paymentTerms || []).find(
-    (item) => item.institution_id === institutionId && item.code === code
+    (item) => item.code === code
   );
   if (existing) throw Object.assign(new Error('Payment term with this code already exists.'), { statusCode: 409 });
 
   const term = {
     id: `pt-${(store.finance.paymentTerms || []).length + 1}`,
-    institution_id: institutionId,
     name: payload.name,
     code,
     description: payload.description || null,
@@ -1324,14 +1314,14 @@ const updatePaymentTerm = async ({ institutionId, userId, termId, payload, ip })
   if (models.PaymentTerm) {
     try {
       const row = await models.PaymentTerm.findOne({
-        where: { id: termId, institution_id: institutionId },
+        where: { id: termId, },
       });
       if (!row) throw Object.assign(new Error('Payment term not found.'), { statusCode: 404 });
       oldValues = row.toJSON();
       if (payload.code) {
         const normalized = String(payload.code).trim().toUpperCase();
         const duplicate = await models.PaymentTerm.findOne({
-          where: { institution_id: institutionId, code: normalized },
+          where: { code: normalized },
         });
         if (duplicate && String(duplicate.id) !== String(termId)) {
           throw Object.assign(new Error('Payment term with this code already exists.'), { statusCode: 409 });
@@ -1367,7 +1357,7 @@ const updatePaymentTerm = async ({ institutionId, userId, termId, payload, ip })
   }
 
   term = (store.finance.paymentTerms || []).find(
-    (item) => item.id === termId && item.institution_id === institutionId
+    (item) => item.id === termId
   );
   if (!term) throw Object.assign(new Error('Payment term not found.'), { statusCode: 404 });
   oldValues = JSON.parse(JSON.stringify(term));
@@ -1375,7 +1365,7 @@ const updatePaymentTerm = async ({ institutionId, userId, termId, payload, ip })
   if (payload.code) {
     const normalized = String(payload.code).trim().toUpperCase();
     const duplicate = (store.finance.paymentTerms || []).find(
-      (item) => item.institution_id === institutionId && item.code === normalized && String(item.id) !== String(termId)
+      (item) => item.code === normalized && String(item.id) !== String(termId)
     );
     if (duplicate) {
       throw Object.assign(new Error('Payment term with this code already exists.'), { statusCode: 409 });
@@ -1407,7 +1397,7 @@ const deletePaymentTerm = async ({ institutionId, userId, termId, ip }) => {
   if (models.PaymentTerm) {
     try {
       const row = await models.PaymentTerm.findOne({
-        where: { id: termId, institution_id: institutionId },
+        where: { id: termId, },
       });
       if (!row) throw Object.assign(new Error('Payment term not found.'), { statusCode: 404 });
       const oldValues = row.toJSON();
@@ -1427,7 +1417,7 @@ const deletePaymentTerm = async ({ institutionId, userId, termId, ip }) => {
     }
   }
   const idx = (store.finance.paymentTerms || []).findIndex(
-    (item) => item.id === termId && item.institution_id === institutionId
+    (item) => item.id === termId
   );
   if (idx === -1) throw Object.assign(new Error('Payment term not found.'), { statusCode: 404 });
   const oldValues = (store.finance.paymentTerms || [])[idx];
@@ -1451,20 +1441,15 @@ const listPayments = async ({ institutionId, query = {} }) => {
       if (query.student_id) where.student_id = query.student_id;
       const rows = await models.Payment.findAll({
         where,
-        include: [{ model: models.StudentInvoice, as: 'invoice', required: false, attributes: ['id', 'invoice_number', 'institution_id'] }],
+        include: [{ model: models.StudentInvoice, as: 'invoice', required: false, attributes: ['id', 'invoice_number'] }],
         order: [['paid_at', 'DESC']],
         limit: 100,
       });
-      const filtered = rows.filter(
-        (r) => !r.invoice || String(r.invoice.institution_id) === String(institutionId) || String(institutionId) === 'platform'
-      );
-      // Filter by institution_id on invoice join
-      return filtered.map((r) => {
+      return rows.map((r) => {
         const json = r.toJSON();
-        if (json.invoice && String(json.invoice.institution_id) !== String(institutionId)) return null;
         delete json.invoice;
         return json;
-      }).filter(Boolean);
+      });
     } catch (_error) {
       // fall through
     }
@@ -1474,8 +1459,6 @@ const listPayments = async ({ institutionId, query = {} }) => {
   return all.filter((payment) => {
     if (query.student_id && String(payment.student_id) !== String(query.student_id)) return false;
     if (query.invoice_id && String(payment.invoice_id) !== String(query.invoice_id)) return false;
-    const inv = (store.finance.invoices || []).find((i) => i.id === payment.invoice_id);
-    if (inv && String(inv.institution_id) !== String(institutionId)) return false;
     return true;
   }).slice(0, 100);
 };

@@ -3,17 +3,7 @@
 module.exports = {
   async up(queryInterface, Sequelize) {
     await queryInterface.sequelize.query('CREATE EXTENSION IF NOT EXISTS "pgcrypto";');
-    await queryInterface.sequelize.query(`
-      DO $$
-      BEGIN
-        IF NOT EXISTS (
-          SELECT 1 FROM pg_type WHERE typname = 'enum_institutions_education_levels'
-        ) THEN
-          CREATE TYPE "enum_institutions_education_levels" AS ENUM ('DC', 'PR', 'JH', 'SH', 'TR');
-        END IF;
-      END $$;
-    `);
-    await queryInterface.createTable("institutions", {
+    await queryInterface.createTable("school_profile", {
       "id": {
         type: Sequelize.UUID,
         allowNull: false,
@@ -37,16 +27,6 @@ module.exports = {
         type: Sequelize.STRING,
         allowNull: false,
       },
-      "code": {
-        type: Sequelize.STRING,
-        allowNull: false,
-        unique: true,
-      },
-      "education_levels": {
-        type: 'enum_institutions_education_levels[]',
-        allowNull: false,
-        defaultValue: Sequelize.literal("'{}'::\"enum_institutions_education_levels\"[]"),
-      },
       "logo_url": {
         type: Sequelize.TEXT,
       },
@@ -62,9 +42,6 @@ module.exports = {
       "website": {
         type: Sequelize.STRING,
       },
-      "subscription_plan": {
-        type: Sequelize.STRING,
-      },
       "is_active": {
         type: Sequelize.BOOLEAN,
         allowNull: false,
@@ -76,7 +53,7 @@ module.exports = {
         defaultValue: {},
       },
     });
-    await queryInterface.addIndex("institutions", ["code"], { unique: true });
+    await queryInterface.addIndex("school_profile", ["name"]);
     await queryInterface.createTable("institution_branches", {
       "id": {
         type: Sequelize.UUID,
@@ -97,17 +74,7 @@ module.exports = {
       "deleted_at": {
         type: Sequelize.DATE,
       },
-      "institution_id": {
-        type: Sequelize.UUID,
-        allowNull: false,
-        references: {
-          model: "institutions",
-          key: "id",
-        },
-        onUpdate: "CASCADE",
-        onDelete: "CASCADE",
-      },
-      "branch_name": {
+            "branch_name": {
         type: Sequelize.STRING,
         allowNull: false,
       },
@@ -120,8 +87,7 @@ module.exports = {
         defaultValue: false,
       },
     });
-    await queryInterface.addIndex("institution_branches", ["institution_id", "branch_name"], { unique: true });
-    await queryInterface.addIndex("institution_branches", ["institution_id"]);
+    await queryInterface.addIndex("institution_branches", ["branch_name"], { unique: true });
     await queryInterface.createTable("academic_years", {
       "id": {
         type: Sequelize.UUID,
@@ -142,17 +108,7 @@ module.exports = {
       "deleted_at": {
         type: Sequelize.DATE,
       },
-      "institution_id": {
-        type: Sequelize.UUID,
-        allowNull: false,
-        references: {
-          model: "institutions",
-          key: "id",
-        },
-        onUpdate: "CASCADE",
-        onDelete: "CASCADE",
-      },
-      "name": {
+            "name": {
         type: Sequelize.STRING,
         allowNull: false,
       },
@@ -170,8 +126,7 @@ module.exports = {
         defaultValue: false,
       },
     });
-    await queryInterface.addIndex("academic_years", ["institution_id", "name"], { unique: true });
-    await queryInterface.addIndex("academic_years", ["institution_id"]);
+    await queryInterface.addIndex("academic_years", ["name"], { unique: true });
     await queryInterface.createTable("terms_semesters", {
       "id": {
         type: Sequelize.UUID,
@@ -246,18 +201,8 @@ module.exports = {
       "deleted_at": {
         type: Sequelize.DATE,
       },
-      "institution_id": {
-        type: Sequelize.UUID,
-        allowNull: false,
-        references: {
-          model: "institutions",
-          key: "id",
-        },
-        onUpdate: "CASCADE",
-        onDelete: "CASCADE",
-      },
-      "level_code": {
-        type: Sequelize.ENUM("DC", "PR", "JH", "SH", "TR"),
+            "level_code": {
+        type: Sequelize.ENUM("TR"),
         allowNull: false,
       },
       "level_name": {
@@ -271,8 +216,7 @@ module.exports = {
         type: Sequelize.INTEGER,
       },
     });
-    await queryInterface.addIndex("education_levels", ["institution_id", "level_code"], { unique: true });
-    await queryInterface.addIndex("education_levels", ["institution_id"]);
+    await queryInterface.addIndex("education_levels", ["level_code"], { unique: true });
   },
 
   async down(queryInterface) {
@@ -282,7 +226,6 @@ module.exports = {
     await queryInterface.sequelize.query('DROP TYPE IF EXISTS "enum_terms_semesters_type";');
     await queryInterface.dropTable("academic_years");
     await queryInterface.dropTable("institution_branches");
-    await queryInterface.dropTable("institutions");
-    await queryInterface.sequelize.query('DROP TYPE IF EXISTS "enum_institutions_education_levels";');
+    await queryInterface.dropTable("school_profile");
   },
 };

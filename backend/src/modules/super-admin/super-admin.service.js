@@ -176,14 +176,13 @@ const appendAudit = (entry) => {
 
 const ensureEducationLevels = async ({ institutionId, educationLevels, transaction }) => {
   const existing = await models.EducationLevel.findAll({
-    where: { institution_id: institutionId },
+    where: { },
     transaction,
   });
   const existingCodes = new Set(existing.map((item) => item.level_code));
   const rows = educationLevels
     .filter((levelCode) => !existingCodes.has(levelCode))
     .map((levelCode) => ({
-      institution_id: institutionId,
       level_code: levelCode,
       level_name: levelLabels[levelCode] || levelCode,
       age_min: getLevelConfig(levelCode)?.ageMin || null,
@@ -197,7 +196,7 @@ const ensureEducationLevels = async ({ institutionId, educationLevels, transacti
 
 const ensureCurrentAcademicYear = async ({ institutionId, transaction }) => {
   const current = await models.AcademicYear.findOne({
-    where: { institution_id: institutionId, is_current: true },
+    where: { is_current: true },
     transaction,
   });
   if (current) {
@@ -207,7 +206,6 @@ const ensureCurrentAcademicYear = async ({ institutionId, transaction }) => {
   const window = getDefaultAcademicYearWindow();
   return models.AcademicYear.create(
     {
-      institution_id: institutionId,
       name: window.name,
       start_date: window.start_date,
       end_date: window.end_date,
@@ -225,10 +223,9 @@ const listInstitutionsFromDatabase = async () => {
   const rows = await Promise.all(
     institutions.map(async (institution) => {
       const [activeStudents, activeStaff] = await Promise.all([
-        models.Student.count({ where: { institution_id: institution.id, status: 'active' } }),
+        models.Student.count({ where: { status: 'active' } }),
         models.User.count({
           where: {
-            institution_id: institution.id,
             role: { [Op.in]: ['institution_admin', 'teacher'] },
             is_active: true,
           },
@@ -269,10 +266,9 @@ const getInstitutionDetailFromDatabase = async (institutionId) => {
   }
 
   const [activeStudents, activeStaff] = await Promise.all([
-    models.Student.count({ where: { institution_id: institution.id, status: 'active' } }),
+    models.Student.count({ where: { status: 'active' } }),
     models.User.count({
       where: {
-        institution_id: institution.id,
         role: { [Op.in]: ['institution_admin', 'teacher'] },
         is_active: true,
       },
@@ -365,7 +361,6 @@ const onboardInstitutionInDatabase = async ({ payload, userId, ip }) => {
 
     const adminUser = await models.User.create(
       {
-        institution_id: institution.id,
         email,
         password_hash: await hashPassword(payload.admin_password),
         role: 'institution_admin',
@@ -408,7 +403,6 @@ const onboardInstitutionInDatabase = async ({ payload, userId, ip }) => {
       institution: serializedInstitution,
       admin_user: {
         id: adminUser.id,
-        institution_id: adminUser.institution_id,
         email: adminUser.email,
         role: adminUser.role,
         first_name: adminUser.first_name,
@@ -459,7 +453,6 @@ const onboardInstitutionInRuntime = async ({ payload, userId, ip }) => {
 
   const adminUser = {
     id: `usr-sa-${String(store.platform.institutions.length + 1).padStart(3, '0')}`,
-    institution_id: nextInstitutionId,
     email: payload.admin_email,
     role: 'institution_admin',
     first_name: payload.admin_first_name,
@@ -642,7 +635,6 @@ const listPlatformUsersFromDatabase = async () => {
   const platformInstitution = await ensurePlatformInstitution();
   const users = await models.User.findAll({
     where: {
-      institution_id: platformInstitution.id,
       role: 'super_admin',
     },
     order: [['created_at', 'DESC']],
@@ -650,7 +642,6 @@ const listPlatformUsersFromDatabase = async () => {
 
   return users.map((user) => ({
     id: user.id,
-    institution_id: user.institution_id,
     username: resolvePlatformUsername(user),
     email: user.email,
     role: 'super_admin',
@@ -664,7 +655,6 @@ const listPlatformUsersFromDatabase = async () => {
 const listPlatformUsersFromRuntime = async () =>
   [store.platform.superAdmin, ...(store.platform.superAdmins || [])].map((user) => ({
     id: user.id,
-    institution_id: 'platform',
     username: user.username,
     email: user.email,
     role: 'super_admin',
@@ -695,7 +685,6 @@ const createPlatformUserInDatabase = async ({ payload, userId, ip }) => {
   const platformInstitution = await ensurePlatformInstitution();
   const duplicate = await models.User.findOne({
     where: {
-      institution_id: platformInstitution.id,
       role: 'super_admin',
       [Op.or]: [{ email }, { phone: username }],
     },
@@ -707,7 +696,6 @@ const createPlatformUserInDatabase = async ({ payload, userId, ip }) => {
   }
 
   const user = await models.User.create({
-    institution_id: platformInstitution.id,
     email,
     phone: username,
     password_hash: await hashPassword(payload.temporary_password),
@@ -720,7 +708,6 @@ const createPlatformUserInDatabase = async ({ payload, userId, ip }) => {
 
   const response = {
     id: user.id,
-    institution_id: user.institution_id,
     username,
     email: user.email,
     role: user.role,
@@ -773,7 +760,6 @@ const createPlatformUser = async ({ payload, userId, ip }) => {
 
   const record = {
     id: `usr-super-${String((store.platform.superAdmins || []).length + 1).padStart(3, '0')}`,
-    institution_id: 'platform',
     username,
     email,
     first_name: payload.first_name,
@@ -808,7 +794,6 @@ const createPlatformUser = async ({ payload, userId, ip }) => {
 
   return {
     id: record.id,
-    institution_id: 'platform',
     username: record.username,
     email: record.email,
     role: record.role,

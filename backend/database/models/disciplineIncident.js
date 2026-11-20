@@ -8,15 +8,7 @@ module.exports = (sequelize, DataTypes) => {
       primaryKey: true,
       defaultValue: DataTypes.UUIDV4,
     },
-    "institution_id": {
-      type: DataTypes.UUID,
-      allowNull: false,
-      references: {
-        model: "institutions",
-        key: "id",
-      },
-    },
-    "student_id": {
+        "student_id": {
       type: DataTypes.UUID,
       allowNull: false,
       references: {
@@ -76,7 +68,6 @@ module.exports = (sequelize, DataTypes) => {
       timestamps: true,
       freezeTableName: true,
       indexes: [
-      { fields: ["institution_id"] },
       { fields: ["student_id"] },
       { fields: ["reported_by"] },
       ],
@@ -84,7 +75,6 @@ module.exports = (sequelize, DataTypes) => {
   );
 
   DisciplineIncident.associate = (models) => {
-  DisciplineIncident.belongsTo(models.Institution, { foreignKey: 'institution_id', as: 'institution' });
   DisciplineIncident.belongsTo(models.Student, { foreignKey: 'student_id', as: 'student' });
   DisciplineIncident.belongsTo(models.User, { foreignKey: 'reported_by', as: 'reportedBy' });
   DisciplineIncident.hasMany(models.DemeritPoint, { foreignKey: 'incident_id', as: 'demeritPoints' });

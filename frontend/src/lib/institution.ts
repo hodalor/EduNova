@@ -1,31 +1,18 @@
-import type { InstitutionSummary, UserRole } from '../types/auth';
+import type { EducationLevelCode, InstitutionSummary, UserRole } from '../types/auth';
 
-export const DEFAULT_LEVELS = ['PR', 'JH', 'SH'] as const;
-export const PLATFORM_LEVELS = ['DC', 'PR', 'JH', 'SH', 'TR'] as const;
+export const DEFAULT_LEVELS = ['TR'] as const;
+export const PLATFORM_LEVELS = ['TR'] as const;
 
-export const getInstitutionLevels = (institution?: InstitutionSummary | null) => {
-  if (institution?.education_levels?.length) {
-    return institution.education_levels;
-  }
-  if (institution?.code === 'MASTER') {
-    return [...PLATFORM_LEVELS];
-  }
-  return [];
-};
+export const getInstitutionLevels = (_institution?: InstitutionSummary | null): EducationLevelCode[] => ['TR'];
 
 export const hasLevel = (institution: InstitutionSummary | null | undefined, level: string) =>
   getInstitutionLevels(institution).includes(level as never);
 
-export const isTertiaryInstitution = (institution?: InstitutionSummary | null) =>
-  hasLevel(institution, 'TR');
+export const isTertiaryInstitution = (_institution?: InstitutionSummary | null) => true;
 
-export const isDaycareInstitution = (institution?: InstitutionSummary | null) =>
-  hasLevel(institution, 'DC');
+export const isDaycareInstitution = (_institution?: InstitutionSummary | null) => false;
 
-export const isBasicInstitution = (institution?: InstitutionSummary | null) =>
-  hasLevel(institution, 'PR') ||
-  hasLevel(institution, 'JH') ||
-  hasLevel(institution, 'SH');
+export const isBasicInstitution = (_institution?: InstitutionSummary | null) => false;
 
 export const supportsAcademics = (institution?: InstitutionSummary | null) =>
   isBasicInstitution(institution) || isTertiaryInstitution(institution);

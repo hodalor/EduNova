@@ -16,15 +16,7 @@ module.exports = (sequelize, DataTypes) => {
         key: "id",
       },
     },
-    "institution_id": {
-      type: DataTypes.UUID,
-      allowNull: false,
-      references: {
-        model: "institutions",
-        key: "id",
-      },
-    },
-    "academic_year_id": {
+        "academic_year_id": {
       type: DataTypes.UUID,
       allowNull: false,
       references: {
@@ -77,10 +69,9 @@ module.exports = (sequelize, DataTypes) => {
       timestamps: true,
       freezeTableName: true,
       indexes: [
-      { fields: ["institution_id", "academic_year_id"] },
-      { fields: ["institution_id", "invoice_number"], unique: true },
+      { fields: ["academic_year_id"] },
+      { fields: ["invoice_number"], unique: true },
       { fields: ["student_id"] },
-      { fields: ["institution_id"] },
       { fields: ["academic_year_id"] },
       { fields: ["term_id"] },
       ],
@@ -89,7 +80,6 @@ module.exports = (sequelize, DataTypes) => {
 
   StudentInvoice.associate = (models) => {
   StudentInvoice.belongsTo(models.Student, { foreignKey: 'student_id', as: 'student' });
-  StudentInvoice.belongsTo(models.Institution, { foreignKey: 'institution_id', as: 'institution' });
   StudentInvoice.belongsTo(models.AcademicYear, { foreignKey: 'academic_year_id', as: 'academicYear' });
   StudentInvoice.belongsTo(models.TermSemester, { foreignKey: 'term_id', as: 'term' });
   StudentInvoice.hasMany(models.Payment, { foreignKey: 'invoice_id', as: 'payments' });

@@ -7,14 +7,12 @@ class AuthRemoteDataSource {
   final DioClient _dioClient;
 
   Future<AuthModel> login({
-    required String institutionCode,
     required String identity,
     required String password,
   }) async {
     final response = await _dioClient.dio.post(
       '/auth/login',
       data: {
-        'institution_code': institutionCode,
         'identity': identity,
         'password': password,
       },
@@ -31,13 +29,11 @@ class AuthRemoteDataSource {
   }
 
   Future<void> forgotPassword({
-    required String institutionCode,
     required String email,
   }) async {
     await _dioClient.dio.post(
       '/auth/forgot-password',
       data: {
-        'institution_code': institutionCode,
         'email': email,
       },
     );

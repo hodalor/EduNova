@@ -8,15 +8,7 @@ module.exports = (sequelize, DataTypes) => {
       primaryKey: true,
       defaultValue: DataTypes.UUIDV4,
     },
-    "institution_id": {
-      type: DataTypes.UUID,
-      allowNull: false,
-      references: {
-        model: "institutions",
-        key: "id",
-      },
-    },
-    "class_id": {
+        "class_id": {
       type: DataTypes.UUID,
       allowNull: false,
       references: {
@@ -55,9 +47,8 @@ module.exports = (sequelize, DataTypes) => {
       timestamps: true,
       freezeTableName: true,
       indexes: [
-      { fields: ["institution_id", "academic_year_id"] },
+      { fields: ["academic_year_id"] },
       { fields: ["class_id", "academic_year_id", "term_id"], unique: true },
-      { fields: ["institution_id"] },
       { fields: ["class_id"] },
       { fields: ["academic_year_id"] },
       { fields: ["term_id"] },
@@ -66,7 +57,6 @@ module.exports = (sequelize, DataTypes) => {
   );
 
   Timetable.associate = (models) => {
-  Timetable.belongsTo(models.Institution, { foreignKey: 'institution_id', as: 'institution' });
   Timetable.belongsTo(models.Class, { foreignKey: 'class_id', as: 'class' });
   Timetable.belongsTo(models.AcademicYear, { foreignKey: 'academic_year_id', as: 'academicYear' });
   Timetable.belongsTo(models.TermSemester, { foreignKey: 'term_id', as: 'term' });

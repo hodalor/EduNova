@@ -1,6 +1,6 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { FormEvent, useMemo, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 
 import { eduovaApi } from '../../api/eduovaApi';
@@ -68,23 +68,19 @@ const emptyForm = {
 };
 
 const ApplyPage = () => {
-  const [searchParams, setSearchParams] = useSearchParams();
-  const [codeInput, setCodeInput] = useState(searchParams.get('code') || '');
   const [step, setStep] = useState(0);
   const [form, setForm] = useState(emptyForm);
   const [receipt, setReceipt] = useState<{ reference: string; program_name: string } | null>(null);
-  const institutionCode = (searchParams.get('code') || '').trim().toUpperCase();
 
   const catalogQuery = useQuery<PublicCatalog>({
-    queryKey: ['public-admissions', institutionCode],
-    queryFn: () => eduovaApi.admissions.catalog(institutionCode),
-    enabled: Boolean(institutionCode),
+    queryKey: ['public-admissions'],
+    queryFn: () => eduovaApi.admissions.catalog(),
     retry: false,
   });
 
   const mutation = useMutation({
     mutationFn: () =>
-      eduovaApi.admissions.submit(institutionCode, {
+      eduovaApi.admissions.submit({
         ...form,
         declaration: true,
       }),
@@ -169,39 +165,12 @@ const ApplyPage = () => {
           </p>
         </div>
 
-        {!institutionCode ? (
-          <form
-            className="surface space-y-4 p-6"
-            onSubmit={(event) => {
-              event.preventDefault();
-              const nextCode = codeInput.trim().toUpperCase();
-              if (!nextCode) {
-                return;
-              }
-              setSearchParams({ code: nextCode });
-            }}
-          >
-            <Input
-              label="Institution code"
-              value={codeInput}
-              onChange={(event) => setCodeInput(event.target.value)}
-              placeholder="Enter the school code"
-            />
-            <Button type="submit" className="w-full">
-              Load programmes
-            </Button>
-          </form>
-        ) : null}
-
         {catalogQuery.isLoading ? <p className="text-center text-sm text-slate-500">Loading programmes...</p> : null}
         {catalogQuery.isError ? (
           <div className="surface p-6 text-center">
             <p className="text-sm text-rose-600">
-              {getApiErrorMessage(catalogQuery.error, 'This institution is not open for tertiary applications.')}
+              {getApiErrorMessage(catalogQuery.error, 'Applications are unavailable right now.')}
             </p>
-            <Button className="mt-4" variant="secondary" onClick={() => setSearchParams({})}>
-              Try another code
-            </Button>
           </div>
         ) : null}
 

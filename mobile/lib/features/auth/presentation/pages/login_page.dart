@@ -29,14 +29,12 @@ class LoginPage extends ConsumerStatefulWidget {
 
 class _LoginPageState extends ConsumerState<LoginPage> {
   final _formKey = GlobalKey<FormState>();
-  final _institutionCodeController = TextEditingController();
   final _identityController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
 
   @override
   void dispose() {
-    _institutionCodeController.dispose();
     _identityController.dispose();
     _passwordController.dispose();
     super.dispose();
@@ -93,19 +91,10 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                         ),
                         const SizedBox(height: 8),
                         const Text(
-                          'Parents, students, and teachers sign in here with the institution code and password.',
+                          'Parents, students, and teachers sign in here with email, phone, or student number.',
                           style: TextStyle(color: AppColors.textMuted),
                         ),
                         const SizedBox(height: 24),
-                        TextFormField(
-                          controller: _institutionCodeController,
-                          decoration: const InputDecoration(
-                            labelText: 'Institution Code',
-                          ),
-                          validator: (value) =>
-                              value == null || value.isEmpty ? 'Required' : null,
-                        ),
-                        const SizedBox(height: 16),
                         TextFormField(
                           controller: _identityController,
                           decoration: const InputDecoration(
@@ -158,8 +147,6 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                     return;
                                   }
                                   await ref.read(authProvider.notifier).login(
-                                        institutionCode:
-                                            _institutionCodeController.text.trim(),
                                         identity:
                                             _identityController.text.trim(),
                                         password:

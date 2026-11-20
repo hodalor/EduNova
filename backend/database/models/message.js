@@ -8,15 +8,7 @@ module.exports = (sequelize, DataTypes) => {
       primaryKey: true,
       defaultValue: DataTypes.UUIDV4,
     },
-    "institution_id": {
-      type: DataTypes.UUID,
-      allowNull: false,
-      references: {
-        model: "institutions",
-        key: "id",
-      },
-    },
-    "sender_id": {
+        "sender_id": {
       type: DataTypes.UUID,
       allowNull: false,
       references: {
@@ -66,7 +58,6 @@ module.exports = (sequelize, DataTypes) => {
       freezeTableName: true,
       indexes: [
       { fields: ["thread_id"] },
-      { fields: ["institution_id"] },
       { fields: ["sender_id"] },
       { fields: ["recipient_id"] },
       ],
@@ -74,7 +65,6 @@ module.exports = (sequelize, DataTypes) => {
   );
 
   Message.associate = (models) => {
-  Message.belongsTo(models.Institution, { foreignKey: 'institution_id', as: 'institution' });
   Message.belongsTo(models.User, { foreignKey: 'sender_id', as: 'sender' });
   Message.belongsTo(models.User, { foreignKey: 'recipient_id', as: 'recipient' });
   };

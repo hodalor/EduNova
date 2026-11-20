@@ -255,7 +255,6 @@ export const eduovaApi = {
     login: async (payload: {
       identity: string;
       password: string;
-      institution_code: string;
     }): Promise<LoginResponse> => {
       const { data } = await authApi.post('/auth/login', payload);
       return data.data || data;
@@ -263,7 +262,6 @@ export const eduovaApi = {
     superAdminLogin: async (payload: {
       identity: string;
       password: string;
-      institution_code: string;
     }): Promise<LoginResponse> => {
       const { data } = await authApi.post('/auth/login', payload);
       return data.data || data;
@@ -562,11 +560,9 @@ export const eduovaApi = {
       (await axiosInstance.patch('/v1/daycare/settings', payload)).data.data,
   },
   admissions: {
-    catalog: async (code: string) =>
-      (await authApi.get(`/v1/admissions/public/${encodeURIComponent(code)}`)).data.data,
-    submit: async (code: string, payload: Record<string, unknown>) =>
-      (await authApi.post(`/v1/admissions/public/${encodeURIComponent(code)}/applications`, payload))
-        .data.data,
+    catalog: async () => (await authApi.get('/v1/admissions/public')).data.data,
+    submit: async (payload: Record<string, unknown>) =>
+      (await authApi.post('/v1/admissions/public/applications', payload)).data.data,
     list: async () => (await axiosInstance.get('/v1/admissions/applications')).data.data,
     detail: async (id: string) =>
       (await axiosInstance.get(`/v1/admissions/applications/${id}`)).data.data,

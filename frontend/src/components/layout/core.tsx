@@ -1,6 +1,5 @@
 import { Suspense, type ReactNode } from 'react';
 import {
-  Baby,
   BookOpen,
   BriefcaseBusiness,
   Building2,
@@ -90,13 +89,6 @@ const institutionNavGroups: NavGroup[] = [
         icon: Layers3,
         roles: ['institution_admin'],
         visible: supportsAcademics,
-      },
-      {
-        name: 'Daycare Setup',
-        to: '/daycare',
-        icon: Baby,
-        roles: ['institution_admin'],
-        visible: isDaycareInstitution,
       },
       {
         name: 'Tertiary Setup',
@@ -248,7 +240,6 @@ const institutionNavGroups: NavGroup[] = [
 const superAdminNavGroups = [
   { label: 'Control Plane', items: [{ name: 'Overview', to: '/super-admin', icon: ShieldCheck }] },
   { label: 'Platform Users', items: [{ name: 'Users', to: '/super-admin/users', icon: Users2 }] },
-  { label: 'Institutions', items: [{ name: 'Institutions', to: '/super-admin/institutions', icon: GraduationCap }] },
   { label: 'Analytics', items: [{ name: 'Platform KPIs', to: '/super-admin/analytics', icon: FileBarChart2 }] },
   { label: 'Audit', items: [{ name: 'Audit Trail', to: '/super-admin/audit-logs', icon: BriefcaseBusiness }] },
 ];

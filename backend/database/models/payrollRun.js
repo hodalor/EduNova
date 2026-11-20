@@ -8,15 +8,7 @@ module.exports = (sequelize, DataTypes) => {
       primaryKey: true,
       defaultValue: DataTypes.UUIDV4,
     },
-    "institution_id": {
-      type: DataTypes.UUID,
-      allowNull: false,
-      references: {
-        model: "institutions",
-        key: "id",
-      },
-    },
-    "month": {
+        "month": {
       type: DataTypes.INTEGER,
       allowNull: false,
     },
@@ -47,15 +39,13 @@ module.exports = (sequelize, DataTypes) => {
       timestamps: true,
       freezeTableName: true,
       indexes: [
-      { fields: ["institution_id", "month", "year"], unique: true },
-      { fields: ["institution_id"] },
+      { fields: ["month", "year"], unique: true },
       { fields: ["processed_by"] },
       ],
     }
   );
 
   PayrollRun.associate = (models) => {
-  PayrollRun.belongsTo(models.Institution, { foreignKey: 'institution_id', as: 'institution' });
   PayrollRun.belongsTo(models.User, { foreignKey: 'processed_by', as: 'processedBy' });
   PayrollRun.hasMany(models.PayrollRecord, { foreignKey: 'payroll_run_id', as: 'records' });
   };

@@ -557,7 +557,6 @@ const getRegistrationFinanceTotals = async ({ institutionId, studentId, currentP
 
   const rows = await models.StudentInvoice.findAll({
     where: {
-      institution_id: institutionId,
       student_id: studentId,
       term_id: currentPeriod.term_semester_id,
     },
@@ -666,10 +665,10 @@ const getOverviewFromDatabase = async ({ institutionId }) => {
 };
 
 const getOverviewFromRuntime = async ({ institutionId }) => ({
-  faculties: (store.tertiary.faculties || []).filter((item) => item.institution_id === institutionId),
-  departments: store.tertiary.departments.filter((item) => item.institution_id === institutionId),
+  faculties: (store.tertiary.faculties || []).filter((item) => true),
+  departments: store.tertiary.departments.filter((item) => true),
   programs: store.tertiary.programs
-    .filter((item) => item.institution_id === institutionId)
+    .filter((item) => true)
     .map((program) => ({
       ...program,
       roadmap_group_ids: program.roadmap_group_ids || [],
@@ -835,7 +834,6 @@ const createFaculty = async ({ institutionId, payload, userId, ip }) => {
   if (!databaseReady()) {
     const faculty = {
       id: `fac-${(store.tertiary.faculties || []).length + 1}`,
-      institution_id: institutionId,
       name: payload.name,
       code: String(payload.code || payload.name || '')
         .trim()
@@ -868,7 +866,6 @@ const createFaculty = async ({ institutionId, payload, userId, ip }) => {
 
       return {
         id: payload.id || crypto.randomUUID(),
-        institution_id: institutionId,
         name: payload.name,
         code,
         dean: payload.dean || null,
@@ -881,7 +878,6 @@ const createDepartment = async ({ institutionId, payload, userId, ip }) => {
   if (!databaseReady()) {
     const department = {
       id: `dep-${store.tertiary.departments.length + 1}`,
-      institution_id: institutionId,
       faculty_id: payload.faculty_id || null,
       faculty:
         (store.tertiary.faculties || []).find((item) => item.id === payload.faculty_id)?.name || '',
@@ -924,7 +920,6 @@ const createDepartment = async ({ institutionId, payload, userId, ip }) => {
 
       return {
         id: payload.id || crypto.randomUUID(),
-        institution_id: institutionId,
         faculty_id: faculty.id,
         faculty: faculty.name,
         name: payload.name,
@@ -939,7 +934,6 @@ const createProgram = async ({ institutionId, payload, userId, ip }) => {
     const department = store.tertiary.departments.find((item) => item.id === payload.department_id);
     const program = {
       id: `prog-${store.tertiary.programs.length + 1}`,
-      institution_id: institutionId,
       name: payload.name,
       faculty_id: department?.faculty_id || null,
       department_id: payload.department_id || null,
@@ -976,7 +970,6 @@ const createProgram = async ({ institutionId, payload, userId, ip }) => {
 
       return {
         id: payload.id || crypto.randomUUID(),
-        institution_id: institutionId,
         faculty_id: department.faculty_id,
         department_id: department.id,
         faculty: department.faculty,
@@ -999,7 +992,7 @@ const createProgram = async ({ institutionId, payload, userId, ip }) => {
 const updateFaculty = async ({ institutionId, facultyId, payload, userId, ip }) => {
   if (!databaseReady()) {
     const index = (store.tertiary.faculties || []).findIndex(
-      (item) => item.institution_id === institutionId && item.id === facultyId
+      (item) => item.id === facultyId
     );
     if (index < 0) {
       throw Object.assign(new Error('Faculty not found.'), { statusCode: 404 });
@@ -1050,7 +1043,7 @@ const updateFaculty = async ({ institutionId, facultyId, payload, userId, ip }) 
 const deleteFaculty = async ({ institutionId, facultyId, userId, ip }) => {
   if (!databaseReady()) {
     const linkedDepartments = (store.tertiary.departments || []).filter(
-      (item) => item.institution_id === institutionId && item.faculty_id === facultyId
+      (item) => item.faculty_id === facultyId
     );
     if (linkedDepartments.length) {
       throw Object.assign(new Error('Delete linked departments before removing this faculty.'), {
@@ -1058,7 +1051,7 @@ const deleteFaculty = async ({ institutionId, facultyId, userId, ip }) => {
       });
     }
     store.tertiary.faculties = (store.tertiary.faculties || []).filter(
-      (item) => !(item.institution_id === institutionId && item.id === facultyId)
+      (item) => !(item.id === facultyId)
     );
     return { id: facultyId, deleted: true };
   }
@@ -1083,7 +1076,7 @@ const deleteFaculty = async ({ institutionId, facultyId, userId, ip }) => {
 const updateDepartment = async ({ institutionId, departmentId, payload, userId, ip }) => {
   if (!databaseReady()) {
     const index = store.tertiary.departments.findIndex(
-      (item) => item.institution_id === institutionId && item.id === departmentId
+      (item) => item.id === departmentId
     );
     if (index < 0) {
       throw Object.assign(new Error('Department not found.'), { statusCode: 404 });
@@ -1139,7 +1132,7 @@ const updateDepartment = async ({ institutionId, departmentId, payload, userId, 
 const deleteDepartment = async ({ institutionId, departmentId, userId, ip }) => {
   if (!databaseReady()) {
     const linkedPrograms = (store.tertiary.programs || []).filter(
-      (item) => item.institution_id === institutionId && item.department_id === departmentId
+      (item) => item.department_id === departmentId
     );
     if (linkedPrograms.length) {
       throw Object.assign(new Error('Delete linked programs before removing this department.'), {
@@ -1147,7 +1140,7 @@ const deleteDepartment = async ({ institutionId, departmentId, userId, ip }) => 
       });
     }
     store.tertiary.departments = store.tertiary.departments.filter(
-      (item) => !(item.institution_id === institutionId && item.id === departmentId)
+      (item) => !(item.id === departmentId)
     );
     return { id: departmentId, deleted: true };
   }
@@ -1172,7 +1165,7 @@ const deleteDepartment = async ({ institutionId, departmentId, userId, ip }) => 
 const updateProgram = async ({ institutionId, programId, payload, userId, ip }) => {
   if (!databaseReady()) {
     const index = store.tertiary.programs.findIndex(
-      (item) => item.institution_id === institutionId && item.id === programId
+      (item) => item.id === programId
     );
     if (index < 0) {
       throw Object.assign(new Error('Program not found.'), { statusCode: 404 });
@@ -1246,7 +1239,7 @@ const updateProgram = async ({ institutionId, programId, payload, userId, ip }) 
 const deleteProgram = async ({ institutionId, programId, userId, ip }) => {
   if (!databaseReady()) {
     store.tertiary.programs = store.tertiary.programs.filter(
-      (item) => !(item.institution_id === institutionId && item.id === programId)
+      (item) => !(item.id === programId)
     );
     return { id: programId, deleted: true };
   }
@@ -1396,7 +1389,7 @@ const updateFinancePolicy = async ({ institutionId, payload, userId, ip }) => {
 const updateStudentProgress = async ({ institutionId, studentId, payload, userId, ip }) => {
   if (!databaseReady()) {
     const progressIndex = store.tertiary.studentProgress.findIndex(
-      (item) => item.student_id === studentId && item.institution_id === institutionId
+      (item) => item.student_id === studentId
     );
     if (progressIndex < 0) {
       throw Object.assign(new Error('Student registration profile not found.'), { statusCode: 404 });
@@ -1434,7 +1427,7 @@ const updateStudentProgress = async ({ institutionId, studentId, payload, userId
 
   const settings = ensureTertiarySettings(institution.settings);
   const progressIndex = settings.tertiary.student_progress.findIndex(
-    (item) => item.student_id === studentId && item.institution_id === institutionId
+    (item) => item.student_id === studentId
   );
   if (progressIndex < 0) {
     throw Object.assign(new Error('Student registration profile not found.'), { statusCode: 404 });
@@ -1491,7 +1484,7 @@ const getRegistrationStateFromSettings = async ({ institutionId, studentId }) =>
       (item) => String(item.student_id || item.id) === String(studentId)
     ) || {};
   const progress = settings.tertiary.student_progress.find(
-    (item) => item.student_id === studentId && item.institution_id === institutionId
+    (item) => item.student_id === studentId
   );
   if (!progress) {
     throw Object.assign(new Error('Student registration profile not found.'), { statusCode: 404 });
@@ -1567,7 +1560,6 @@ const getRegistrationStateFromSettings = async ({ institutionId, studentId }) =>
 
   const alreadyRegistered = settings.tertiary.registrations.filter(
     (item) =>
-      item.institution_id === institutionId &&
       item.student_id === studentId &&
       item.period_id === currentPeriod.id
   );
@@ -1626,16 +1618,15 @@ const getRegistrationStateFromSettings = async ({ institutionId, studentId }) =>
 
 const getAcademicStructureForInstitution = ({ institutionId }) => {
   const groups = store.academics.structure.groups.filter(
-    (item) => item.institution_id === institutionId && item.level_code === 'TR'
+    (item) => item.level_code === 'TR'
   );
   const groupIds = new Set(groups.map((item) => item.id));
   const periods = store.academics.structure.periods.filter(
-    (item) => item.institution_id === institutionId && groupIds.has(item.group_id)
+    (item) => groupIds.has(item.group_id)
   );
   const periodIds = new Set(periods.map((item) => item.id));
   const offerings = store.academics.structure.offerings.filter(
     (item) =>
-      item.institution_id === institutionId &&
       groupIds.has(item.group_id) &&
       periodIds.has(item.period_id)
   );
@@ -1657,7 +1648,7 @@ const getStudentRegistrationState = async ({ institutionId, studentId }) => {
       (item) => String(item.student_id || item.id) === String(studentId)
     ) || {};
   const progress = store.tertiary.studentProgress.find(
-    (item) => item.student_id === studentId && item.institution_id === institutionId
+    (item) => item.student_id === studentId
   );
   if (!progress) {
     throw Object.assign(new Error('Student registration profile not found.'), { statusCode: 404 });
@@ -1740,7 +1731,6 @@ const getStudentRegistrationState = async ({ institutionId, studentId }) => {
 
   const alreadyRegistered = store.tertiary.registrations.filter(
     (item) =>
-      item.institution_id === institutionId &&
       item.student_id === studentId &&
       item.period_id === currentPeriod.id
   );
@@ -1759,7 +1749,6 @@ const getStudentRegistrationState = async ({ institutionId, studentId }) => {
 
   const periodInvoices = store.finance.invoices.filter(
     (item) =>
-      item.institution_id === institutionId &&
       item.student_id === studentId &&
       (item.term_id === currentPeriod.term_semester_id || item.period_id === currentPeriod.id)
   );
@@ -1828,7 +1817,6 @@ const registerCourses = async ({ institutionId, payload, userId, ip }) => {
     const selectedCourses = state.eligible_courses.filter((item) => requestedCourseIds.includes(item.id));
     const registration = {
       id: crypto.randomUUID(),
-      institution_id: institutionId,
       student_id: payload.student_id,
       group_id: state.current_group.id,
       period_id: state.current_period.id,
@@ -1901,7 +1889,6 @@ const registerCourses = async ({ institutionId, payload, userId, ip }) => {
   );
   const registration = {
     id: `reg-${store.tertiary.registrations.length + 1}`,
-    institution_id: institutionId,
     student_id: payload.student_id,
     group_id: state.current_group.id,
     period_id: state.current_period.id,
@@ -1941,7 +1928,7 @@ const getTranscript = async ({ institutionId, studentId }) => {
 
     const settings = ensureTertiarySettings(institution.settings);
     const studentRecord = await models.Student.findOne({
-      where: { id: studentId, institution_id: institutionId },
+      where: { id: studentId, },
       include: [{ model: models.User, as: 'user', required: false }],
     });
     if (!studentRecord) {
@@ -1962,8 +1949,7 @@ const getTranscript = async ({ institutionId, studentId }) => {
       };
     const rows = settings.tertiary.transcripts.filter(
       (item) =>
-        String(item.student_id || '') === String(studentId) &&
-        String(item.institution_id || '') === String(institutionId)
+        String(item.student_id || '') === String(studentId)
     );
     return buildTranscriptPayload({
       institutionId,
@@ -1977,8 +1963,7 @@ const getTranscript = async ({ institutionId, studentId }) => {
 
   const rows = store.tertiary.transcripts.filter(
     (item) =>
-      String(item.student_id || '') === String(studentId) &&
-      String(item.institution_id || '') === String(institutionId)
+      String(item.student_id || '') === String(studentId)
   );
 
   const settings = ensureTertiarySettings(store.settings || {});
@@ -2016,7 +2001,7 @@ const verifyTranscriptByCode = async ({ verificationCode }) => {
       const settings = ensureTertiarySettings(institution.settings);
       const transcriptsByStudent = new Map();
       (settings.tertiary.transcripts || []).forEach((row) => {
-        if (String(row.institution_id) !== String(institution.id)) {
+        if (false) {
           return;
         }
         const key = String(row.student_id || '');

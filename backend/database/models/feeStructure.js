@@ -8,15 +8,7 @@ module.exports = (sequelize, DataTypes) => {
       primaryKey: true,
       defaultValue: DataTypes.UUIDV4,
     },
-    "institution_id": {
-      type: DataTypes.UUID,
-      allowNull: false,
-      references: {
-        model: "institutions",
-        key: "id",
-      },
-    },
-    "level_id": {
+        "level_id": {
       type: DataTypes.UUID,
       references: {
         model: "education_levels",
@@ -79,9 +71,8 @@ module.exports = (sequelize, DataTypes) => {
       timestamps: true,
       freezeTableName: true,
       indexes: [
-      { fields: ["institution_id", "academic_year_id"] },
-      { fields: ["institution_id", "academic_year_id", "fee_type", "level_id", "class_id", "term_id"], unique: true },
-      { fields: ["institution_id"] },
+      { fields: ["academic_year_id"] },
+      { fields: ["academic_year_id", "fee_type", "level_id", "class_id", "term_id"], unique: true },
       { fields: ["level_id"] },
       { fields: ["class_id"] },
       { fields: ["academic_year_id"] },
@@ -91,7 +82,6 @@ module.exports = (sequelize, DataTypes) => {
   );
 
   FeeStructure.associate = (models) => {
-  FeeStructure.belongsTo(models.Institution, { foreignKey: 'institution_id', as: 'institution' });
   FeeStructure.belongsTo(models.EducationLevel, { foreignKey: 'level_id', as: 'level' });
   FeeStructure.belongsTo(models.Class, { foreignKey: 'class_id', as: 'class' });
   FeeStructure.belongsTo(models.AcademicYear, { foreignKey: 'academic_year_id', as: 'academicYear' });

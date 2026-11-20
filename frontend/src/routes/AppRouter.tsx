@@ -8,8 +8,6 @@ import PublicRoute from './PublicRoute';
 const LoginPage = lazy(() => import('../modules/auth/LoginPage'));
 const SuperAdminLoginPage = lazy(() => import('../modules/super-admin/SuperAdminLoginPage'));
 const PlatformHomePage = lazy(() => import('../modules/super-admin/PlatformHomePage'));
-const InstitutionListPage = lazy(() => import('../modules/super-admin/InstitutionListPage'));
-const InstitutionOnboardPage = lazy(() => import('../modules/super-admin/InstitutionOnboardPage'));
 const PlatformUserManagementPage = lazy(
   () => import('../modules/super-admin/PlatformUserManagementPage')
 );
@@ -45,7 +43,6 @@ const AttendanceReportPage = lazy(() => import('../modules/attendance/Attendance
 const TimetableViewPage = lazy(() => import('../modules/timetable/TimetableViewPage'));
 const TimetableGeneratorPage = lazy(() => import('../modules/timetable/TimetableGeneratorPage'));
 const WorkspaceHubPage = lazy(() => import('../modules/workspace/WorkspaceHubPage'));
-const DaycareManagementPage = lazy(() => import('../modules/workspace/DaycareManagementPage'));
 const TertiaryManagementPage = lazy(() => import('../modules/workspace/TertiaryManagementPage'));
 const SettingsWorkspacePage = lazy(() => import('../modules/workspace/SettingsWorkspacePage'));
 const UserManagementPage = lazy(() => import('../modules/workspace/UserManagementPage'));
@@ -387,8 +384,7 @@ const AppRouter = () => {
                     ]}
                     links={[
                       { title: 'Communication', description: 'Send delay and pickup updates to guardians.', to: '/communication' },
-                      { title: 'Daycare Operations', description: 'Coordinate child release and pickup policies.', to: '/daycare', badge: 'early years' },
-                      { title: 'Settings', description: 'Align transport operations to institution policy.', to: '/settings' },
+                      { title: 'Settings', description: 'Align transport operations to school policy.', to: '/settings' },
                     ]}
                     checklist={[
                       { title: 'Guardian workflow', description: 'Parents and students can see transport-related operations without seeing admin-only data.', status: 'success' },
@@ -468,14 +464,6 @@ const AppRouter = () => {
               element={
                 <ProtectedRoute allowedRoles={['institution_admin']}>
                   <SettingsWorkspacePage />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/daycare"
-              element={
-                <ProtectedRoute allowedRoles={['institution_admin', 'teacher']}>
-                  <DaycareManagementPage />
                 </ProtectedRoute>
               }
             />
@@ -606,8 +594,8 @@ const AppRouter = () => {
           >
             <Route path="/super-admin" element={<PlatformHomePage />} />
             <Route path="/super-admin/users" element={<PlatformUserManagementPage />} />
-            <Route path="/super-admin/institutions" element={<InstitutionListPage />} />
-            <Route path="/super-admin/institutions/new" element={<InstitutionOnboardPage />} />
+            <Route path="/super-admin/institutions" element={<Navigate to="/super-admin" replace />} />
+            <Route path="/super-admin/institutions/new" element={<Navigate to="/super-admin" replace />} />
             <Route path="/super-admin/analytics" element={<PlatformAnalyticsPage />} />
             <Route path="/super-admin/audit-logs" element={<AuditLogPage />} />
           </Route>

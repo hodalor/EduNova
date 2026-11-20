@@ -8,15 +8,7 @@ module.exports = (sequelize, DataTypes) => {
       primaryKey: true,
       defaultValue: DataTypes.UUIDV4,
     },
-    "institution_id": {
-      type: DataTypes.UUID,
-      allowNull: false,
-      references: {
-        model: "institutions",
-        key: "id",
-      },
-    },
-    "level_id": {
+        "level_id": {
       type: DataTypes.UUID,
       allowNull: false,
       references: {
@@ -57,9 +49,8 @@ module.exports = (sequelize, DataTypes) => {
       timestamps: true,
       freezeTableName: true,
       indexes: [
-      { fields: ["institution_id", "academic_year_id"] },
-      { fields: ["institution_id", "academic_year_id", "name", "stream"], unique: true },
-      { fields: ["institution_id"] },
+      { fields: ["academic_year_id"] },
+      { fields: ["academic_year_id", "name", "stream"], unique: true },
       { fields: ["level_id"] },
       { fields: ["class_teacher_id"] },
       { fields: ["academic_year_id"] },
@@ -68,7 +59,6 @@ module.exports = (sequelize, DataTypes) => {
   );
 
   Class.associate = (models) => {
-  Class.belongsTo(models.Institution, { foreignKey: 'institution_id', as: 'institution' });
   Class.belongsTo(models.EducationLevel, { foreignKey: 'level_id', as: 'level' });
   Class.belongsTo(models.Staff, { foreignKey: 'class_teacher_id', as: 'classTeacher' });
   Class.belongsTo(models.AcademicYear, { foreignKey: 'academic_year_id', as: 'academicYear' });

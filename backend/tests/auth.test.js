@@ -11,7 +11,6 @@ const mockInstitution = {
 const mockUsers = [
   {
     id: 'usr-001',
-    institution_id: mockInstitution.id,
     email: 'parent@eduova.test',
     phone: '+233200000001',
     role: 'parent',
@@ -88,7 +87,6 @@ jest.mock('../src/shared/helpers/auth', () => ({
   isTokenBlacklisted: jest.fn(async () => false),
   verifyAccessToken: jest.fn(() => ({
     sub: 'usr-001',
-    institution_id: mockInstitution.id,
     role: 'parent',
   })),
   isLocked: jest.fn(async (identity, institutionId) => {

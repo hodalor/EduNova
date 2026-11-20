@@ -11,7 +11,6 @@ const initialStore = {
     },
     superAdmin: {
       id: 'usr-super-master',
-      institution_id: 'platform',
       username: 'superadmin',
       email: 'superadmin@eduova.test',
       first_name: 'Master',
@@ -103,7 +102,6 @@ const initialStore = {
     accounts: [
       {
         id: 'usr-admin-001',
-        institution_id: 'test-inst',
         email: 'admin@eduova.test',
         phone: '+233200000001',
         role: 'institution_admin',
@@ -122,7 +120,6 @@ const initialStore = {
       },
       {
         id: 'usr-teacher-001',
-        institution_id: 'test-inst',
         email: 'teacher@eduova.test',
         phone: '+233200000010',
         role: 'teacher',
@@ -141,7 +138,6 @@ const initialStore = {
       },
       {
         id: 'usr-parent-001',
-        institution_id: 'test-inst',
         email: 'parent.mensah@eduova.test',
         phone: '+233244100001',
         role: 'parent',
@@ -153,7 +149,6 @@ const initialStore = {
       },
       {
         id: 'usr-parent-002',
-        institution_id: 'test-inst',
         email: 'parent.tetteh@eduova.test',
         phone: '+233244100002',
         role: 'parent',
@@ -165,7 +160,6 @@ const initialStore = {
       },
       {
         id: 'usr-parent-003',
-        institution_id: 'test-inst',
         email: 'kwame.boadi@example.com',
         phone: '+233244100003',
         role: 'parent',
@@ -177,7 +171,6 @@ const initialStore = {
       },
       {
         id: 'usr-parent-004',
-        institution_id: 'inst-growth',
         email: 'ama.akoto@example.com',
         phone: '+233244100004',
         role: 'parent',
@@ -193,7 +186,6 @@ const initialStore = {
     profiles: [
       {
         id: 'stu-001',
-        institution_id: 'test-inst',
         parent_id: 'parent-001',
         student_number: 'EDU-2026-0001',
         first_name: 'Elikem',
@@ -209,7 +201,6 @@ const initialStore = {
       },
       {
         id: 'stu-002',
-        institution_id: 'test-inst',
         parent_id: 'parent-001',
         student_number: 'EDU-2026-0002',
         first_name: 'Ama',
@@ -236,7 +227,6 @@ const initialStore = {
     invoices: [
       {
         id: 'inv-001',
-        institution_id: 'test-inst',
         student_id: 'stu-001',
         student_name: 'Elikem Mensah',
         class_name: 'SH 2 Science',
@@ -250,7 +240,6 @@ const initialStore = {
       },
       {
         id: 'inv-002',
-        institution_id: 'test-inst',
         student_id: 'stu-002',
         student_name: 'Ama Tetteh',
         class_name: 'PR 5 Gold',
@@ -267,7 +256,6 @@ const initialStore = {
     feeStructures: [
       {
         id: 'fee-001',
-        institution_id: 'test-inst',
         level: 'PR',
         class_name: 'PR 5 Gold',
         term: 'Term 2',
@@ -277,7 +265,6 @@ const initialStore = {
     paymentTerms: [
       {
         id: 'pt-001',
-        institution_id: 'test-inst',
         name: 'Full Payment On Admission',
         code: 'FULL',
         description: 'Full fees payable at the point of enrollment.',
@@ -288,7 +275,6 @@ const initialStore = {
       },
       {
         id: 'pt-002',
-        institution_id: 'test-inst',
         name: 'Two Equal Installments',
         code: 'HALF',
         description: 'Split fees into two equal installments, second due at mid-term.',
@@ -299,7 +285,6 @@ const initialStore = {
       },
       {
         id: 'pt-003',
-        institution_id: 'test-inst',
         name: 'Three-Term Payment Plan',
         code: 'TERM3',
         description: 'Fees spread across three monthly installments after enrollment.',
@@ -315,7 +300,6 @@ const initialStore = {
       groups: [
         {
           id: 'grp-sh2-sci',
-          institution_id: 'test-inst',
           name: 'SH 2 Science',
           code: 'SH2-SCI',
           group_type: 'class',
@@ -324,7 +308,6 @@ const initialStore = {
         },
         {
           id: 'grp-l100-cs',
-          institution_id: 'test-inst',
           name: 'Level 100 Computer Science',
           code: 'L100-CS',
           group_type: 'level',
@@ -333,7 +316,6 @@ const initialStore = {
         },
         {
           id: 'grp-l200-cs',
-          institution_id: 'test-inst',
           name: 'Level 200 Computer Science',
           code: 'L200-CS',
           group_type: 'level',
@@ -344,7 +326,6 @@ const initialStore = {
       periods: [
         {
           id: 'prd-sh2-term2',
-          institution_id: 'test-inst',
           group_id: 'grp-sh2-sci',
           name: 'Term 2',
           sequence: 2,
@@ -356,7 +337,6 @@ const initialStore = {
         },
         {
           id: 'prd-l100-sem1',
-          institution_id: 'test-inst',
           group_id: 'grp-l100-cs',
           name: 'Semester 1',
           sequence: 1,
@@ -368,7 +348,6 @@ const initialStore = {
         },
         {
           id: 'prd-l100-sem2',
-          institution_id: 'test-inst',
           group_id: 'grp-l100-cs',
           name: 'Semester 2',
           sequence: 2,
@@ -380,7 +359,6 @@ const initialStore = {
         },
         {
           id: 'prd-l200-sem1',
-          institution_id: 'test-inst',
           group_id: 'grp-l200-cs',
           name: 'Semester 1',
           sequence: 1,
@@ -394,7 +372,6 @@ const initialStore = {
       offerings: [
         {
           id: 'off-sh2-math',
-          institution_id: 'test-inst',
           group_id: 'grp-sh2-sci',
           period_id: 'prd-sh2-term2',
           type: 'subject',
@@ -407,7 +384,6 @@ const initialStore = {
         },
         {
           id: 'off-sh2-bio',
-          institution_id: 'test-inst',
           group_id: 'grp-sh2-sci',
           period_id: 'prd-sh2-term2',
           type: 'subject',
@@ -420,7 +396,6 @@ const initialStore = {
         },
         {
           id: 'off-csc101',
-          institution_id: 'test-inst',
           group_id: 'grp-l100-cs',
           period_id: 'prd-l100-sem1',
           type: 'course',
@@ -433,7 +408,6 @@ const initialStore = {
         },
         {
           id: 'off-mth101',
-          institution_id: 'test-inst',
           group_id: 'grp-l100-cs',
           period_id: 'prd-l100-sem1',
           type: 'course',
@@ -446,7 +420,6 @@ const initialStore = {
         },
         {
           id: 'off-csc102',
-          institution_id: 'test-inst',
           group_id: 'grp-l100-cs',
           period_id: 'prd-l100-sem2',
           type: 'course',
@@ -459,7 +432,6 @@ const initialStore = {
         },
         {
           id: 'off-gst102',
-          institution_id: 'test-inst',
           group_id: 'grp-l100-cs',
           period_id: 'prd-l100-sem2',
           type: 'course',
@@ -472,7 +444,6 @@ const initialStore = {
         },
         {
           id: 'off-csc201',
-          institution_id: 'test-inst',
           group_id: 'grp-l200-cs',
           period_id: 'prd-l200-sem1',
           type: 'course',
@@ -494,7 +465,6 @@ const initialStore = {
     reportCards: [
       {
         id: 'rc-001',
-        institution_id: 'test-inst',
         student_id: 'stu-001',
         student_name: 'Elikem Mensah',
         class_name: 'SH 2 Science',
@@ -511,7 +481,6 @@ const initialStore = {
       },
       {
         id: 'rc-002',
-        institution_id: 'test-inst',
         student_id: 'stu-002',
         student_name: 'Ama Tetteh',
         class_name: 'PR 5 Gold',
@@ -531,7 +500,6 @@ const initialStore = {
     sessions: [
       {
         id: 'ses-001',
-        institution_id: 'test-inst',
         class_id: 'cls-001',
         class_name: 'SH 2 Science',
         session_type: 'morning',
@@ -549,7 +517,6 @@ const initialStore = {
     vehicles: [
       {
         id: 'veh-001',
-        institution_id: 'test-inst',
         vehicle_id: 'veh-001',
         name: 'Bus 1',
         route: 'East Legon Shuttle',
@@ -568,15 +535,14 @@ const initialStore = {
     ],
   },
   tertiary: {
-    departments: [{ id: 'dep-001', institution_id: 'test-inst', name: 'Computer Science' }],
+    departments: [{ id: 'dep-001', name: 'Computer Science' }],
     programs: [
-      { id: 'prog-001', institution_id: 'test-inst', name: 'BSc Computer Science', type: 'degree' },
+      { id: 'prog-001', name: 'BSc Computer Science', type: 'degree' },
     ],
     registrations: [],
     studentProgress: [
       {
         student_id: 'usr-tertiary-student-001',
-        institution_id: 'test-inst',
         current_group_id: 'grp-l100-cs',
         current_period_id: 'prd-l100-sem2',
         passed_offering_codes: ['CSC101'],
@@ -586,7 +552,6 @@ const initialStore = {
       },
       {
         student_id: 'stu-001',
-        institution_id: 'test-inst',
         current_group_id: 'grp-l100-cs',
         current_period_id: 'prd-l100-sem2',
         passed_offering_codes: ['CSC101'],
@@ -596,12 +561,12 @@ const initialStore = {
       },
     ],
     transcripts: [
-      { student_id: 'stu-001', institution_id: 'test-inst', cgpa: 3.62, credit_hours: 45, semester: '2026/1' },
+      { student_id: 'stu-001', cgpa: 3.62, credit_hours: 45, semester: '2026/1' },
     ],
   },
   daycare: {
     presentNow: [
-      { student_id: 'dc-001', student_name: 'Baby Ama', institution_id: 'test-inst', session: 'AM' },
+      { student_id: 'dc-001', student_name: 'Baby Ama', session: 'AM' },
     ],
     milestones: {},
     pickupPins: {},

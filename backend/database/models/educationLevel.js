@@ -8,16 +8,8 @@ module.exports = (sequelize, DataTypes) => {
       primaryKey: true,
       defaultValue: DataTypes.UUIDV4,
     },
-    "institution_id": {
-      type: DataTypes.UUID,
-      allowNull: false,
-      references: {
-        model: "institutions",
-        key: "id",
-      },
-    },
-    "level_code": {
-      type: DataTypes.ENUM("DC", "PR", "JH", "SH", "TR"),
+        "level_code": {
+      type: DataTypes.ENUM("TR"),
       allowNull: false,
     },
     "level_name": {
@@ -38,14 +30,12 @@ module.exports = (sequelize, DataTypes) => {
       timestamps: true,
       freezeTableName: true,
       indexes: [
-      { fields: ["institution_id", "level_code"], unique: true },
-      { fields: ["institution_id"] },
+      { fields: ["level_code"], unique: true },
       ],
     }
   );
 
   EducationLevel.associate = (models) => {
-  EducationLevel.belongsTo(models.Institution, { foreignKey: 'institution_id', as: 'institution' });
   EducationLevel.hasMany(models.Class, { foreignKey: 'level_id', as: 'classes' });
   EducationLevel.hasMany(models.Subject, { foreignKey: 'level_id', as: 'subjects' });
   EducationLevel.hasMany(models.Student, { foreignKey: 'level_id', as: 'students' });

@@ -65,7 +65,7 @@ export interface AuthUser {
   email: string;
   username?: string;
   role: UserRole;
-  institution_id: string;
+  institution_id?: string;
   phone?: string | null;
   profile_photo?: string | null;
 }

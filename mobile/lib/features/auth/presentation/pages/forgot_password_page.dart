@@ -10,14 +10,12 @@ class ForgotPasswordPage extends StatefulWidget {
 }
 
 class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
-  final _institutionCodeController = TextEditingController();
   final _emailController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   bool _submitted = false;
 
   @override
   void dispose() {
-    _institutionCodeController.dispose();
     _emailController.dispose();
     super.dispose();
   }
@@ -50,19 +48,10 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                         ),
                         const SizedBox(height: 8),
                         const Text(
-                          'Enter your institution code and email to receive reset instructions.',
+                          'Enter your email to receive reset instructions.',
                           style: TextStyle(color: AppColors.textMuted),
                         ),
                         const SizedBox(height: 24),
-                        TextFormField(
-                          controller: _institutionCodeController,
-                          decoration: const InputDecoration(
-                            labelText: 'Institution Code',
-                          ),
-                          validator: (value) =>
-                              value == null || value.isEmpty ? 'Required' : null,
-                        ),
-                        const SizedBox(height: 16),
                         TextFormField(
                           controller: _emailController,
                           decoration:

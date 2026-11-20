@@ -16,15 +16,7 @@ module.exports = (sequelize, DataTypes) => {
         key: "id",
       },
     },
-    "institution_id": {
-      type: DataTypes.UUID,
-      allowNull: false,
-      references: {
-        model: "institutions",
-        key: "id",
-      },
-    },
-    "staff_number": {
+        "staff_number": {
       type: DataTypes.STRING,
       allowNull: false,
     },
@@ -60,15 +52,13 @@ module.exports = (sequelize, DataTypes) => {
       freezeTableName: true,
       indexes: [
       { fields: ["user_id"], unique: true },
-      { fields: ["institution_id", "staff_number"], unique: true },
-      { fields: ["institution_id"] },
+      { fields: ["staff_number"], unique: true },
       ],
     }
   );
 
   Staff.associate = (models) => {
   Staff.belongsTo(models.User, { foreignKey: 'user_id', as: 'user' });
-  Staff.belongsTo(models.Institution, { foreignKey: 'institution_id', as: 'institution' });
   Staff.hasMany(models.Class, { foreignKey: 'class_teacher_id', as: 'homeroomClasses' });
   Staff.hasMany(models.ClassSubject, { foreignKey: 'teacher_id', as: 'classSubjectAssignments' });
   Staff.hasMany(models.AttendanceSession, { foreignKey: 'teacher_id', as: 'attendanceSessions' });

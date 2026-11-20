@@ -2,8 +2,8 @@ require('./test-env');
 
 jest.mock('../src/modules/auth/auth.middleware', () => ({
   authenticate: (req, _res, next) => {
-    req.user = { id: 'teacher-1', role: 'teacher', institution_id: 'test-inst' };
-    req.auth = { institution_id: 'test-inst' };
+    req.user = { id: 'teacher-1', role: 'teacher', };
+    req.auth = { };
     next();
   },
   resolveInstitution: (req, _res, next) => {

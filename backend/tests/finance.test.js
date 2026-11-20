@@ -2,8 +2,8 @@ require('./test-env');
 
 jest.mock('../src/modules/auth/auth.middleware', () => ({
   authenticate: (req, _res, next) => {
-    req.user = { id: 'tester-1', role: 'institution_admin', institution_id: 'test-inst' };
-    req.auth = { institution_id: 'test-inst' };
+    req.user = { id: 'tester-1', role: 'institution_admin', };
+    req.auth = { };
     next();
   },
   resolveInstitution: (req, _res, next) => {
@@ -75,7 +75,6 @@ describe('Finance routes', () => {
 
     store.finance.invoices.push({
       id: 'inv-overdue',
-      institution_id: 'test-inst',
       student_id: 'stu-099',
       student_name: 'Late Payer',
       class_name: 'PR 1',

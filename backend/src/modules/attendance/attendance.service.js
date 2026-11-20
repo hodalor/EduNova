@@ -10,7 +10,7 @@ const databaseReady = () =>
 
 const markAttendance = async ({ institutionId, sessionId, payload, userId, ip }) => {
   const session = store.attendance.sessions.find(
-    (item) => item.id === sessionId && item.institution_id === institutionId
+    (item) => item.id === sessionId
   );
   if (!session) {
     throw Object.assign(new Error('Attendance session not found.'), { statusCode: 404 });
@@ -18,7 +18,6 @@ const markAttendance = async ({ institutionId, sessionId, payload, userId, ip })
 
   const record = {
     id: `att-${store.attendance.records.length + 1}`,
-    institution_id: institutionId,
     session_id: sessionId,
     student_id: payload.student_id,
     student_name: payload.student_name,
@@ -63,7 +62,7 @@ const markAttendance = async ({ institutionId, sessionId, payload, userId, ip })
 
 const closeSession = async ({ institutionId, sessionId, userId, ip }) => {
   const session = store.attendance.sessions.find(
-    (item) => item.id === sessionId && item.institution_id === institutionId
+    (item) => item.id === sessionId
   );
   if (!session) {
     throw Object.assign(new Error('Attendance session not found.'), { statusCode: 404 });
@@ -89,7 +88,7 @@ const getToday = async ({ institutionId }) => {
   if (databaseReady()) {
     const [students, records] = await Promise.all([
       models.Student.findAll({
-        where: { institution_id: institutionId, status: 'active' },
+        where: { status: 'active' },
         include: [{ model: models.User, as: 'user', required: false }],
         order: [['created_at', 'DESC']],
       }).catch(() => []),
@@ -99,7 +98,7 @@ const getToday = async ({ institutionId }) => {
             model: models.Student,
             as: 'student',
             required: true,
-            where: { institution_id: institutionId },
+            where: { },
           },
           {
             model: models.AttendanceSession,
@@ -122,12 +121,12 @@ const getToday = async ({ institutionId }) => {
 
   const statusMap = new Map(
     store.attendance.records
-      .filter((item) => item.institution_id === institutionId)
+      .filter((item) => true)
       .map((item) => [item.student_id, item.status])
   );
 
   return store.students.profiles
-    .filter((item) => item.institution_id === institutionId)
+    .filter((item) => true)
     .map((student) => ({
       id: student.id,
       student: student.full_name || `${student.first_name || ''} ${student.last_name || ''}`.trim(),
@@ -136,7 +135,7 @@ const getToday = async ({ institutionId }) => {
 };
 
 const getReport = async ({ institutionId }) => {
-  const records = store.attendance.records.filter((item) => item.institution_id === institutionId);
+  const records = store.attendance.records.filter((item) => true);
   const grouped = records.reduce((acc, record) => {
     if (!acc[record.student_id]) {
       acc[record.student_id] = {

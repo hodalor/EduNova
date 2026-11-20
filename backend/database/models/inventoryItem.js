@@ -8,15 +8,7 @@ module.exports = (sequelize, DataTypes) => {
       primaryKey: true,
       defaultValue: DataTypes.UUIDV4,
     },
-    "institution_id": {
-      type: DataTypes.UUID,
-      allowNull: false,
-      references: {
-        model: "institutions",
-        key: "id",
-      },
-    },
-    "category_id": {
+        "category_id": {
       type: DataTypes.UUID,
       allowNull: false,
       references: {
@@ -68,15 +60,13 @@ module.exports = (sequelize, DataTypes) => {
       timestamps: true,
       freezeTableName: true,
       indexes: [
-      { fields: ["institution_id", "barcode"], unique: true },
-      { fields: ["institution_id"] },
+      { fields: ["barcode"], unique: true },
       { fields: ["category_id"] },
       ],
     }
   );
 
   InventoryItem.associate = (models) => {
-  InventoryItem.belongsTo(models.Institution, { foreignKey: 'institution_id', as: 'institution' });
   InventoryItem.belongsTo(models.InventoryCategory, { foreignKey: 'category_id', as: 'category' });
   InventoryItem.hasMany(models.StockMovement, { foreignKey: 'item_id', as: 'stockMovements' });
   };

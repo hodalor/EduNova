@@ -110,6 +110,7 @@ if (env.NODE_ENV === 'test') {
   };
 
   models = initializeModels(sequelize);
+  require('../shared/services/school.service').installSingleSchoolLookup();
 }
 
 module.exports = {

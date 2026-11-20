@@ -22,17 +22,7 @@ module.exports = {
       "deleted_at": {
         type: Sequelize.DATE,
       },
-      "institution_id": {
-        type: Sequelize.UUID,
-        allowNull: false,
-        references: {
-          model: "institutions",
-          key: "id",
-        },
-        onUpdate: "CASCADE",
-        onDelete: "CASCADE",
-      },
-      "email": {
+            "email": {
         type: Sequelize.STRING,
         allowNull: false,
       },
@@ -85,9 +75,8 @@ module.exports = {
         type: Sequelize.STRING,
       },
     });
-    await queryInterface.addIndex("users", ["email", "institution_id"], { unique: true });
-    await queryInterface.addIndex("users", ["institution_id", "phone"]);
-    await queryInterface.addIndex("users", ["institution_id"]);
+    await queryInterface.addIndex("users", ["email"], { unique: true });
+    await queryInterface.addIndex("users", ["phone"]);
     await queryInterface.createTable("guardians", {
       "id": {
         type: Sequelize.UUID,
@@ -171,17 +160,7 @@ module.exports = {
         onUpdate: "CASCADE",
         onDelete: "CASCADE",
       },
-      "institution_id": {
-        type: Sequelize.UUID,
-        allowNull: false,
-        references: {
-          model: "institutions",
-          key: "id",
-        },
-        onUpdate: "CASCADE",
-        onDelete: "CASCADE",
-      },
-      "staff_number": {
+            "staff_number": {
         type: Sequelize.STRING,
         allowNull: false,
       },
@@ -210,8 +189,7 @@ module.exports = {
       },
     });
     await queryInterface.addIndex("staff", ["user_id"], { unique: true });
-    await queryInterface.addIndex("staff", ["institution_id", "staff_number"], { unique: true });
-    await queryInterface.addIndex("staff", ["institution_id"]);
+    await queryInterface.addIndex("staff", ["staff_number"], { unique: true });
     await queryInterface.createTable("classes", {
       "id": {
         type: Sequelize.UUID,
@@ -232,17 +210,7 @@ module.exports = {
       "deleted_at": {
         type: Sequelize.DATE,
       },
-      "institution_id": {
-        type: Sequelize.UUID,
-        allowNull: false,
-        references: {
-          model: "institutions",
-          key: "id",
-        },
-        onUpdate: "CASCADE",
-        onDelete: "CASCADE",
-      },
-      "level_id": {
+            "level_id": {
         type: Sequelize.UUID,
         allowNull: false,
         references: {
@@ -282,9 +250,8 @@ module.exports = {
         onDelete: "CASCADE",
       },
     });
-    await queryInterface.addIndex("classes", ["institution_id", "academic_year_id"]);
-    await queryInterface.addIndex("classes", ["institution_id", "academic_year_id", "name", "stream"], { unique: true });
-    await queryInterface.addIndex("classes", ["institution_id"]);
+    await queryInterface.addIndex("classes", ["academic_year_id"]);
+    await queryInterface.addIndex("classes", ["academic_year_id", "name", "stream"], { unique: true });
     await queryInterface.addIndex("classes", ["level_id"]);
     await queryInterface.addIndex("classes", ["class_teacher_id"]);
     await queryInterface.addIndex("classes", ["academic_year_id"]);
@@ -308,17 +275,7 @@ module.exports = {
       "deleted_at": {
         type: Sequelize.DATE,
       },
-      "institution_id": {
-        type: Sequelize.UUID,
-        allowNull: false,
-        references: {
-          model: "institutions",
-          key: "id",
-        },
-        onUpdate: "CASCADE",
-        onDelete: "CASCADE",
-      },
-      "level_id": {
+            "level_id": {
         type: Sequelize.UUID,
         allowNull: false,
         references: {
@@ -349,8 +306,7 @@ module.exports = {
         defaultValue: true,
       },
     });
-    await queryInterface.addIndex("subjects", ["institution_id", "code"], { unique: true });
-    await queryInterface.addIndex("subjects", ["institution_id"]);
+    await queryInterface.addIndex("subjects", ["code"], { unique: true });
     await queryInterface.addIndex("subjects", ["level_id"]);
     await queryInterface.createTable("class_subjects", {
       "id": {
@@ -441,17 +397,7 @@ module.exports = {
         onUpdate: "CASCADE",
         onDelete: "CASCADE",
       },
-      "institution_id": {
-        type: Sequelize.UUID,
-        allowNull: false,
-        references: {
-          model: "institutions",
-          key: "id",
-        },
-        onUpdate: "CASCADE",
-        onDelete: "CASCADE",
-      },
-      "student_number": {
+            "student_number": {
         type: Sequelize.STRING,
         allowNull: false,
       },
@@ -513,10 +459,9 @@ module.exports = {
         onDelete: "SET NULL",
       },
     });
-    await queryInterface.addIndex("students", ["student_number", "institution_id"], { unique: true });
-    await queryInterface.addIndex("students", ["institution_id", "admission_number"], { unique: true });
+    await queryInterface.addIndex("students", ["student_number"], { unique: true });
+    await queryInterface.addIndex("students", ["admission_number"], { unique: true });
     await queryInterface.addIndex("students", ["user_id"]);
-    await queryInterface.addIndex("students", ["institution_id"]);
     await queryInterface.addIndex("students", ["class_id"]);
     await queryInterface.addIndex("students", ["level_id"]);
     await queryInterface.addIndex("students", ["guardian_id"]);

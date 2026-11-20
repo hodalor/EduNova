@@ -8,15 +8,7 @@ module.exports = (sequelize, DataTypes) => {
       primaryKey: true,
       defaultValue: DataTypes.UUIDV4,
     },
-    "institution_id": {
-      type: DataTypes.UUID,
-      allowNull: false,
-      references: {
-        model: "institutions",
-        key: "id",
-      },
-    },
-    "branch_name": {
+        "branch_name": {
       type: DataTypes.STRING,
       allowNull: false,
     },
@@ -36,14 +28,12 @@ module.exports = (sequelize, DataTypes) => {
       timestamps: true,
       freezeTableName: true,
       indexes: [
-      { fields: ["institution_id", "branch_name"], unique: true },
-      { fields: ["institution_id"] },
+      { fields: ["branch_name"], unique: true },
       ],
     }
   );
 
   InstitutionBranch.associate = (models) => {
-  InstitutionBranch.belongsTo(models.Institution, { foreignKey: 'institution_id', as: 'institution' });
   };
 
   return InstitutionBranch;

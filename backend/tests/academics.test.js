@@ -2,8 +2,8 @@ require('./test-env');
 
 jest.mock('../src/modules/auth/auth.middleware', () => ({
   authenticate: (req, _res, next) => {
-    req.user = { id: 'teacher-1', role: 'teacher', institution_id: 'test-inst' };
-    req.auth = { institution_id: 'test-inst' };
+    req.user = { id: 'teacher-1', role: 'teacher', };
+    req.auth = { };
     next();
   },
   resolveInstitution: (req, _res, next) => {
@@ -70,7 +70,6 @@ describe('Academics routes', () => {
 
     store.academics.reportCards.push({
       id: 'rc-003',
-      institution_id: 'test-inst',
       student_id: 'stu-010',
       student_name: 'Top Student',
       class_name: 'SH 2 Science',

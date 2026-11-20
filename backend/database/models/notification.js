@@ -8,15 +8,7 @@ module.exports = (sequelize, DataTypes) => {
       primaryKey: true,
       defaultValue: DataTypes.UUIDV4,
     },
-    "institution_id": {
-      type: DataTypes.UUID,
-      allowNull: false,
-      references: {
-        model: "institutions",
-        key: "id",
-      },
-    },
-    "sender_id": {
+        "sender_id": {
       type: DataTypes.UUID,
       references: {
         model: "users",
@@ -67,14 +59,12 @@ module.exports = (sequelize, DataTypes) => {
       timestamps: true,
       freezeTableName: true,
       indexes: [
-      { fields: ["institution_id"] },
       { fields: ["sender_id"] },
       ],
     }
   );
 
   Notification.associate = (models) => {
-  Notification.belongsTo(models.Institution, { foreignKey: 'institution_id', as: 'institution' });
   Notification.belongsTo(models.User, { foreignKey: 'sender_id', as: 'sender' });
   };
 

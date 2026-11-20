@@ -45,9 +45,7 @@ const initializeSocketNamespaces = ({ io }) => {
     if (userId) {
       socket.join(`user:${userId}`);
     }
-    if (institutionId) {
-      socket.join(`institution:${institutionId}`);
-    }
+    socket.join('school');
   });
 
   namespaces.transport.use((socket, next) => {
@@ -105,7 +103,7 @@ const emitAdmissionEvent = ({ institutionId, event, application }) => {
     return;
   }
 
-  namespaces.notifications.to(`institution:${institutionId}`).emit(event, application);
+  namespaces.notifications.to('school').emit(event, application);
 };
 
 const emitNotification = ({ userId, notification }) => {

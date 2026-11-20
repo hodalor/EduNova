@@ -99,34 +99,14 @@ const requireText = (payload, key, label) => {
   return value;
 };
 
-const findInstitutionByCode = async (code) => {
-  const normalized = String(code || '').trim().toUpperCase();
-  if (!normalized) {
-    throw Object.assign(new Error('Institution code is required.'), { statusCode: 400 });
-  }
+const loadInstitution = async () => {
   if (!models.Institution) {
     throw Object.assign(new Error('Admissions are unavailable right now.'), { statusCode: 503 });
   }
 
-  const institution = await models.Institution.findOne({ where: { code: normalized } });
+  const institution = await models.Institution.findOne();
   if (!institution) {
-    throw Object.assign(new Error('No institution matches that code.'), { statusCode: 404 });
-  }
-
-  const levels = Array.isArray(institution.education_levels) ? institution.education_levels : [];
-  if (levels.length && !levels.includes('TR')) {
-    throw Object.assign(new Error('This institution is not accepting tertiary applications.'), {
-      statusCode: 400,
-    });
-  }
-
-  return institution;
-};
-
-const loadInstitution = async (institutionId) => {
-  const institution = await models.Institution.findByPk(institutionId);
-  if (!institution) {
-    throw Object.assign(new Error('Institution not found.'), { statusCode: 404 });
+    throw Object.assign(new Error('School profile is not set up yet.'), { statusCode: 404 });
   }
   return institution;
 };
@@ -138,7 +118,7 @@ const loadFeePlan = async (institutionId) => {
 
   try {
     const rows = await models.FeeStructure.findAll({
-      where: { institution_id: institutionId },
+      where: { },
       include: [
         { model: models.TermSemester, as: 'term', required: false },
         { model: models.EducationLevel, as: 'level', required: false },
@@ -211,13 +191,13 @@ const buildLetterHtml = ({ institution, application, feePlan, minimumPercent }) 
   </div>`;
 };
 
-const getPublicCatalog = async ({ code }) => {
-  const institution = await findInstitutionByCode(code);
+const getPublicCatalog = async () => {
+  const institution = await loadInstitution();
   const settings = ensureAdmissionSettings(institution.settings);
   return {
     institution: {
       name: institution.name,
-      code: institution.code,
+      code: null,
       logo_url: institution.logo_url || null,
       address: institution.address || '',
       phone: institution.phone || '',
@@ -230,8 +210,8 @@ const getPublicCatalog = async ({ code }) => {
   };
 };
 
-const submitApplication = async ({ code, payload }) => {
-  const institution = await findInstitutionByCode(code);
+const submitApplication = async ({ payload }) => {
+  const institution = await loadInstitution();
   const settings = ensureAdmissionSettings(institution.settings);
   const programId = requireText(payload, 'program_id', 'Programme');
   const program = settings.tertiary.programs.find((item) => String(item.id) === programId);
@@ -272,7 +252,7 @@ const submitApplication = async ({ code, payload }) => {
 
   const application = {
     id: crypto.randomUUID(),
-    reference: `${institution.code}-${year}-${String(sequence).padStart(4, '0')}`,
+    reference: `APP-${year}-${String(sequence).padStart(4, '0')}`,
     status: 'submitted',
     first_name: firstName,
     middle_name: middleName,

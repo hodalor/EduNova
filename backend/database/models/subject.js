@@ -8,15 +8,7 @@ module.exports = (sequelize, DataTypes) => {
       primaryKey: true,
       defaultValue: DataTypes.UUIDV4,
     },
-    "institution_id": {
-      type: DataTypes.UUID,
-      allowNull: false,
-      references: {
-        model: "institutions",
-        key: "id",
-      },
-    },
-    "level_id": {
+        "level_id": {
       type: DataTypes.UUID,
       allowNull: false,
       references: {
@@ -52,15 +44,13 @@ module.exports = (sequelize, DataTypes) => {
       timestamps: true,
       freezeTableName: true,
       indexes: [
-      { fields: ["institution_id", "code"], unique: true },
-      { fields: ["institution_id"] },
+      { fields: ["code"], unique: true },
       { fields: ["level_id"] },
       ],
     }
   );
 
   Subject.associate = (models) => {
-  Subject.belongsTo(models.Institution, { foreignKey: 'institution_id', as: 'institution' });
   Subject.belongsTo(models.EducationLevel, { foreignKey: 'level_id', as: 'level' });
   Subject.hasMany(models.ClassSubject, { foreignKey: 'subject_id', as: 'classSubjects' });
   Subject.hasMany(models.AttendanceSession, { foreignKey: 'subject_id', as: 'attendanceSessions' });

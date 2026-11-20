@@ -8,15 +8,7 @@ module.exports = (sequelize, DataTypes) => {
       primaryKey: true,
       defaultValue: DataTypes.UUIDV4,
     },
-    "institution_id": {
-      type: DataTypes.UUID,
-      allowNull: false,
-      references: {
-        model: "institutions",
-        key: "id",
-      },
-    },
-    "grade_name": {
+        "grade_name": {
       type: DataTypes.STRING,
       allowNull: false,
     },
@@ -42,14 +34,12 @@ module.exports = (sequelize, DataTypes) => {
       timestamps: true,
       freezeTableName: true,
       indexes: [
-      { fields: ["institution_id", "grade_name"], unique: true },
-      { fields: ["institution_id"] },
+      { fields: ["grade_name"], unique: true },
       ],
     }
   );
 
   SalaryGrade.associate = (models) => {
-  SalaryGrade.belongsTo(models.Institution, { foreignKey: 'institution_id', as: 'institution' });
   };
 
   return SalaryGrade;

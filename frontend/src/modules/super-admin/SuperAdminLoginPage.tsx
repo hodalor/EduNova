@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Lock, ShieldCheck, UserCog } from 'lucide-react';
+import { Lock, UserCog } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
@@ -13,7 +13,6 @@ import Input from '../../components/ui/Input';
 import { useAuthStore } from '../../store/authStore';
 
 const loginSchema = z.object({
-  institution_code: z.string().min(1, 'Platform code is required'),
   identity: z.string().min(1, 'Super admin username is required'),
   password: z.string().min(8),
 });
@@ -28,17 +27,14 @@ const SuperAdminLoginPage = () => {
   const {
     register,
     handleSubmit,
-    watch,
     formState: { errors, isSubmitting },
   } = useForm<LoginValues>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
-      institution_code: '',
       identity: '',
       password: '',
     },
   });
-  const institutionCode = watch('institution_code');
 
   const mutation = useMutation({
     mutationFn: eduovaApi.auth.superAdminLogin,
@@ -59,24 +55,9 @@ const SuperAdminLoginPage = () => {
   return (
     <AuthLayout
       title="Sign in to EDUOVA Super Admin"
-      description="Access the platform control plane for institutions, subscriptions, analytics, and audit visibility."
-      decorativeWord={(institutionCode || 'MASTER').trim().toUpperCase()}
+      description="Sign in with your username and password."
     >
-      <form
-        className="space-y-4"
-        onSubmit={handleSubmit((values) =>
-          mutation.mutate({
-            ...values,
-            institution_code: values.institution_code.trim().toUpperCase(),
-          })
-        )}
-      >
-        <Input
-          label="Platform Code"
-          error={errors.institution_code?.message}
-          prefix={<ShieldCheck className="h-4 w-4" />}
-          {...register('institution_code')}
-        />
+      <form className="space-y-4" onSubmit={handleSubmit((values) => mutation.mutate(values))}>
         <Input
           label="Email or Username"
           error={errors.identity?.message}

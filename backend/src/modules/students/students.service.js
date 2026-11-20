@@ -165,7 +165,6 @@ const buildAutoInvoicePayload = ({ institutionId, student, profile, progress, se
   }
 
   return {
-    institution_id: institutionId,
     student_id: student.id,
     student_name: profile.full_name,
     class_name: profile.group_name || currentGroup.name,
@@ -210,13 +209,12 @@ const createAutoSemesterInvoiceIfNeeded = async ({
 
   if (models.StudentInvoice) {
     const existingCount = await models.StudentInvoice.count({
-      where: { institution_id: institutionId },
+      where: { },
       transaction,
     });
     invoicePayload.invoice_number = createSequence('INV', new Date(), existingCount + 1, 3);
     const existing = await models.StudentInvoice.findOne({
       where: {
-        institution_id: institutionId,
         student_id: student.id,
         term_id: invoicePayload.term_id,
       },
@@ -229,7 +227,7 @@ const createAutoSemesterInvoiceIfNeeded = async ({
     let academicYearId = null;
     if (models.AcademicYear) {
       const currentYear = await models.AcademicYear.findOne({
-        where: { institution_id: institutionId, is_current: true },
+        where: { is_current: true },
         transaction,
       });
       academicYearId = currentYear?.id || null;
@@ -237,7 +235,6 @@ const createAutoSemesterInvoiceIfNeeded = async ({
 
     return models.StudentInvoice.create(
       {
-        institution_id: institutionId,
         student_id: student.id,
         academic_year_id: academicYearId,
         term_id: invoicePayload.term_id,
@@ -255,7 +252,6 @@ const createAutoSemesterInvoiceIfNeeded = async ({
 
   const existsInRuntime = store.finance.invoices.some(
     (item) =>
-      item.institution_id === institutionId &&
       String(item.student_id) === String(student.id) &&
       String(item.period_id || '') === String(invoicePayload.period_id || '')
   );
@@ -519,14 +515,13 @@ const formatSequelizeCreateError = (error) => {
 
 const ensureLevelRecord = async ({ institutionId, levelCode, transaction }) => {
   let level = await models.EducationLevel.findOne({
-    where: { institution_id: institutionId, level_code: levelCode },
+    where: { level_code: levelCode },
     transaction,
   });
   if (!level) {
     const config = getLevelConfig(levelCode) || {};
     level = await models.EducationLevel.create(
       {
-        institution_id: institutionId,
         level_code: levelCode,
         level_name:
           {
@@ -603,7 +598,7 @@ const assertStudentAdmin = (actor) => {
 };
 
 const listStudentsFromDatabase = async ({ institutionId, parentId }) => {
-  const where = { institution_id: institutionId };
+  const where = { };
 
   if (parentId) {
     const guardian = await models.Guardian.findOne({
@@ -645,7 +640,7 @@ const listStudentsFromDatabase = async ({ institutionId, parentId }) => {
 const listStudentsFromRuntime = async ({ institutionId, parentId }) =>
   store.students.profiles.filter(
     (student) =>
-      student.institution_id === institutionId && (!parentId || student.parent_id === parentId)
+      (!parentId || student.parent_id === parentId)
   );
 
 const listStudents = async (context) => {
@@ -658,7 +653,6 @@ const listStudents = async (context) => {
 const listDeletedStudentsFromDatabase = async ({ institutionId }) => {
   const students = await models.Student.findAll({
     where: {
-      institution_id: institutionId,
       deletedAt: { [Op.ne]: null },
     },
     paranoid: false,
@@ -683,7 +677,7 @@ const listDeletedStudentsFromDatabase = async ({ institutionId }) => {
 
 const listDeletedStudentsFromRuntime = async ({ institutionId }) =>
   (store.students.profiles || []).filter(
-    (student) => student.institution_id === institutionId && student.deleted_at
+    (student) => student.deleted_at
   );
 
 const listDeletedStudents = async (context) => {
@@ -695,7 +689,7 @@ const listDeletedStudents = async (context) => {
 
 const getStudentFromDatabase = async ({ institutionId, studentId }) => {
   const student = await models.Student.findOne({
-    where: { id: studentId, institution_id: institutionId },
+    where: { id: studentId, },
     include: [
       { model: models.User, as: 'user' },
       { model: models.Class, as: 'class', required: false },
@@ -740,13 +734,13 @@ const getStudentFromDatabase = async ({ institutionId, studentId }) => {
       : Promise.resolve([]),
     models.StudentInvoice
       ? models.StudentInvoice.findAll({
-          where: { student_id: student.id, institution_id: institutionId },
+          where: { student_id: student.id, },
           order: [['created_at', 'DESC']],
         }).catch(() => [])
       : Promise.resolve([]),
     models.DisciplineIncident
       ? models.DisciplineIncident.findAll({
-          where: { student_id: student.id, institution_id: institutionId },
+          where: { student_id: student.id, },
           order: [['incident_date', 'DESC']],
         }).catch(() => [])
       : Promise.resolve([]),
@@ -854,7 +848,7 @@ const getStudentFromDatabase = async ({ institutionId, studentId }) => {
 
 const getStudentFromRuntime = async ({ institutionId, studentId }) => {
   const student = store.students.profiles.find(
-    (item) => item.id === studentId && item.institution_id === institutionId
+    (item) => item.id === studentId
   );
   if (!student) {
     throw Object.assign(new Error('Student not found.'), { statusCode: 404 });
@@ -934,7 +928,7 @@ const updateStudentInDatabase = async ({ institutionId, studentId, payload, acto
 
   try {
     const student = await models.Student.findOne({
-      where: { id: studentId, institution_id: institutionId },
+      where: { id: studentId, },
       include: [
         { model: models.User, as: 'user' },
         {
@@ -1104,7 +1098,7 @@ const updateStudentInDatabase = async ({ institutionId, studentId, payload, acto
 
 const updateStudentInRuntime = async ({ institutionId, studentId, payload }) => {
   const student = store.students.profiles.find(
-    (item) => item.id === studentId && item.institution_id === institutionId
+    (item) => item.id === studentId
   );
   if (!student) {
     throw Object.assign(new Error('Student not found.'), { statusCode: 404 });
@@ -1263,7 +1257,7 @@ const createStudentInDatabase = async ({ institutionId, payload, actorId, ip }) 
 
     const levelRecord = await ensureLevelRecord({ institutionId, levelCode, transaction });
     const nextSequence = await models.Student.count({
-      where: { institution_id: institutionId },
+      where: { },
       transaction,
       paranoid: false,
     });
@@ -1280,7 +1274,6 @@ const createStudentInDatabase = async ({ institutionId, payload, actorId, ip }) 
 
     const studentUser = await models.User.create(
       {
-        institution_id: institutionId,
         email: studentEmail,
         phone: payload.phone || null,
         password_hash: await hashPassword(payload.temporary_password || studentNumber),
@@ -1300,7 +1293,6 @@ const createStudentInDatabase = async ({ institutionId, payload, actorId, ip }) 
       const guardianPhone = payload.guardian_phone || payload.guardianPhone || null;
       const guardianUser = await models.User.create(
         {
-          institution_id: institutionId,
           email:
             payload.guardian_email ||
             `parent.${studentNumber.toLowerCase()}@${String(institution.code || 'edu').toLowerCase()}.local`,
@@ -1328,7 +1320,6 @@ const createStudentInDatabase = async ({ institutionId, payload, actorId, ip }) 
     const student = await models.Student.create(
       {
         user_id: studentUser.id,
-        institution_id: institutionId,
         student_number: studentNumber,
         admission_number: admissionNumber,
         class_id: selectedGroup?.class_record_id || null,
@@ -1434,7 +1425,6 @@ const createStudentInDatabase = async ({ institutionId, payload, actorId, ip }) 
 
       tertiaryProgress = {
         student_id: student.id,
-        institution_id: institutionId,
         current_group_id: selectedGroup.id,
         current_period_id: activePeriod?.id || null,
         passed_offering_codes: [],
@@ -1500,7 +1490,6 @@ const createStudentInRuntime = async ({ institutionId, payload }) => {
   const fullName = `${payload.first_name || payload.firstName || ''} ${payload.last_name || payload.lastName || ''}`.trim();
   const student = {
     id: nextId,
-    institution_id: institutionId,
     parent_id: payload.parent_id || null,
     student_number:
       payload.student_number || `EDU-${new Date().getFullYear()}-${String(store.students.profiles.length + 1).padStart(4, '0')}`,
@@ -1631,7 +1620,7 @@ const deleteStudentInDatabase = async ({ institutionId, studentId, actor, ip }) 
 
   try {
     const student = await models.Student.findOne({
-      where: { id: studentId, institution_id: institutionId },
+      where: { id: studentId, },
       include: [{ model: models.User, as: 'user' }],
       transaction,
     });
@@ -1677,7 +1666,7 @@ const deleteStudentInDatabase = async ({ institutionId, studentId, actor, ip }) 
 const deleteStudentInRuntime = async ({ institutionId, studentId, actor, ip }) => {
   assertStudentAdmin(actor);
   const student = (store.students.profiles || []).find(
-    (item) => item.id === studentId && item.institution_id === institutionId && !item.deleted_at
+    (item) => item.id === studentId && !item.deleted_at
   );
   if (!student) {
     throw Object.assign(new Error('Student not found.'), { statusCode: 404 });
@@ -1710,7 +1699,7 @@ const restoreStudentInDatabase = async ({ institutionId, studentId, actor, ip })
 
   try {
     const student = await models.Student.findOne({
-      where: { id: studentId, institution_id: institutionId },
+      where: { id: studentId, },
       paranoid: false,
       include: [{ model: models.User, as: 'user', paranoid: false, required: false }],
       transaction,
@@ -1752,7 +1741,7 @@ const restoreStudentInDatabase = async ({ institutionId, studentId, actor, ip })
 const restoreStudentInRuntime = async ({ institutionId, studentId, actor, ip }) => {
   assertStudentAdmin(actor);
   const student = (store.students.profiles || []).find(
-    (item) => item.id === studentId && item.institution_id === institutionId && item.deleted_at
+    (item) => item.id === studentId && item.deleted_at
   );
   if (!student) {
     throw Object.assign(new Error('Deleted student not found.'), { statusCode: 404 });
@@ -1785,7 +1774,7 @@ const permanentlyDeleteStudentInDatabase = async ({ institutionId, studentId, ac
 
   try {
     const student = await models.Student.findOne({
-      where: { id: studentId, institution_id: institutionId },
+      where: { id: studentId, },
       paranoid: false,
       include: [{ model: models.User, as: 'user', paranoid: false, required: false }],
       transaction,
@@ -1848,7 +1837,7 @@ const permanentlyDeleteStudentInDatabase = async ({ institutionId, studentId, ac
 const permanentlyDeleteStudentInRuntime = async ({ institutionId, studentId, actor, ip }) => {
   assertStudentAdmin(actor);
   const index = (store.students.profiles || []).findIndex(
-    (item) => item.id === studentId && item.institution_id === institutionId && item.deleted_at
+    (item) => item.id === studentId && item.deleted_at
   );
   if (index < 0) {
     throw Object.assign(new Error('Deleted student not found.'), { statusCode: 404 });

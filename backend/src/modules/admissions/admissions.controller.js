@@ -7,10 +7,9 @@ const wrap = (handler) => async (req, res) =>
   });
 
 module.exports = {
-  getPublicCatalog: wrap((req) => admissionsService.getPublicCatalog({ code: req.params.code })),
+  getPublicCatalog: wrap(() => admissionsService.getPublicCatalog()),
   submitApplication: wrap((req) =>
     admissionsService.submitApplication({
-      code: req.params.code,
       payload: req.body,
     })
   ),

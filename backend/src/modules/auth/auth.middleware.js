@@ -32,9 +32,7 @@ const authenticate = async (req, res, next) => {
         return res.status(401).json({ success: false, message: 'User account is inactive.' });
       }
     } else {
-      user = await models.User.findByPk(payload.sub, {
-        include: [{ model: models.Institution, as: 'institution' }],
-      });
+      user = await models.User.findByPk(payload.sub);
     }
 
     if (!user || !user.is_active) {
@@ -50,23 +48,8 @@ const authenticate = async (req, res, next) => {
   }
 };
 
-const resolveInstitution = (req, res, next) => {
-  const headerInstitution = req.headers['x-institution-id'];
-  const requestedInstitution =
-    headerInstitution || req.body.institution_id || req.query.institution_id || null;
-  const institutionId =
-    req.user?.role === 'super_admin'
-      ? requestedInstitution || req.auth?.institution_id
-      : req.auth?.institution_id || requestedInstitution;
-
-  if (!institutionId) {
-    return res.status(400).json({ success: false, message: 'institution_id is required.' });
-  }
-  if (req.user?.institution_id && req.user.role !== 'super_admin' && req.user.institution_id !== institutionId) {
-    return res.status(403).json({ success: false, message: 'Institution mismatch.' });
-  }
-
-  req.institutionId = institutionId;
+const resolveInstitution = (req, _res, next) => {
+  req.institutionId = null;
   return next();
 };
 
@@ -93,12 +76,7 @@ const authorize = (roles = [], permission = null) => (req, res, next) => {
   return next();
 };
 
-const institutionGuard = (req, res, next) => {
-  if (!req.institutionId) {
-    return res.status(400).json({ success: false, message: 'Institution must be resolved first.' });
-  }
-  return next();
-};
+const institutionGuard = (_req, _res, next) => next();
 
 module.exports = {
   authenticate,

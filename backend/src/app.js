@@ -15,7 +15,6 @@ const analyticsRoutes = require('./modules/analytics/analytics.routes');
 const attendanceRoutes = require('./modules/attendance/attendance.routes');
 const authRoutes = require('./modules/auth/auth.routes');
 const communicationRoutes = require('./modules/communication/communication.routes');
-const daycareRoutes = require('./modules/daycare/daycare.routes');
 const financeRoutes = require('./modules/finance/finance.routes');
 const learningRoutes = require('./modules/learning/learning.routes');
 const mediaRoutes = require('./modules/media/media.routes');
@@ -124,8 +123,6 @@ const createApp = () => {
   app.use('/api/v1/students', studentsRoutes);
   app.use('/api/users', usersRoutes);
   app.use('/api/v1/users', usersRoutes);
-  app.use('/api/daycare', daycareRoutes);
-  app.use('/api/v1/daycare', daycareRoutes);
   app.use('/api/tertiary', tertiaryRoutes);
   app.use('/api/v1/tertiary', tertiaryRoutes);
   app.use('/api/admissions', admissionsRoutes);

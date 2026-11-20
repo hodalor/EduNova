@@ -308,7 +308,7 @@ const serializeReportCard = ({ reportCard, workflow = {} }) => {
 
 const ensureLevelRecord = async ({ institutionId, levelCode, transaction }) => {
   let level = await models.EducationLevel.findOne({
-    where: { institution_id: institutionId, level_code: levelCode },
+    where: { level_code: levelCode },
     transaction,
   });
 
@@ -316,7 +316,6 @@ const ensureLevelRecord = async ({ institutionId, levelCode, transaction }) => {
     const config = getLevelConfig(levelCode) || {};
     level = await models.EducationLevel.create(
       {
-        institution_id: institutionId,
         level_code: levelCode,
         level_name:
           {
@@ -338,7 +337,7 @@ const ensureLevelRecord = async ({ institutionId, levelCode, transaction }) => {
 
 const ensureCurrentAcademicYear = async ({ institutionId, transaction }) => {
   const existing = await models.AcademicYear.findOne({
-    where: { institution_id: institutionId, is_current: true },
+    where: { is_current: true },
     transaction,
   });
   if (existing) {
@@ -348,7 +347,6 @@ const ensureCurrentAcademicYear = async ({ institutionId, transaction }) => {
   const year = new Date().getFullYear();
   return models.AcademicYear.create(
     {
-      institution_id: institutionId,
       name: `${year}/${year + 1}`,
       start_date: `${year}-01-01`,
       end_date: `${year}-12-31`,
@@ -497,17 +495,17 @@ const listAcademicStructureFromDatabase = async ({ institutionId, levelCode }) =
 const listAcademicStructureFromRuntime = async ({ institutionId, levelCode }) => {
   const groups = store.academics.structure.groups.filter(
     (item) =>
-      item.institution_id === institutionId && (!levelCode || item.level_code === levelCode)
+      (!levelCode || item.level_code === levelCode)
   );
   const groupIds = new Set(groups.map((item) => item.id));
 
   return {
     groups,
     periods: store.academics.structure.periods.filter(
-      (item) => item.institution_id === institutionId && groupIds.has(item.group_id)
+      (item) => groupIds.has(item.group_id)
     ),
     offerings: store.academics.structure.offerings.filter(
-      (item) => item.institution_id === institutionId && groupIds.has(item.group_id)
+      (item) => groupIds.has(item.group_id)
     ),
     progression_rules: [...store.academics.structure.progression_rules],
   };
@@ -572,8 +570,8 @@ const getGradebook = async ({ institutionId }) => {
   const settings = models.Institution
     ? ensureAcademicSettings((await models.Institution.findByPk(institutionId, { attributes: ['settings'] }))?.settings)
     : ensureAcademicSettings(store.settings || {});
-  const students = store.students.profiles.filter((item) => item.institution_id === institutionId);
-  const scoreRows = store.academics.scores.filter((item) => item.institution_id === institutionId);
+  const students = store.students.profiles.filter((item) => true);
+  const scoreRows = store.academics.scores.filter((item) => true);
 
   return students.map((student) => {
     const studentScores = scoreRows.filter((item) => item.student_id === student.id);
@@ -631,7 +629,6 @@ const createAcademicGroupFromDatabase = async ({ institutionId, userId, payload,
     const levelRecord = await ensureLevelRecord({ institutionId, levelCode, transaction });
     const group = {
       id: payload.id || crypto.randomUUID(),
-      institution_id: institutionId,
       name: payload.name,
       code: normalizedCode,
       group_type: payload.group_type || 'level',
@@ -648,7 +645,6 @@ const createAcademicGroupFromDatabase = async ({ institutionId, userId, payload,
       const academicYear = await ensureCurrentAcademicYear({ institutionId, transaction });
       const classRecord = await models.Class.create(
         {
-          institution_id: institutionId,
           level_id: levelRecord.id,
           name: payload.name,
           stream: payload.stream || null,
@@ -687,7 +683,6 @@ const createAcademicGroupFromDatabase = async ({ institutionId, userId, payload,
 const createAcademicGroupFromRuntime = async ({ institutionId, userId, payload, ip }) => {
   const group = {
     id: payload.id || `grp-${store.academics.structure.groups.length + 1}`,
-    institution_id: institutionId,
     name: payload.name,
     code: payload.code,
     group_type: payload.group_type || 'level',
@@ -806,7 +801,7 @@ const updateAcademicGroupFromDatabase = async ({ institutionId, groupId, userId,
 
 const updateAcademicGroupFromRuntime = async ({ institutionId, groupId, userId, payload, ip }) => {
   const groupIndex = store.academics.structure.groups.findIndex(
-    (item) => item.id === groupId && item.institution_id === institutionId
+    (item) => item.id === groupId
   );
   if (groupIndex < 0) {
     throw Object.assign(new Error('Academic group not found.'), { statusCode: 404 });
@@ -910,7 +905,7 @@ const deleteAcademicGroupFromDatabase = async ({ institutionId, groupId, userId,
 
 const deleteAcademicGroupFromRuntime = async ({ institutionId, groupId, userId, ip }) => {
   const group = store.academics.structure.groups.find(
-    (item) => item.id === groupId && item.institution_id === institutionId
+    (item) => item.id === groupId
   );
   if (!group) {
     throw Object.assign(new Error('Academic group not found.'), { statusCode: 404 });
@@ -920,13 +915,13 @@ const deleteAcademicGroupFromRuntime = async ({ institutionId, groupId, userId, 
   const linkedOfferings = store.academics.structure.offerings.filter((item) => item.group_id === groupId);
 
   store.academics.structure.groups = store.academics.structure.groups.filter(
-    (item) => !(item.id === groupId && item.institution_id === institutionId)
+    (item) => !(item.id === groupId)
   );
   store.academics.structure.periods = store.academics.structure.periods.filter(
-    (item) => !(item.group_id === groupId && item.institution_id === institutionId)
+    (item) => !(item.group_id === groupId)
   );
   store.academics.structure.offerings = store.academics.structure.offerings.filter(
-    (item) => !(item.group_id === groupId && item.institution_id === institutionId)
+    (item) => !(item.group_id === groupId)
   );
 
   await logAudit({
@@ -970,7 +965,6 @@ const createAcademicPeriodFromDatabase = async ({ institutionId, userId, payload
 
     const period = {
       id: payload.id || crypto.randomUUID(),
-      institution_id: institutionId,
       group_id: payload.group_id,
       name: payload.name,
       sequence: Number(payload.sequence || 1),
@@ -1044,7 +1038,7 @@ const createAcademicPeriodFromDatabase = async ({ institutionId, userId, payload
 
 const createAcademicPeriodFromRuntime = async ({ institutionId, userId, payload, ip }) => {
   const group = store.academics.structure.groups.find(
-    (item) => item.id === payload.group_id && item.institution_id === institutionId
+    (item) => item.id === payload.group_id
   );
   if (!group) {
     throw Object.assign(new Error('Academic group not found.'), { statusCode: 404 });
@@ -1052,7 +1046,6 @@ const createAcademicPeriodFromRuntime = async ({ institutionId, userId, payload,
 
   const period = {
     id: payload.id || `prd-${store.academics.structure.periods.length + 1}`,
-    institution_id: institutionId,
     group_id: payload.group_id,
     name: payload.name,
     sequence: Number(payload.sequence || 1),
@@ -1201,7 +1194,7 @@ const updateAcademicPeriodFromDatabase = async ({
 
 const updateAcademicPeriodFromRuntime = async ({ institutionId, periodId, userId, payload, ip }) => {
   const periodIndex = store.academics.structure.periods.findIndex(
-    (item) => item.id === periodId && item.institution_id === institutionId
+    (item) => item.id === periodId
   );
   if (periodIndex < 0) {
     throw Object.assign(new Error('Academic period not found.'), { statusCode: 404 });
@@ -1318,7 +1311,7 @@ const deleteAcademicPeriodFromDatabase = async ({ institutionId, periodId, userI
 
 const deleteAcademicPeriodFromRuntime = async ({ institutionId, periodId, userId, ip }) => {
   const period = store.academics.structure.periods.find(
-    (item) => item.id === periodId && item.institution_id === institutionId
+    (item) => item.id === periodId
   );
   if (!period) {
     throw Object.assign(new Error('Academic period not found.'), { statusCode: 404 });
@@ -1326,10 +1319,10 @@ const deleteAcademicPeriodFromRuntime = async ({ institutionId, periodId, userId
 
   const removedOfferings = store.academics.structure.offerings.filter((item) => item.period_id === periodId);
   store.academics.structure.periods = store.academics.structure.periods.filter(
-    (item) => !(item.id === periodId && item.institution_id === institutionId)
+    (item) => !(item.id === periodId)
   );
   store.academics.structure.offerings = store.academics.structure.offerings.filter(
-    (item) => !(item.period_id === periodId && item.institution_id === institutionId)
+    (item) => !(item.period_id === periodId)
   );
 
   await logAudit({
@@ -1403,7 +1396,6 @@ const createAcademicOfferingFromDatabase = async ({ institutionId, userId, paylo
     });
     const subject = await models.Subject.create(
       {
-        institution_id: institutionId,
         level_id: levelRecord.id,
         name: payload.name,
         code: normalizedCode,
@@ -1437,7 +1429,6 @@ const createAcademicOfferingFromDatabase = async ({ institutionId, userId, paylo
     const offeringFees = normalizeOfferingFees(payload);
     const offering = {
       id: payload.id || crypto.randomUUID(),
-      institution_id: institutionId,
       group_id: payload.group_id,
       period_id: payload.period_id,
       program_id: programId,
@@ -1478,7 +1469,7 @@ const createAcademicOfferingFromDatabase = async ({ institutionId, userId, paylo
 
 const createAcademicOfferingFromRuntime = async ({ institutionId, userId, payload, ip }) => {
   const group = store.academics.structure.groups.find(
-    (item) => item.id === payload.group_id && item.institution_id === institutionId
+    (item) => item.id === payload.group_id
   );
   if (!group) {
     throw Object.assign(new Error('Academic group not found.'), { statusCode: 404 });
@@ -1487,8 +1478,7 @@ const createAcademicOfferingFromRuntime = async ({ institutionId, userId, payloa
   const period = store.academics.structure.periods.find(
     (item) =>
       item.id === payload.period_id &&
-      item.group_id === payload.group_id &&
-      item.institution_id === institutionId
+      item.group_id === payload.group_id
   );
   if (!period) {
     throw Object.assign(new Error('Academic period not found for this group.'), {
@@ -1504,7 +1494,6 @@ const createAcademicOfferingFromRuntime = async ({ institutionId, userId, payloa
   const normalizedCode = normalizeCode(payload.code);
   const duplicate = store.academics.structure.offerings.find(
     (item) =>
-      item.institution_id === institutionId &&
       item.group_id === payload.group_id &&
       item.period_id === payload.period_id &&
       normalizeProgramId(item.program_id) === programId &&
@@ -1520,7 +1509,6 @@ const createAcademicOfferingFromRuntime = async ({ institutionId, userId, payloa
   const offeringFees = normalizeOfferingFees(payload);
   const offering = {
     id: payload.id || `off-${store.academics.structure.offerings.length + 1}`,
-    institution_id: institutionId,
     group_id: payload.group_id,
     period_id: payload.period_id,
     program_id: programId,
@@ -1668,7 +1656,7 @@ const updateAcademicOfferingFromRuntime = async ({
   ip,
 }) => {
   const offeringIndex = store.academics.structure.offerings.findIndex(
-    (item) => item.id === offeringId && item.institution_id === institutionId
+    (item) => item.id === offeringId
   );
   if (offeringIndex < 0) {
     throw Object.assign(new Error('Academic offering not found.'), { statusCode: 404 });
@@ -1676,7 +1664,7 @@ const updateAcademicOfferingFromRuntime = async ({
 
   const current = store.academics.structure.offerings[offeringIndex];
   const group = store.academics.structure.groups.find(
-    (item) => item.id === current.group_id && item.institution_id === institutionId
+    (item) => item.id === current.group_id
   );
   const programId = resolveOfferingProgramId({ payload, current, group });
   if (String(group?.level_code || '').toUpperCase() === 'TR' && !programId) {
@@ -1688,7 +1676,6 @@ const updateAcademicOfferingFromRuntime = async ({
   const duplicate = store.academics.structure.offerings.find(
     (item, index) =>
       index !== offeringIndex &&
-      item.institution_id === institutionId &&
       item.group_id === current.group_id &&
       item.period_id === current.period_id &&
       normalizeProgramId(item.program_id) === programId &&
@@ -1778,14 +1765,14 @@ const deleteAcademicOfferingFromDatabase = async ({ institutionId, offeringId, u
 
 const deleteAcademicOfferingFromRuntime = async ({ institutionId, offeringId, userId, ip }) => {
   const offering = store.academics.structure.offerings.find(
-    (item) => item.id === offeringId && item.institution_id === institutionId
+    (item) => item.id === offeringId
   );
   if (!offering) {
     throw Object.assign(new Error('Academic offering not found.'), { statusCode: 404 });
   }
 
   store.academics.structure.offerings = store.academics.structure.offerings.filter(
-    (item) => !(item.id === offeringId && item.institution_id === institutionId)
+    (item) => !(item.id === offeringId)
   );
 
   await logAudit({
@@ -1833,7 +1820,6 @@ const saveScores = async ({ institutionId, userId, payload, ip }) => {
 
     return {
     id: `score-${store.academics.scores.length + 1}-${row.student_id}`,
-    institution_id: institutionId,
     class_id: payload.class_id,
     subject_id: payload.subject_id,
     assessment_name: payload.assessment_name,
@@ -1878,7 +1864,7 @@ const getReportCardsFromDatabase = async ({ institutionId }) => {
           model: models.Student,
           as: 'student',
           required: true,
-          where: { institution_id: institutionId },
+          where: { },
           include: [{ model: models.User, as: 'user', required: false }],
         },
         { model: models.Class, as: 'class', required: false },
@@ -1915,7 +1901,7 @@ const getReportCardsFromDatabase = async ({ institutionId }) => {
 const getReportCardsFromRuntime = async ({ institutionId }) => {
   const settings = ensureAcademicSettings(store.settingsByInstitution[institutionId]);
   return store.academics.reportCards
-    .filter((item) => item.institution_id === institutionId)
+    .filter((item) => true)
     .map((reportCard) =>
       serializeReportCard({
         reportCard: {
@@ -1940,7 +1926,7 @@ const getReportCards = async ({ institutionId, actor = null }) => {
 
   const linkedStudent = models.Student
     ? await models.Student.findOne({
-        where: { user_id: actor.id, institution_id: institutionId },
+        where: { user_id: actor.id, },
         attributes: ['id'],
       }).catch(() => null)
     : null;
@@ -1985,7 +1971,7 @@ const transitionReportCardWorkflowInDatabase = async ({
           model: models.Student,
           as: 'student',
           required: true,
-          where: { institution_id: institutionId },
+          where: { },
         },
       ],
       transaction,
@@ -2110,7 +2096,7 @@ const transitionReportCardWorkflowInRuntime = async ({
 }) => {
   const settings = ensureAcademicSettings(store.settingsByInstitution[institutionId]);
   const reportCard = store.academics.reportCards.find(
-    (item) => item.id === reportCardId && item.institution_id === institutionId
+    (item) => item.id === reportCardId
   );
   if (!reportCard) {
     throw Object.assign(new Error('Report card not found.'), { statusCode: 404 });

@@ -8,15 +8,7 @@ module.exports = (sequelize, DataTypes) => {
       primaryKey: true,
       defaultValue: DataTypes.UUIDV4,
     },
-    "institution_id": {
-      type: DataTypes.UUID,
-      allowNull: false,
-      references: {
-        model: "institutions",
-        key: "id",
-      },
-    },
-    "name": {
+        "name": {
       type: DataTypes.STRING,
       allowNull: false,
     },
@@ -34,14 +26,12 @@ module.exports = (sequelize, DataTypes) => {
       timestamps: true,
       freezeTableName: true,
       indexes: [
-      { fields: ["institution_id", "name"], unique: true },
-      { fields: ["institution_id"] },
+      { fields: ["name"], unique: true },
       ],
     }
   );
 
   TransportRoute.associate = (models) => {
-  TransportRoute.belongsTo(models.Institution, { foreignKey: 'institution_id', as: 'institution' });
   TransportRoute.hasMany(models.RouteStop, { foreignKey: 'route_id', as: 'stops' });
   TransportRoute.hasMany(models.Vehicle, { foreignKey: 'route_id', as: 'vehicles' });
   TransportRoute.hasMany(models.StudentTransport, { foreignKey: 'route_id', as: 'studentTransportAssignments' });

@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Mail, Lock, School } from 'lucide-react';
+import { Mail, Lock } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
@@ -14,7 +14,6 @@ import Input from '../../components/ui/Input';
 import { useAuthStore } from '../../store/authStore';
 
 const loginSchema = z.object({
-  institution_code: z.string().min(1, 'Institution code is required'),
   identity: z.string().min(3, 'Email or phone is required'),
   password: z.string().min(8),
 });
@@ -32,7 +31,6 @@ const LoginPage = () => {
   } = useForm<LoginValues>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
-      institution_code: '',
       identity: '',
       password: '',
     },
@@ -50,22 +48,8 @@ const LoginPage = () => {
   });
 
   return (
-    <AuthLayout title="Sign in" description="Use your institution code, identity, and password.">
-      <form
-        className="space-y-4"
-        onSubmit={handleSubmit((values) =>
-          mutation.mutate({
-            ...values,
-            institution_code: values.institution_code.trim().toUpperCase(),
-          })
-        )}
-      >
-        <Input
-          label="Institution Code"
-          error={errors.institution_code?.message}
-          prefix={<School className="h-4 w-4" />}
-          {...register('institution_code')}
-        />
+    <AuthLayout title="Sign in" description="Use your email, phone, student number, and password.">
+      <form className="space-y-4" onSubmit={handleSubmit((values) => mutation.mutate(values))}>
         <Input
           label="Email, Phone, or Student Number"
           error={errors.identity?.message}

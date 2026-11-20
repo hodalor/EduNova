@@ -68,14 +68,12 @@ class AuthController extends AsyncNotifier<AuthModel?> {
   }
 
   Future<void> login({
-    required String institutionCode,
     required String identity,
     required String password,
   }) async {
     state = const AsyncLoading();
     state = await AsyncValue.guard(() async {
       final result = await ref.read(loginUseCaseProvider)(
-            institutionCode: institutionCode,
             identity: identity,
             password: password,
           );

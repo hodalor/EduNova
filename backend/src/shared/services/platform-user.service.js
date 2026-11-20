@@ -16,10 +16,7 @@ const buildPlatformSettings = (settings = {}) => ({
 });
 
 const buildPlatformInstitutionPayload = () => ({
-  name: 'EDUOVA Master Control',
-  code: PLATFORM_CODE,
-  subscription_plan: 'enterprise',
-  education_levels: PLATFORM_LEVELS,
+  name: 'EDUOVA',
   is_active: true,
   settings: buildPlatformSettings(),
 });
@@ -31,8 +28,7 @@ const serializePlatformInstitution = (institution) => {
   return {
     ...defaults,
     ...base,
-    code: PLATFORM_CODE,
-    education_levels: base.education_levels?.length ? base.education_levels : defaults.education_levels,
+    education_levels: ['TR'],
     settings: buildPlatformSettings(base.settings),
   };
 };
@@ -44,16 +40,19 @@ const ensurePlatformInstitution = async ({ transaction } = {}) => {
     return serializePlatformInstitution({ id: 'platform' });
   }
 
-  const institution = await models.Institution.findOne({
-    where: { code: PLATFORM_CODE },
-    transaction,
-  });
+  const institution = await models.Institution.findOne({ transaction });
 
   if (institution) {
     return institution;
   }
 
-  return models.Institution.create(buildPlatformInstitutionPayload(), { transaction });
+  return models.Institution.create(
+    {
+      ...buildPlatformInstitutionPayload(),
+      name: process.env.SCHOOL_NAME || 'EDUOVA',
+    },
+    { transaction }
+  );
 };
 
 const normalizePlatformIdentity = (value) => String(value || '').trim().toLowerCase();
@@ -75,11 +74,9 @@ const findPlatformUserByIdentity = async (identity) => {
 
   return models.User.findOne({
     where: {
-      institution_id: platformInstitution.id,
       role: 'super_admin',
       [Op.or]: [{ email: normalizedIdentity }, { phone: normalizedIdentity }],
     },
-    include: [{ model: models.Institution, as: 'institution' }],
   });
 };
 
@@ -88,9 +85,7 @@ const findPlatformUserById = async (id) => {
     return null;
   }
 
-  return models.User.findByPk(id, {
-    include: [{ model: models.Institution, as: 'institution' }],
-  });
+  return models.User.findByPk(id);
 };
 
 module.exports = {

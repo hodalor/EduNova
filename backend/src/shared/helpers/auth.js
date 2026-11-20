@@ -144,7 +144,6 @@ const signAccessToken = (user, permissions = getPermissionsForRole(user.role)) =
   signToken(
     {
       sub: user.id,
-      institution_id: user.institution_id,
       role: user.role,
       permissions,
       type: 'access',
@@ -157,7 +156,6 @@ const signRefreshToken = async (user) => {
   const tokenId = crypto.randomUUID();
   const payload = {
     sub: user.id,
-    institution_id: user.institution_id,
     role: user.role,
     type: 'refresh',
     jti: tokenId,
@@ -166,7 +164,7 @@ const signRefreshToken = async (user) => {
 
   await safeRedisSet(
     `auth:refresh:${tokenId}`,
-    JSON.stringify({ user_id: user.id, institution_id: user.institution_id }),
+    JSON.stringify({ user_id: user.id, }),
     'EX',
     REFRESH_TTL_SECONDS
   );

@@ -16,15 +16,7 @@ module.exports = (sequelize, DataTypes) => {
         key: "id",
       },
     },
-    "institution_id": {
-      type: DataTypes.UUID,
-      allowNull: false,
-      references: {
-        model: "institutions",
-        key: "id",
-      },
-    },
-    "student_number": {
+        "student_number": {
       type: DataTypes.STRING,
       allowNull: false,
     },
@@ -87,10 +79,9 @@ module.exports = (sequelize, DataTypes) => {
       timestamps: true,
       freezeTableName: true,
       indexes: [
-      { fields: ["student_number", "institution_id"], unique: true },
-      { fields: ["institution_id", "admission_number"], unique: true },
+      { fields: ["student_number"], unique: true },
+      { fields: ["admission_number"], unique: true },
       { fields: ["user_id"] },
-      { fields: ["institution_id"] },
       { fields: ["class_id"] },
       { fields: ["level_id"] },
       { fields: ["guardian_id"] },
@@ -102,7 +93,6 @@ module.exports = (sequelize, DataTypes) => {
   Student.belongsTo(models.User, { foreignKey: 'user_id', as: 'user' });
   Student.belongsTo(models.Class, { foreignKey: 'class_id', as: 'class' });
   Student.belongsTo(models.EducationLevel, { foreignKey: 'level_id', as: 'level' });
-  Student.belongsTo(models.Institution, { foreignKey: 'institution_id', as: 'institution' });
   Student.belongsTo(models.Guardian, { foreignKey: 'guardian_id', as: 'guardian' });
   Student.belongsToMany(models.Guardian, { through: models.StudentGuardian, foreignKey: 'student_id', otherKey: 'guardian_id', as: 'guardians' });
   Student.hasOne(models.StudentMedical, { foreignKey: 'student_id', as: 'medicalProfile' });
