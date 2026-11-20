@@ -98,11 +98,8 @@ const ApplyPage = () => {
     onError: (error: unknown) => toast.error(getApiErrorMessage(error, 'Unable to submit the application.')),
   });
 
-  const programs = catalogQuery.data?.programs || [];
-  const selectedProgram = useMemo(
-    () => programs.find((program) => program.id === form.program_id),
-    [form.program_id, programs]
-  );
+  const programs = useMemo(() => catalogQuery.data?.programs || [], [catalogQuery.data?.programs]);
+  const selectedProgram = programs.find((program) => program.id === form.program_id);
 
   const setField = (key: keyof typeof emptyForm, value: string | boolean) => {
     setForm((current) => ({ ...current, [key]: value }));
@@ -249,7 +246,7 @@ const ApplyPage = () => {
                   onChange={(event) => setField('program_id', event.target.value)}
                 >
                   <option value="">Select a programme</option>
-                  {programs.map((program) => (
+                  {programs.map((program: PublicProgram) => (
                     <option key={program.id} value={program.id}>
                       {program.name}
                       {program.credential ? ` · ${program.credential}` : ''}
@@ -271,7 +268,7 @@ const ApplyPage = () => {
                   <option value="">Optional</option>
                   {programs
                     .filter((program) => program.id !== form.program_id)
-                    .map((program) => (
+                    .map((program: PublicProgram) => (
                       <option key={program.id} value={program.id}>
                         {program.name}
                       </option>
@@ -280,7 +277,7 @@ const ApplyPage = () => {
                 <div className="grid gap-4 sm:grid-cols-3">
                   <Select label="Intake" value={form.intake} onChange={(event) => setField('intake', event.target.value)}>
                     <option value="">Select intake</option>
-                    {catalogQuery.data.intakes.map((intake) => (
+                    {catalogQuery.data.intakes.map((intake: string) => (
                       <option key={intake} value={intake}>
                         {intake}
                       </option>
@@ -291,7 +288,7 @@ const ApplyPage = () => {
                     value={form.study_mode}
                     onChange={(event) => setField('study_mode', event.target.value)}
                   >
-                    {catalogQuery.data.study_modes.map((mode) => (
+                    {catalogQuery.data.study_modes.map((mode: string) => (
                       <option key={mode} value={mode}>
                         {mode}
                       </option>
@@ -302,7 +299,7 @@ const ApplyPage = () => {
                     value={form.student_category}
                     onChange={(event) => setField('student_category', event.target.value)}
                   >
-                    {catalogQuery.data.student_categories.map((category) => (
+                    {catalogQuery.data.student_categories.map((category: string) => (
                       <option key={category} value={category}>
                         {category}
                       </option>

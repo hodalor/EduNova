@@ -112,7 +112,7 @@ const AdmissionApplicationsPage = () => {
     onError: (error: unknown) => toast.error(getApiErrorMessage(error, 'Unable to admit this applicant.')),
   });
 
-  const applications = (listQuery.data || []).filter((item) =>
+  const applications = (listQuery.data || []).filter((item: ApplicationSummary) =>
     statusFilter === 'all' ? true : item.status === statusFilter
   );
   const detail = detailQuery.data;
@@ -256,7 +256,7 @@ const AdmissionApplicationsPage = () => {
                   </p>
                   {detail.fee_plan?.length ? (
                     <div className="overflow-hidden rounded-2xl border border-slate-200">
-                      {detail.fee_plan.map((line) => (
+                      {detail.fee_plan.map((line: FeeLine) => (
                         <div key={`${line.fee_type}-${line.term}`} className="flex justify-between gap-3 border-b border-slate-100 px-4 py-2 text-sm last:border-b-0">
                           <span>
                             {line.fee_type} · {line.term}
