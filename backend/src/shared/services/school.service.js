@@ -23,7 +23,10 @@ const ensureSchool = async ({ transaction } = {}) => {
     };
   }
 
-  const existing = await models.Institution.findOne({ transaction });
+  const existing = await models.Institution.findOne({
+    transaction,
+    order: [['updated_at', 'DESC']],
+  });
   if (existing) {
     return existing;
   }

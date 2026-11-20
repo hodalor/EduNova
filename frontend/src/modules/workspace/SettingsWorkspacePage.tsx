@@ -130,7 +130,7 @@ const SettingsWorkspacePage = () => {
       }),
     onSuccess: () => {
       toast.success('Finance settings updated.');
-      queryClient.invalidateQueries({ queryKey: ['finance-settings', activeInstitutionId] });
+      queryClient.invalidateQueries({ queryKey: ['finance-settings'] });
     },
     onError: (error: unknown) => {
       const message =

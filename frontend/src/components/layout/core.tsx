@@ -18,7 +18,10 @@ import {
   ShieldCheck,
   Trash2,
 } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 import { NavLink, Outlet } from 'react-router-dom';
+
+import { eduovaApi } from '../../api/eduovaApi';
 
 import { cn } from '../../lib/cn';
 import {
@@ -358,8 +361,16 @@ export const Topbar = () => {
   const collapsed = useUiStore((state) => state.sidebarCollapsed);
   const notificationBadgeCount = useUiStore((state) => state.notificationBadgeCount);
   const toggleSidebar = useUiStore((state) => state.toggleSidebar);
-  const activeInstitution = tenantContext || institution;
-  const title = activeInstitution?.name || user?.institution?.name || 'EDUOVA';
+  const activeInstitution = tenantContext || institution || user?.institution || null;
+  const { data: financeSettings } = useQuery({
+    queryKey: ['finance-settings', 'branding'],
+    queryFn: eduovaApi.finance.settings,
+    staleTime: 15000,
+  });
+  const title =
+    financeSettings?.branding?.letterhead_name ||
+    activeInstitution?.name ||
+    'EDUOVA';
 
   return (
     <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/90 backdrop-blur">

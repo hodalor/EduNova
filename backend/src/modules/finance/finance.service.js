@@ -1546,7 +1546,11 @@ const updateFinanceSettings = async ({ institutionId, userId, payload, ip }) => 
       registrar_title: String(payload.branding?.registrar_title || '').trim(),
       signature_url: String(payload.branding?.signature_url || '').trim(),
     };
-    await institution.update({ settings });
+    const schoolUpdates = { settings };
+    if (settings.branding.letterhead_name) {
+      schoolUpdates.name = settings.branding.letterhead_name;
+    }
+    await institution.update(schoolUpdates);
     const newValues = {
       currencies: settings.finance.currencies,
       default_local_currency: settings.finance.default_local_currency,

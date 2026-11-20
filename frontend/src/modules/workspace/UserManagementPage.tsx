@@ -37,7 +37,7 @@ const userSchema = z.object({
     .string()
     .refine((value) => ['full_time', 'part_time', 'contract'].includes(value), 'Employment type is required'),
   date_joined: z.string().min(1, 'Joining date is required'),
-  temporary_password: z.string().min(8, 'Temporary password must be at least 8 characters'),
+  temporary_password: z.string().optional(),
   custom_permissions: z.array(z.string()).optional(),
 });
 
@@ -128,11 +128,26 @@ const UserManagementPage = () => {
   const role = watch('role');
 
   const onSubmit = handleSubmit(async (payload) => {
+    const password = String(payload.temporary_password || '').trim();
+    if (!editingUser && password.length < 8) {
+      toast.error('Password must be at least 8 characters.');
+      return;
+    }
+    if (editingUser && password && password.length < 8) {
+      toast.error('New password must be at least 8 characters.');
+      return;
+    }
+
+    const nextPayload = {
+      ...payload,
+      temporary_password: password,
+    };
+
     try {
       if (editingUser) {
-        await updateUser.mutateAsync({ id: editingUser.id, payload });
+        await updateUser.mutateAsync({ id: editingUser.id, payload: nextPayload });
       } else {
-        await createStaffUser.mutateAsync(payload);
+        await createStaffUser.mutateAsync(nextPayload);
       }
       reset(defaultValues);
       setShowCreate(false);
@@ -157,7 +172,7 @@ const UserManagementPage = () => {
       specialization: user.specialization || '',
       employment_type: user.employment_type,
       date_joined: user.date_joined?.slice(0, 10) || '',
-      temporary_password: 'temporary123',
+      temporary_password: '',
       custom_permissions: user.custom_permissions || [],
     });
     setShowCreate(true);
@@ -296,6 +311,18 @@ const UserManagementPage = () => {
             <Input label="Last Name" error={errors.last_name?.message} {...register('last_name')} />
             <Input label="Email" error={errors.email?.message} {...register('email')} />
             <Input label="Phone" error={errors.phone?.message} {...register('phone')} />
+            <Input
+              label={editingUser ? 'New Password' : 'Password'}
+              type="password"
+              autoComplete="new-password"
+              helperText={
+                editingUser
+                  ? 'Leave blank to keep the current password. At least 8 characters to replace it.'
+                  : 'At least 8 characters. The staff member uses this to sign in.'
+              }
+              error={errors.temporary_password?.message}
+              {...register('temporary_password')}
+            />
             <Input label="Department" error={errors.department?.message} {...register('department')} />
             <Input label="Designation" error={errors.designation?.message} {...register('designation')} />
             <Select label="Employment Type" error={errors.employment_type?.message} {...register('employment_type')}>
@@ -330,15 +357,6 @@ const UserManagementPage = () => {
                 </label>
               </div>
             </div>
-            {!editingUser ? (
-              <div className="md:col-span-2">
-                <Input
-                  label="Temporary Password"
-                  error={errors.temporary_password?.message}
-                  {...register('temporary_password')}
-                />
-              </div>
-            ) : null}
           </div>
 
           <Alert

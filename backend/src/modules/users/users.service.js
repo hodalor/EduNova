@@ -359,16 +359,22 @@ const updateUser = async ({ institutionId, userId, payload, actorId, ip }) => {
         });
       }
 
-      await user.update(
-        {
-          email,
-          phone: payload.phone || null,
-          role: payload.role,
-          first_name: payload.first_name,
-          last_name: payload.last_name,
-        },
-        { transaction }
-      );
+      const updates = {
+        email,
+        phone: payload.phone || null,
+        role: payload.role,
+        first_name: payload.first_name,
+        last_name: payload.last_name,
+      };
+      const nextPassword = String(payload.temporary_password || '').trim();
+      if (nextPassword) {
+        if (nextPassword.length < 8) {
+          throw Object.assign(new Error('Password must be at least 8 characters.'), { statusCode: 400 });
+        }
+        updates.password_hash = await hashPassword(nextPassword);
+      }
+
+      await user.update(updates, { transaction });
 
       if (user.staffProfile) {
         await user.staffProfile.update(
@@ -449,6 +455,13 @@ const updateUser = async ({ institutionId, userId, payload, actorId, ip }) => {
   runtimeUser.employment_type = payload.employment_type;
   runtimeUser.date_joined = payload.date_joined;
   runtimeUser.custom_permissions = normalizeCustomPermissions(payload.custom_permissions);
+  const nextPassword = String(payload.temporary_password || '').trim();
+  if (nextPassword) {
+    if (nextPassword.length < 8) {
+      throw Object.assign(new Error('Password must be at least 8 characters.'), { statusCode: 400 });
+    }
+    runtimeUser.password_hash = await hashPassword(nextPassword);
+  }
 
   await logAudit({
     userId: actorId,
