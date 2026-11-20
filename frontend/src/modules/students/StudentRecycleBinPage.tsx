@@ -63,7 +63,7 @@ const StudentRecycleBinPage = () => {
   const { data, isLoading } = useQuery<DeletedStudentRow[]>({
     queryKey: ['students-deleted', activeInstitutionId],
     queryFn: eduovaApi.students.deleted,
-    enabled: Boolean(activeInstitutionId),
+    enabled: true,
   });
 
   const refreshStudents = async () => {

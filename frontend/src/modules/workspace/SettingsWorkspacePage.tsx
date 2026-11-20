@@ -75,7 +75,7 @@ const SettingsWorkspacePage = () => {
   const financeQuery = useQuery<FinanceSettings>({
     queryKey: ['finance-settings', activeInstitutionId],
     queryFn: eduovaApi.finance.settings,
-    enabled: Boolean(activeInstitutionId),
+    enabled: true,
   });
   const financeSettings = financeQuery.data || fallbackFinanceSettings;
   const [currencyInput, setCurrencyInput] = useState(financeSettings.currencies.join(', '));

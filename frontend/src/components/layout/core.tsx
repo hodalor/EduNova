@@ -354,17 +354,12 @@ export const Topbar = () => {
   const role = useAuthStore((state) => state.role);
   const institution = useAuthStore((state) => state.institution);
   const tenantContext = useAuthStore((state) => state.tenantContext);
-  const setTenantContext = useAuthStore((state) => state.setTenantContext);
   const logout = useAuthStore((state) => state.logout);
   const collapsed = useUiStore((state) => state.sidebarCollapsed);
   const notificationBadgeCount = useUiStore((state) => state.notificationBadgeCount);
   const toggleSidebar = useUiStore((state) => state.toggleSidebar);
   const activeInstitution = tenantContext || institution;
-  const title =
-    activeInstitution?.name ||
-    (role === 'super_admin'
-      ? tenantContext?.name || 'Platform Workspace'
-      : 'EDUNOVA');
+  const title = activeInstitution?.name || user?.institution?.name || 'EDUOVA';
 
   return (
     <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/90 backdrop-blur">
@@ -379,15 +374,6 @@ export const Topbar = () => {
           </button>
           <div>
             <h2 className="text-2xl font-semibold text-brand-navy">{title}</h2>
-            {role === 'super_admin' && tenantContext ? (
-              <p className="mt-1 text-xs font-semibold uppercase tracking-[0.14em] text-brand-gold">
-                School scope active
-              </p>
-            ) : role === 'super_admin' ? (
-              <p className="mt-1 text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
-                No school scope selected
-              </p>
-            ) : null}
           </div>
         </div>
         <div className="flex items-center gap-3">
@@ -418,10 +404,7 @@ export const Topbar = () => {
             }
             items={[
               { label: 'My Profile' },
-              { label: role === 'super_admin' ? 'Platform Settings' : 'Institution Settings' },
-              ...(role === 'super_admin' && tenantContext
-                ? [{ label: 'Clear School Scope', onSelect: () => setTenantContext(null) }]
-                : []),
+              { label: role === 'super_admin' ? 'School Settings' : 'Institution Settings' },
               { label: 'Logout', onSelect: logout, destructive: true },
             ]}
           />

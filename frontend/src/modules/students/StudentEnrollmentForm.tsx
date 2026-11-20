@@ -244,12 +244,12 @@ const StudentEnrollmentForm = () => {
   const { data: structure, isLoading: structureLoading } = useQuery<AcademicStructureResponse>({
     queryKey: ['academic-structure', 'enrollment', activeInstitutionId],
     queryFn: eduovaApi.academics.structure,
-    enabled: Boolean(activeInstitutionId),
+    enabled: true,
   });
   const { data: tertiaryOverview, isLoading: tertiaryLoading } = useQuery<TertiaryOverview>({
     queryKey: ['tertiary-overview', 'enrollment', activeInstitutionId],
     queryFn: eduovaApi.tertiary.overview,
-    enabled: Boolean(activeInstitutionId && isTertiaryInstitution(activeInstitution)),
+    enabled: true,
   });
 
   const [parentSearch, setParentSearch] = useState('');
@@ -263,7 +263,7 @@ const StudentEnrollmentForm = () => {
   const parentsQuery = useQuery<ParentOption[]>({
     queryKey: ['parents-search', parentSearch, activeInstitutionId],
     queryFn: () => eduovaApi.users.searchParents(parentSearch, 15),
-    enabled: Boolean(activeInstitutionId) && parentSearchOpen,
+    enabled: parentSearchOpen,
     staleTime: 1000 * 30,
   });
   const parentResults: ParentOption[] = parentsQuery.data ?? [];

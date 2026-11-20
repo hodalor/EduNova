@@ -48,9 +48,9 @@ const FeeStructurePage = () => {
   const { register, control, handleSubmit } = useForm<FeeStructureValues>({
     resolver: zodResolver(feeStructureSchema),
     defaultValues: {
-      level: 'PR',
+      level: 'TR',
       className: '',
-      term: 'Term 2',
+      term: 'Semester 1',
       items: [{ fee_type: 'Tuition', amount: 950, due_date: '2026-06-20' }],
     },
   });

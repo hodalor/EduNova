@@ -60,7 +60,7 @@ export const useAuthStore = create<AuthState>()(
           user: normalizedUser,
           token: payload.tokens.access_token,
           refreshToken: payload.tokens.refresh_token,
-          institution: payload.institution,
+          institution: payload.institution || payload.user.institution || null,
           tenantContext: null,
           permissions: payload.permissions,
           role: normalizeRole(payload.user.role),
@@ -100,11 +100,13 @@ export const useAuthStore = create<AuthState>()(
       name: 'eduova-auth-store',
       merge: (persistedState, currentState) => {
         const state = persistedState as Partial<AuthState>;
+        const user = normalizeUser(state.user || null);
         return {
           ...currentState,
           ...state,
-          user: normalizeUser(state.user || null),
-          tenantContext: state.tenantContext || null,
+          user,
+          institution: state.institution || user?.institution || null,
+          tenantContext: null,
           role: normalizeRole(state.role),
         };
       },

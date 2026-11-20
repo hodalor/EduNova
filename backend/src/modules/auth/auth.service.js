@@ -177,7 +177,7 @@ const login = async ({ email, identity, password, otp_code }) => {
 
   return {
     user: profile,
-    institution: user.institution,
+    institution: profile.institution,
     permissions: profile.permissions,
     tokens: {
       access_token,

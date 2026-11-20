@@ -84,7 +84,7 @@ const TimetableGeneratorPage = () => {
   const { data, isLoading } = useQuery<AcademicStructureResponse>({
     queryKey: ['academic-structure', 'timetable-generator', activeInstitutionId],
     queryFn: eduovaApi.academics.structure,
-    enabled: Boolean(activeInstitutionId),
+    enabled: true,
   });
   const [subjects, setSubjects] = useState<SubjectConfig[]>([]);
   const groups = ((data?.groups || []) as AcademicGroup[]).filter(

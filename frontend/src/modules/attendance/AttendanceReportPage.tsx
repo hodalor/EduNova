@@ -61,7 +61,7 @@ const AttendanceReportPage = () => {
   const { data: structure, isLoading: structureLoading } = useQuery<AcademicStructureResponse>({
     queryKey: ['academic-structure', 'attendance-report', activeInstitutionId],
     queryFn: eduovaApi.academics.structure,
-    enabled: Boolean(activeInstitutionId),
+    enabled: true,
   });
 
   const rows = useMemo(() => (data || []) as AttendanceReportRow[], [data]);

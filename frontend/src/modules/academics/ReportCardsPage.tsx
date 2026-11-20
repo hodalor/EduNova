@@ -60,7 +60,7 @@ const ReportCardsPage = () => {
   const { data, isLoading } = useQuery({
     queryKey: ['academics-report-cards', activeInstitutionId],
     queryFn: eduovaApi.academics.reportCards,
-    enabled: Boolean(activeInstitutionId),
+    enabled: true,
   });
 
   const workflowMutation = useMutation({

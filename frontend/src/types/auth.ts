@@ -68,6 +68,7 @@ export interface AuthUser {
   institution_id?: string;
   phone?: string | null;
   profile_photo?: string | null;
+  institution?: InstitutionSummary | null;
 }
 
 export interface LoginResponse {

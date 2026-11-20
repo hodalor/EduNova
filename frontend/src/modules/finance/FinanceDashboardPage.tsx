@@ -286,13 +286,13 @@ const FinanceDashboardPage = () => {
   const financeSettingsQuery = useQuery<FinanceSettings>({
     queryKey: ['finance-settings', activeInstitutionId],
     queryFn: eduovaApi.finance.settings,
-    enabled: Boolean(activeInstitutionId),
+    enabled: true,
   });
 
   const invoicesQuery = useQuery<InvoiceRow[]>({
     queryKey: ['finance-invoices', activeInstitutionId],
     queryFn: eduovaApi.finance.invoices,
-    enabled: Boolean(activeInstitutionId),
+    enabled: true,
   });
   const invoices = useMemo<InvoiceRow[]>(() => invoicesQuery.data ?? [], [invoicesQuery.data]);
   const primaryInvoiceCurrencyCode = useMemo(
@@ -316,7 +316,7 @@ const FinanceDashboardPage = () => {
   const paymentsQuery = useQuery<PaymentRow[]>({
     queryKey: ['finance-payments', activeInstitutionId],
     queryFn: eduovaApi.finance.payments,
-    enabled: Boolean(activeInstitutionId),
+    enabled: true,
   });
   const payments = useMemo<PaymentRow[]>(() => paymentsQuery.data ?? [], [paymentsQuery.data]);
   const paymentsLoading = paymentsQuery.isLoading;
@@ -324,7 +324,7 @@ const FinanceDashboardPage = () => {
   const approvalsQuery = useQuery<PaymentApprovalRow[]>({
     queryKey: ['finance-payment-approvals', activeInstitutionId],
     queryFn: eduovaApi.finance.paymentApprovals,
-    enabled: Boolean(activeInstitutionId),
+    enabled: true,
   });
   const approvals = useMemo<PaymentApprovalRow[]>(
     () => approvalsQuery.data ?? [],
@@ -334,7 +334,7 @@ const FinanceDashboardPage = () => {
   const gatewayRequestsQuery = useQuery<PaymentGatewayRequestRow[]>({
     queryKey: ['finance-payment-gateway-requests', activeInstitutionId],
     queryFn: eduovaApi.finance.paymentGatewayRequests,
-    enabled: Boolean(activeInstitutionId),
+    enabled: true,
   });
   const gatewayRequests = useMemo<PaymentGatewayRequestRow[]>(
     () => gatewayRequestsQuery.data ?? [],
@@ -344,7 +344,7 @@ const FinanceDashboardPage = () => {
   const debtorsQuery = useQuery<DebtorRow[]>({
     queryKey: ['finance-debtors', activeInstitutionId],
     queryFn: eduovaApi.finance.debtors,
-    enabled: Boolean(activeInstitutionId),
+    enabled: true,
   });
   const debtors = useMemo<DebtorRow[]>(() => debtorsQuery.data ?? [], [debtorsQuery.data]);
   const debtorsLoading = debtorsQuery.isLoading;
@@ -352,7 +352,7 @@ const FinanceDashboardPage = () => {
   const termsQuery = useQuery<PaymentTermRow[]>({
     queryKey: ['finance-payment-terms', activeInstitutionId],
     queryFn: eduovaApi.finance.paymentTerms,
-    enabled: Boolean(activeInstitutionId),
+    enabled: true,
   });
   const paymentTerms = useMemo<PaymentTermRow[]>(
     () => termsQuery.data ?? [],
@@ -363,7 +363,7 @@ const FinanceDashboardPage = () => {
   const studentsQuery = useQuery<StudentLookupRow[]>({
     queryKey: ['finance-student-lookup', activeInstitutionId],
     queryFn: eduovaApi.students.list,
-    enabled: Boolean(activeInstitutionId),
+    enabled: true,
   });
   const students = useMemo<StudentLookupRow[]>(
     () =>

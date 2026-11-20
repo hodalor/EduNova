@@ -46,7 +46,7 @@ const AttendanceTakingPage = () => {
   const { data: structure, isLoading: structureLoading } = useQuery<AcademicStructureResponse>({
     queryKey: ['academic-structure', 'attendance-taking', activeInstitutionId],
     queryFn: eduovaApi.academics.structure,
-    enabled: Boolean(activeInstitutionId),
+    enabled: true,
   });
 
   const [rows, setRows] = useState<AttendanceRow[]>([]);

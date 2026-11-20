@@ -181,12 +181,12 @@ const TertiaryManagementPage = () => {
   const { data, isLoading } = useQuery<TertiaryOverview>({
     queryKey: ['tertiary-overview', activeInstitutionId],
     queryFn: eduovaApi.tertiary.overview,
-    enabled: Boolean(activeInstitutionId && isTertiaryInstitution(activeInstitution)),
+    enabled: true,
   });
   const { data: structure } = useQuery<AcademicStructureResponse>({
     queryKey: ['academic-structure', 'tertiary-roadmap', activeInstitutionId],
     queryFn: eduovaApi.academics.structure,
-    enabled: Boolean(activeInstitutionId && isTertiaryInstitution(activeInstitution)),
+    enabled: true,
   });
 
   const faculties = useMemo<FacultyRow[]>(() => data?.faculties || [], [data?.faculties]);

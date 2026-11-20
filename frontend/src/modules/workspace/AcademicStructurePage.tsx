@@ -303,22 +303,22 @@ const AcademicStructurePage = () => {
   const { data, isLoading } = useQuery<StructureResponse>({
     queryKey: ['academic-structure', activeInstitutionId],
     queryFn: eduovaApi.academics.structure,
-    enabled: Boolean(activeInstitutionId),
+    enabled: true,
   });
   const gradeScalesQuery = useQuery<GradeScaleDefinition[]>({
     queryKey: ['academic-grade-scales', activeInstitutionId],
     queryFn: () => eduovaApi.academics.gradeScales(),
-    enabled: Boolean(activeInstitutionId),
+    enabled: true,
   });
   const { data: tertiaryOverview } = useQuery<TertiaryOverview>({
     queryKey: ['tertiary-overview', 'academic-structure', activeInstitutionId],
     queryFn: eduovaApi.tertiary.overview,
-    enabled: Boolean(activeInstitutionId && allowedLevels.includes('TR')),
+    enabled: true,
   });
   const { data: financeSettings } = useQuery<FinanceSettings>({
     queryKey: ['finance-settings', activeInstitutionId],
     queryFn: eduovaApi.finance.settings,
-    enabled: Boolean(activeInstitutionId),
+    enabled: true,
   });
   const levelOptions = useMemo(
     () => allowedLevels.map((code) => ({ code, label: educationLevelLabels[code] })),
@@ -767,16 +767,6 @@ const AcademicStructurePage = () => {
 
   if (isLoading) {
     return <PageLoader />;
-  }
-
-  if (role === 'super_admin' && !tenantContext) {
-    return (
-      <Card title="Select A School Scope">
-        <p className="text-sm text-slate-600">
-          Choose a school from the institutions page before creating classes, terms, subjects, or courses.
-        </p>
-      </Card>
-    );
   }
 
   const tabMeta: Array<{ id: StructureTab; label: string; count: number }> = [

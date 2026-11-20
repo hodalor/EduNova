@@ -75,7 +75,7 @@ const DashboardPage = () => {
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['dashboard-overview', institution?.id],
     queryFn: eduovaApi.analytics.getOverview,
-    enabled: Boolean(institution?.id),
+    enabled: true,
   });
   const recentPayments = (data?.recentPayments as RecentPaymentRow[] | undefined) || [];
   const primaryCurrencyCode = resolvePrimaryCurrencyCode(recentPayments);

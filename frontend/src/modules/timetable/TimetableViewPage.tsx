@@ -64,7 +64,7 @@ const TimetableViewPage = () => {
   const { data: structure, isLoading: structureLoading } = useQuery<AcademicStructureResponse>({
     queryKey: ['academic-structure', 'timetable-view', activeInstitutionId],
     queryFn: eduovaApi.academics.structure,
-    enabled: Boolean(activeInstitutionId),
+    enabled: true,
   });
 
   const groups = ((structure?.groups || []) as AcademicGroup[]).filter(
