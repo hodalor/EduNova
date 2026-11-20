@@ -7,6 +7,7 @@ import { eduovaApi } from '../../api/eduovaApi';
 import { getApiErrorMessage } from '../../api/axiosInstance';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
+import MediaUploadField from '../../components/ui/MediaUploadField';
 import Select from '../../components/ui/Select';
 
 interface PublicProgram {
@@ -18,6 +19,12 @@ interface PublicProgram {
   department?: string;
 }
 
+interface PublicIntake {
+  id: string;
+  name: string;
+  enrollment_deadline?: string;
+}
+
 interface PublicCatalog {
   institution: {
     name: string;
@@ -27,7 +34,7 @@ interface PublicCatalog {
     email?: string;
   };
   programs: PublicProgram[];
-  intakes: string[];
+  intakes: Array<PublicIntake | string>;
   study_modes: string[];
   student_categories: string[];
 }
@@ -57,6 +64,8 @@ const emptyForm = {
   qualification: '',
   year_completed: '',
   subjects_or_grades: '',
+  results_document_url: '',
+  id_document_url: '',
   sponsor_type: 'Parent',
   sponsor_name: '',
   sponsor_phone: '',
@@ -134,6 +143,10 @@ const ApplyPage = () => {
   const continueFromEducation = () => {
     if (!form.previous_institution.trim() || !form.qualification.trim()) {
       toast.error('Add the previous school and highest qualification.');
+      return;
+    }
+    if (!form.results_document_url || !form.id_document_url) {
+      toast.error('Upload the results and the identity document.');
       return;
     }
     setStep(3);
@@ -249,11 +262,18 @@ const ApplyPage = () => {
                 <div className="grid gap-4 sm:grid-cols-3">
                   <Select label="Intake" value={form.intake} onChange={(event) => setField('intake', event.target.value)}>
                     <option value="">Select intake</option>
-                    {catalogQuery.data.intakes.map((intake: string) => (
-                      <option key={intake} value={intake}>
-                        {intake}
-                      </option>
-                    ))}
+                    {catalogQuery.data.intakes.map((intake: PublicIntake | string) => {
+                      const value = typeof intake === 'string' ? intake : intake.id;
+                      const label =
+                        typeof intake === 'string'
+                          ? intake
+                          : `${intake.name}${intake.enrollment_deadline ? ` · closes ${intake.enrollment_deadline}` : ''}`;
+                      return (
+                        <option key={value} value={value}>
+                          {label}
+                        </option>
+                      );
+                    })}
                   </Select>
                   <Select
                     label="Study mode"
@@ -372,6 +392,20 @@ const ApplyPage = () => {
                     placeholder="Example: English B, Mathematics C, Biology B"
                   />
                 </label>
+                <MediaUploadField
+                  label="Results"
+                  value={form.results_document_url}
+                  folder="admissions/results"
+                  helperText="Upload the certificate or results slip."
+                  onUploaded={(media) => setField('results_document_url', media?.url || '')}
+                />
+                <MediaUploadField
+                  label="Identity document"
+                  value={form.id_document_url}
+                  folder="admissions/identity"
+                  helperText="Upload the national ID, passport, or student card."
+                  onUploaded={(media) => setField('id_document_url', media?.url || '')}
+                />
                 <div className="flex justify-between">
                   <Button type="button" variant="ghost" onClick={() => setStep(1)}>
                     Back

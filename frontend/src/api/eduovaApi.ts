@@ -569,6 +569,33 @@ export const eduovaApi = {
     admit: async (id: string) =>
       (await axiosInstance.post(`/v1/admissions/applications/${id}/admit`)).data.data,
   },
+  university: {
+    intakes: async () => (await axiosInstance.get('/v1/university/intakes')).data.data,
+    createIntake: async (payload: Record<string, unknown>) =>
+      (await axiosInstance.post('/v1/university/intakes', payload)).data.data,
+    deleteIntake: async (id: string) =>
+      (await axiosInstance.delete(`/v1/university/intakes/${id}`)).data.data,
+    intakeReport: async (query: { intakeId?: string; years?: number[] }) =>
+      (
+        await axiosInstance.get('/v1/university/intake-report', {
+          params: {
+            intake_id: query.intakeId || 'all',
+            years: (query.years || []).join(','),
+          },
+        })
+      ).data.data,
+    notices: async () => (await axiosInstance.get('/v1/university/notices')).data.data,
+    createNotice: async (payload: Record<string, unknown>) =>
+      (await axiosInstance.post('/v1/university/notices', payload)).data.data,
+    blasts: async () => (await axiosInstance.get('/v1/university/blasts')).data.data,
+    sendBlast: async (payload: Record<string, unknown>) =>
+      (await axiosInstance.post('/v1/university/blasts', payload)).data.data,
+    results: async () => (await axiosInstance.get('/v1/university/results')).data.data,
+    recordResult: async (payload: Record<string, unknown>) =>
+      (await axiosInstance.post('/v1/university/results', payload)).data.data,
+    updateWeights: async (payload: Record<string, unknown>) =>
+      (await axiosInstance.patch('/v1/university/results/weights', payload)).data.data,
+  },
   tertiary: {
     overview: async () => (await axiosInstance.get('/v1/tertiary/overview')).data.data,
     createFaculty: async (payload: Record<string, unknown>) =>

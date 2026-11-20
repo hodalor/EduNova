@@ -22,6 +22,7 @@ const mediaRoutes = require('./modules/media/media.routes');
 const superAdminRoutes = require('./modules/super-admin/super-admin.routes');
 const studentsRoutes = require('./modules/students/students.routes');
 const tertiaryRoutes = require('./modules/tertiary/tertiary.routes');
+const universityRoutes = require('./modules/university/university.routes');
 const timetableRoutes = require('./modules/timetable/timetable.routes');
 const transportRoutes = require('./modules/transport/transport.routes');
 const usersRoutes = require('./modules/users/users.routes');
@@ -117,6 +118,8 @@ const createApp = () => {
   app.use('/api/v1/users', usersRoutes);
   app.use('/api/tertiary', tertiaryRoutes);
   app.use('/api/v1/tertiary', tertiaryRoutes);
+  app.use('/api/university', universityRoutes);
+  app.use('/api/v1/university', universityRoutes);
   app.use('/api/admissions', admissionsRoutes);
   app.use('/api/v1/admissions', admissionsRoutes);
   app.use('/api/media', mediaRoutes);

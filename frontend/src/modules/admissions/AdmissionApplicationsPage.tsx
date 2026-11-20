@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 
 import { eduovaApi } from '../../api/eduovaApi';
@@ -47,6 +48,9 @@ interface ApplicationDetail extends ApplicationSummary {
   sponsor_phone?: string;
   next_of_kin_name?: string;
   next_of_kin_phone?: string;
+  student_id?: string | null;
+  results_document_url?: string | null;
+  id_document_url?: string | null;
   letter_html?: string;
   fee_plan?: FeeLine[];
   email_delivered?: boolean | null;
@@ -65,6 +69,7 @@ const formatWhen = (value?: string) => {
 };
 
 const AdmissionApplicationsPage = () => {
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const socket = useSocket('/notifications');
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -232,6 +237,16 @@ const AdmissionApplicationsPage = () => {
                   {detail.year_completed ? ` · ${detail.year_completed}` : ''}
                 </p>
                 {detail.subjects_or_grades ? <p className="mt-2">{detail.subjects_or_grades}</p> : null}
+                {detail.results_document_url ? (
+                  <a className="mt-2 block font-semibold text-brand-navy" href={detail.results_document_url} target="_blank" rel="noreferrer">
+                    View results
+                  </a>
+                ) : null}
+                {detail.id_document_url ? (
+                  <a className="mt-2 block font-semibold text-brand-navy" href={detail.id_document_url} target="_blank" rel="noreferrer">
+                    View identity document
+                  </a>
+                ) : null}
                 <p className="mt-2">
                   Sponsor {detail.sponsor_name}
                   {detail.sponsor_phone ? ` · ${detail.sponsor_phone}` : ''}
@@ -273,6 +288,16 @@ const AdmissionApplicationsPage = () => {
                       className="max-h-80 overflow-auto rounded-2xl border border-slate-200 bg-white p-4 text-sm"
                       dangerouslySetInnerHTML={{ __html: detail.letter_html }}
                     />
+                  ) : null}
+                  {detail.status === 'admitted' && !detail.student_id ? (
+                    <Button
+                      onClick={() => navigate(`/students/enroll?application=${detail.id}`)}
+                    >
+                      Enrol as student
+                    </Button>
+                  ) : null}
+                  {detail.student_id ? (
+                    <p className="text-sm font-semibold text-emerald-700">This applicant is now on the student register.</p>
                   ) : null}
                 </div>
               )}

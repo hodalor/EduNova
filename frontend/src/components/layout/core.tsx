@@ -1,4 +1,4 @@
-import { Suspense, type ReactNode } from 'react';
+import { Suspense, useState, type ReactNode } from 'react';
 import {
   BookOpen,
   BriefcaseBusiness,
@@ -15,11 +15,12 @@ import {
   Settings,
   Users2,
   Bell,
+  ChevronDown,
   ShieldCheck,
   Trash2,
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
 
 import { eduovaApi } from '../../api/eduovaApi';
 
@@ -47,6 +48,7 @@ type NavItem = {
   roles?: UserRole[];
   permissions?: string[];
   visible?: (institution: InstitutionSummary | null) => boolean;
+  children?: NavItem[];
 };
 
 type NavGroup = {
@@ -100,6 +102,13 @@ const institutionNavGroups: NavGroup[] = [
         roles: ['institution_admin'],
         visible: isTertiaryInstitution,
       },
+      {
+        name: 'Intakes',
+        to: '/academics/intakes',
+        icon: Layers3,
+        roles: ['institution_admin'],
+        visible: isTertiaryInstitution,
+      },
     ],
   },
   {
@@ -126,8 +135,8 @@ const institutionNavGroups: NavGroup[] = [
     label: 'Workflows',
     items: [
       {
-        name: 'Results Entry',
-        to: '/academics/results-entry',
+        name: 'Results',
+        to: '/academics/results',
         icon: BookOpen,
         roles: ['institution_admin', 'teacher'],
         permissions: ['academics:write'],
@@ -180,11 +189,35 @@ const institutionNavGroups: NavGroup[] = [
       },
       {
         name: 'Results',
-        to: '/learning/results',
+        to: '/academics/results',
         icon: FileBarChart2,
         roles: ['student'],
         permissions: ['academics:read'],
         visible: isTertiaryInstitution,
+      },
+    ],
+  },
+  {
+    label: 'Communication',
+    items: [
+      {
+        name: 'Communication',
+        to: '/communication/notices',
+        icon: Bell,
+        children: [
+          {
+            name: 'In-app Notices',
+            to: '/communication/notices',
+            icon: Bell,
+            roles: ['institution_admin', 'teacher', 'student'],
+          },
+          {
+            name: 'SMS and Email',
+            to: '/communication/messages',
+            icon: Bell,
+            roles: ['institution_admin'],
+          },
+        ],
       },
     ],
   },
@@ -247,6 +280,36 @@ const superAdminNavGroups = [
   { label: 'Audit', items: [{ name: 'Audit Trail', to: '/super-admin/audit-logs', icon: BriefcaseBusiness }] },
 ];
 
+const itemIsVisible = (
+  item: NavItem,
+  role: UserRole | null,
+  institution: InstitutionSummary | null,
+  permissions: string[]
+) => {
+  const matchesRole = !item.roles?.length || (role ? item.roles.includes(role) : false);
+  const matchesPermission =
+    !item.permissions?.length ||
+    item.permissions.some(
+      (permission) => permissions.includes(permission) || permissions.includes('*:*')
+    );
+  const visible = item.visible ? item.visible(institution) : true;
+  return matchesRole && matchesPermission && visible;
+};
+
+const filterNavItems = (
+  items: NavItem[],
+  role: UserRole | null,
+  institution: InstitutionSummary | null,
+  permissions: string[]
+): NavItem[] =>
+  items.flatMap((item) => {
+    if (item.children?.length) {
+      const children = filterNavItems(item.children, role, institution, permissions);
+      return children.length ? [{ ...item, children }] : [];
+    }
+    return itemIsVisible(item, role, institution, permissions) ? [item] : [];
+  });
+
 const buildNavGroups = (
   role: UserRole | null,
   institution: InstitutionSummary | null,
@@ -259,7 +322,7 @@ const buildNavGroups = (
     const tenantGroups = institutionNavGroups
       .map((group) => ({
         ...group,
-        items: group.items.filter((item) => (item.visible ? item.visible(activeInstitution) : true)),
+        items: filterNavItems(group.items, role, activeInstitution, permissions),
       }))
       .filter((group) => group.items.length > 0);
 
@@ -273,16 +336,7 @@ const buildNavGroups = (
   return institutionNavGroups
     .map((group) => ({
       ...group,
-      items: group.items.filter((item) => {
-        const matchesRole = !item.roles?.length || (role ? item.roles.includes(role) : false);
-        const matchesPermission =
-          !item.permissions?.length ||
-          item.permissions.some(
-            (permission) => permissions.includes(permission) || permissions.includes('*:*')
-          );
-        const visible = item.visible ? item.visible(activeInstitution) : true;
-        return matchesRole && matchesPermission && visible;
-      }),
+      items: filterNavItems(group.items, role, activeInstitution, permissions),
     }))
     .filter((group) => group.items.length > 0);
 };
@@ -294,6 +348,8 @@ export const Sidebar = () => {
   const tenantContext = useAuthStore((state) => state.tenantContext);
   const permissions = useAuthStore((state) => state.permissions);
   const groups = buildNavGroups(role, institution, tenantContext, permissions);
+  const location = useLocation();
+  const [openMenus, setOpenMenus] = useState<Record<string, boolean>>({});
 
   return (
     <aside
@@ -327,6 +383,51 @@ export const Sidebar = () => {
             <div className="space-y-0.5">
               {group.items.map((item) => {
                 const Icon = item.icon;
+                if (item.children?.length) {
+                  const childActive = item.children.some((child) => location.pathname.startsWith(child.to));
+                  const open = openMenus[item.name] ?? childActive;
+                  return (
+                    <div key={item.name}>
+                      <button
+                        type="button"
+                        className={cn(
+                          'flex w-full items-center gap-3 rounded-r-2xl px-3 py-2.5 text-left text-sm font-medium text-slate-200 transition hover:bg-white/10',
+                          childActive ? 'text-white' : ''
+                        )}
+                        onClick={() =>
+                          setOpenMenus((current) => ({
+                            ...current,
+                            [item.name]: !(current[item.name] ?? childActive),
+                          }))
+                        }
+                      >
+                        <Icon className="h-5 w-5 shrink-0" />
+                        {!collapsed ? (
+                          <>
+                            <span className="flex-1">{item.name}</span>
+                            <ChevronDown className={cn('h-4 w-4 transition', open ? 'rotate-180' : '')} />
+                          </>
+                        ) : null}
+                      </button>
+                      {!collapsed && open
+                        ? item.children.map((child) => (
+                            <NavLink
+                              key={child.to}
+                              to={child.to}
+                              className={({ isActive }) =>
+                                cn(
+                                  'ml-8 flex items-center rounded-r-2xl px-3 py-2 text-sm text-slate-300 transition hover:bg-white/10',
+                                  isActive ? 'nav-active text-white' : ''
+                                )
+                              }
+                            >
+                              {child.name}
+                            </NavLink>
+                          ))
+                        : null}
+                    </div>
+                  );
+                }
                 return (
                   <NavLink
                     key={item.to}

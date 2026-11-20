@@ -36,6 +36,7 @@ import {
 } from '../../components/ui/Tabs';
 import { formatCurrencyAmount, resolvePrimaryCurrencyCode } from '../../utils/currency';
 import PageHeader from '../shared/PageHeader';
+import IntakeReport from '../university/IntakeReport';
 import { useAuthStore } from '../../store/authStore';
 
 const statusStyles: Record<string, string> = {
@@ -835,6 +836,8 @@ const FinanceDashboardPage = () => {
           </div>
         }
       />
+
+      <IntakeReport />
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {[

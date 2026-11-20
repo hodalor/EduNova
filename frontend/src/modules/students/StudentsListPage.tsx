@@ -20,6 +20,7 @@ import { useAuthStore } from '../../store/authStore';
 import type { EducationLevelCode } from '../../types/auth';
 import PageHeader from '../shared/PageHeader';
 import { type StudentListItem, useStudents } from './hooks/useStudents';
+import IntakeReport from '../university/IntakeReport';
 
 const LEVEL_LABELS: Record<EducationLevelCode, string> = {
   DC: 'Day Care',
@@ -48,6 +49,10 @@ const StudentsListPage = () => {
   const [className, setClassName] = useState('all');
   const [program, setProgram] = useState('all');
   const [status, setStatus] = useState('all');
+  const [intakeSelection, setIntakeSelection] = useState<{ intakeId: string; years: number[] }>({
+    intakeId: 'all',
+    years: [],
+  });
   const [confirmDeleteState, setConfirmDeleteState] = useState<{
     open: boolean;
     studentId: string | null;
@@ -65,8 +70,10 @@ const StudentsListPage = () => {
       className,
       program,
       status,
+      intakeId: intakeSelection.intakeId,
+      years: intakeSelection.years,
     }),
-    [className, level, program, search, status]
+    [className, intakeSelection.intakeId, intakeSelection.years, level, program, search, status]
   );
 
   const { data, allRows, isLoading } = useStudents(filters);
@@ -134,6 +141,8 @@ const StudentsListPage = () => {
           </div>
         }
       />
+
+      <IntakeReport onChange={setIntakeSelection} />
 
       <Card>
         <div
@@ -234,6 +243,9 @@ const StudentsListPage = () => {
               ),
             },
             { header: 'Student Number', accessorKey: 'student_number' },
+            ...(isPureTertiaryWorkspace
+              ? [{ header: 'Intake', accessorKey: 'intake_name' as const }]
+              : []),
             { header: isPureTertiaryWorkspace ? 'Level' : 'Class', accessorKey: 'className' },
             {
               header: 'Level',

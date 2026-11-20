@@ -10,6 +10,8 @@ export interface StudentsFilters {
   program?: string;
   status?: string;
   search?: string;
+  intakeId?: string;
+  years?: number[];
 }
 
 export interface StudentListItem {
@@ -18,6 +20,9 @@ export interface StudentListItem {
   student_number: string;
   className: string;
   program_name?: string | null;
+  intake_id?: string | null;
+  intake_name?: string | null;
+  intake_year?: number | null;
   level: string;
   status: string;
   photo: string;
@@ -47,6 +52,10 @@ export const useStudents = (filters: StudentsFilters) => {
         String(row.program_name || '').trim() === filters.program;
       const matchesStatus =
         !filters.status || filters.status === 'all' || row.status === filters.status;
+      const matchesIntake =
+        !filters.intakeId || filters.intakeId === 'all' || row.intake_id === filters.intakeId;
+      const matchesYear =
+        !filters.years?.length || filters.years.includes(Number(row.intake_year));
       const searchQuery = filters.search?.trim().toLowerCase();
       const matchesSearch =
         !searchQuery ||
@@ -59,9 +68,26 @@ export const useStudents = (filters: StudentsFilters) => {
           .toLowerCase()
           .includes(searchQuery);
 
-      return matchesLevel && matchesClass && matchesProgram && matchesStatus && matchesSearch;
+      return (
+        matchesLevel &&
+        matchesClass &&
+        matchesProgram &&
+        matchesStatus &&
+        matchesSearch &&
+        matchesIntake &&
+        matchesYear
+      );
     });
-  }, [filters.className, filters.level, filters.program, filters.search, filters.status, query.data]);
+  }, [
+    filters.className,
+    filters.intakeId,
+    filters.level,
+    filters.program,
+    filters.search,
+    filters.status,
+    filters.years,
+    query.data,
+  ]);
 
   return {
     ...query,

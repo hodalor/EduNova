@@ -26,6 +26,7 @@ const ensureAdmissionsSettings = (settings) => {
   next.academics = next.academics || { groups: [], periods: [], offerings: [], progression_rules: [] };
   next.admissions = next.admissions || {};
   next.admissions.student_profiles = next.admissions.student_profiles || [];
+  next.admissions.applications = next.admissions.applications || [];
   next.tertiary = next.tertiary || {};
   next.tertiary.student_progress = next.tertiary.student_progress || [];
   next.tertiary.registrations = next.tertiary.registrations || [];
@@ -33,6 +34,7 @@ const ensureAdmissionsSettings = (settings) => {
   next.tertiary.faculties = next.tertiary.faculties || [];
   next.tertiary.departments = next.tertiary.departments || [];
   next.tertiary.programs = next.tertiary.programs || [];
+  next.tertiary.intakes = next.tertiary.intakes || [];
   next.finance = next.finance || {};
   next.finance.student_credits = next.finance.student_credits || [];
   return next;
@@ -551,7 +553,12 @@ const serializeStudentListItem = ({ student, profile }) => {
       student.class?.name || profile?.group_name || profile?.class_name || profile?.assigned_class || 'Unassigned',
     level: student.level?.level_code || profile?.level_code || '',
     status: student.status,
-    photo: student.user?.profile_photo || student.photo_url || null,
+    photo: student.user?.profile_photo || student.photo_url || profile?.photo_url || null,
+    intake_id: profile?.intake_id || null,
+    intake_name: profile?.intake_name || null,
+    intake_year: profile?.intake_year || null,
+    program_id: profile?.tertiary?.program_id || profile?.program_id || null,
+    program_name: profile?.program_name || profile?.tertiary?.program_name || null,
     guardian: guardianName,
   };
 };
@@ -1249,6 +1256,22 @@ const createStudentInDatabase = async ({ institutionId, payload, actorId, ip }) 
       settings.academics.groups.find((item) => item.name === payload.assignedClass);
 
     const levelRecord = await ensureLevelRecord({ institutionId, levelCode, transaction });
+    if (levelCode === 'TR') {
+      const selectedIntake = (settings.tertiary.intakes || []).find((item) => item.id === payload.intake_id);
+      if (!selectedIntake) {
+        throw Object.assign(new Error('Choose the intake this student is joining.'), { statusCode: 400 });
+      }
+    }
+    if (payload.application_id) {
+      const application = (settings.admissions.applications || []).find(
+        (item) => item.id === payload.application_id
+      );
+      if (!application || application.status !== 'admitted' || application.student_id) {
+        throw Object.assign(new Error('This applicant is not waiting to be enrolled as a student.'), {
+          statusCode: 400,
+        });
+      }
+    }
     const nextSequence = await models.Student.count({
       where: { },
       transaction,
@@ -1402,6 +1425,33 @@ const createStudentInDatabase = async ({ institutionId, payload, actorId, ip }) 
           ? 'international'
           : 'local',
     };
+
+    const selectedIntake = (settings.tertiary.intakes || []).find((item) => item.id === payload.intake_id);
+    if (selectedIntake) {
+      profile.intake_id = selectedIntake.id;
+      profile.intake_name = selectedIntake.name;
+      profile.intake_year = selectedIntake.year;
+    }
+    if (profile.tertiary?.program_id) {
+      const selectedProgram = (settings.tertiary.programs || []).find(
+        (item) => item.id === profile.tertiary.program_id
+      );
+      profile.program_name = selectedProgram?.name || null;
+      profile.tertiary.program_name = selectedProgram?.name || null;
+    }
+    if (payload.application_id) {
+      const applicationIndex = (settings.admissions.applications || []).findIndex(
+        (item) => item.id === payload.application_id
+      );
+      if (applicationIndex >= 0) {
+        settings.admissions.applications[applicationIndex] = {
+          ...settings.admissions.applications[applicationIndex],
+          status: 'enrolled',
+          student_id: student.id,
+          enrolled_at: new Date().toISOString(),
+        };
+      }
+    }
 
     settings.admissions.student_profiles.push(profile);
 

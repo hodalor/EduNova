@@ -3,7 +3,7 @@ import type { BaseSyntheticEvent } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useQuery } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { z } from 'zod';
 import { Search, UserCircle2, X } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -54,6 +54,7 @@ const enrollmentSchema = z
     facultyId: z.string().optional(),
     departmentId: z.string().optional(),
     programId: z.string().optional(),
+    intakeId: z.string().optional(),
     groupId: z.string().min(1, 'Class or level assignment is required'),
     feePlan: z.string().min(1, 'Fee plan is required'),
   })
@@ -77,6 +78,13 @@ const enrollmentSchema = z
         code: 'custom',
         path: ['programId'],
         message: 'Program is required for tertiary enrollment',
+      });
+    }
+    if (values.level === 'TR' && !values.intakeId) {
+      context.addIssue({
+        code: 'custom',
+        path: ['intakeId'],
+        message: 'Intake is required for tertiary enrollment',
       });
     }
   });
@@ -219,12 +227,15 @@ const defaultValues: EnrollmentValues = {
   facultyId: '',
   departmentId: '',
   programId: '',
+  intakeId: '',
   groupId: '',
   feePlan: 'Standard Term Plan',
 };
 
 const StudentEnrollmentForm = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const applicationId = searchParams.get('application');
   const institution = useAuthStore((state) => state.institution);
   const tenantContext = useAuthStore((state) => state.tenantContext);
   const activeInstitution = tenantContext || institution;
@@ -251,6 +262,36 @@ const StudentEnrollmentForm = () => {
     queryFn: eduovaApi.tertiary.overview,
     enabled: true,
   });
+  const intakesQuery = useQuery<Array<{ id: string; name: string }>>({
+    queryKey: ['university-intakes', 'enrollment'],
+    queryFn: eduovaApi.university.intakes,
+  });
+  const applicationQuery = useQuery<{
+    first_name?: string;
+    last_name?: string;
+    email?: string;
+    date_of_birth?: string;
+    nationality?: string;
+    id_type?: string;
+    id_number?: string;
+    marital_status?: string;
+    residential_address?: string;
+    postal_address?: string;
+    sponsor_type?: string;
+    sponsor_name?: string;
+    next_of_kin_name?: string;
+    next_of_kin_phone?: string;
+    qualification?: string;
+    student_category?: string;
+    program_id?: string;
+    intake_id?: string;
+    status?: string;
+    student_id?: string | null;
+  }>({
+    queryKey: ['admissions', 'application', applicationId],
+    queryFn: () => eduovaApi.admissions.detail(applicationId || ''),
+    enabled: Boolean(applicationId),
+  });
 
   const [parentSearch, setParentSearch] = useState('');
   const [parentSearchOpen, setParentSearchOpen] = useState(false);
@@ -270,9 +311,10 @@ const StudentEnrollmentForm = () => {
   const parentsLoading = parentsQuery.isFetching;
 
   const savedDraft = useMemo(() => {
+    if (applicationId) return null;
     const draft = window.localStorage.getItem(draftKey);
     return draft ? (JSON.parse(draft) as Partial<EnrollmentValues>) : null;
-  }, []);
+  }, [applicationId]);
 
   const {
     register,
@@ -294,6 +336,36 @@ const StudentEnrollmentForm = () => {
   });
 
   const values = watch();
+  const application = applicationQuery.data;
+
+  useEffect(() => {
+    if (!applicationId || !application) return;
+    const program = (tertiaryOverview?.programs || []).find(
+      (item: TertiaryOverview['programs'][number]) => item.id === application.program_id
+    );
+    const category = String(application.student_category || 'local').toLowerCase();
+    setValue('level', 'TR');
+    setValue('firstName', application.first_name || '');
+    setValue('lastName', application.last_name || '');
+    setValue('email', application.email || '');
+    setValue('dateOfBirth', application.date_of_birth || '');
+    setValue('nationality', application.nationality || '');
+    setValue('idType', application.id_type || '');
+    setValue('idNumber', application.id_number || '');
+    setValue('maritalStatus', String(application.marital_status || 'single').toLowerCase());
+    setValue('residentialAddress', application.residential_address || '');
+    setValue('postalAddress', application.postal_address || application.residential_address || '');
+    setValue('sponsorType', String(application.sponsor_type || 'self').toLowerCase());
+    setValue('sponsorName', application.sponsor_name || '');
+    setValue('guardianName', application.next_of_kin_name || application.sponsor_name || '');
+    setValue('guardianPhone', application.next_of_kin_phone || '');
+    setValue('qualification', application.qualification || '');
+    setValue('studentCategory', category === 'international' ? 'international' : 'local');
+    setValue('programId', application.program_id || '');
+    setValue('facultyId', program?.faculty_id || '');
+    setValue('departmentId', program?.department_id || '');
+    setValue('intakeId', application.intake_id || '');
+  }, [application, applicationId, setValue, tertiaryOverview?.programs]);
   const completion = ((step + 1) / steps.length) * 100;
   const groups: AcademicGroup[] = (structure?.groups || []).filter((item: AcademicGroup) =>
     activeLevelSet.includes(item.level_code as EducationLevelCode)
@@ -536,6 +608,8 @@ const StudentEnrollmentForm = () => {
           faculty_id: payload.facultyId || undefined,
           department_id: payload.departmentId || undefined,
           program_id: payload.programId || undefined,
+          intake_id: payload.intakeId || undefined,
+          application_id: applicationId || undefined,
           group_id: payload.groupId,
           fee_plan: payload.feePlan,
         });
@@ -609,8 +683,12 @@ const StudentEnrollmentForm = () => {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Enroll Student"
-        description={`Capture learner information in a guided flow for ${activeInstitution?.name || 'the selected school'}.`}
+        title={applicationId ? 'Enrol admitted applicant' : 'Enroll Student'}
+        description={
+          applicationId
+            ? 'The application details are filled in. Assign the level, intake, and portal password so this person becomes a student.'
+            : `Capture learner information in a guided flow for ${activeInstitution?.name || 'the selected school'}.`
+        }
       />
 
       <Card title={`Step ${step + 1} of ${steps.length}`} description={steps[step]}>
@@ -882,6 +960,14 @@ const StudentEnrollmentForm = () => {
                     {programs.map((program) => (
                       <option key={program.id} value={program.id}>
                         {program.name}
+                      </option>
+                    ))}
+                  </Select>
+                  <Select label="Intake" error={errors.intakeId?.message} {...register('intakeId')}>
+                    <option value="">Select intake</option>
+                    {(intakesQuery.data || []).map((intake: { id: string; name: string }) => (
+                      <option key={intake.id} value={intake.id}>
+                        {intake.name}
                       </option>
                     ))}
                   </Select>

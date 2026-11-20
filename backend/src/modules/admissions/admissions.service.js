@@ -22,6 +22,7 @@ const ensureAdmissionSettings = (settings) => {
     : [];
   next.tertiary = next.tertiary || {};
   next.tertiary.programs = next.tertiary.programs || [];
+  next.tertiary.intakes = next.tertiary.intakes || [];
   next.tertiary.departments = next.tertiary.departments || [];
   next.tertiary.faculties = next.tertiary.faculties || [];
   next.tertiary.finance_policy = next.tertiary.finance_policy || {};
@@ -61,15 +62,22 @@ const publicProgram = (program, settings) => {
   };
 };
 
-const intakeOptions = () => {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth();
-  const options = [`January ${year}`, `August ${year}`];
-  if (month >= 6) {
-    options.push(`January ${year + 1}`);
-  }
-  return options;
+const intakeOptions = (settings) => {
+  const today = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Africa/Lusaka',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+  return (settings.tertiary.intakes || [])
+    .filter((intake) => String(intake.enrollment_deadline || '') >= today)
+    .map((intake) => ({
+      id: intake.id,
+      name: intake.name,
+      year: intake.year,
+      start_date: intake.start_date,
+      enrollment_deadline: intake.enrollment_deadline,
+    }));
 };
 
 const summaryOf = (application) => ({
@@ -86,6 +94,9 @@ const summaryOf = (application) => ({
   student_category: application.student_category,
   status: application.status,
   admission_number: application.admission_number || null,
+  student_id: application.student_id || null,
+  results_document_url: application.results_document_url || null,
+  id_document_url: application.id_document_url || null,
   submitted_at: application.submitted_at,
   admitted_at: application.admitted_at || null,
   email_delivered: application.email_delivered ?? null,
@@ -204,7 +215,7 @@ const getPublicCatalog = async () => {
       email: institution.email || '',
     },
     programs: settings.tertiary.programs.map((program) => publicProgram(program, settings)),
-    intakes: intakeOptions(),
+    intakes: intakeOptions(settings),
     study_modes: ['Full-time', 'Part-time', 'Distance'],
     student_categories: ['Local', 'International'],
   };
@@ -240,6 +251,16 @@ const submitApplication = async ({ payload }) => {
     );
   }
 
+  const intakeId = requireText(payload, 'intake', 'Intake');
+  const openIntakes = intakeOptions(settings);
+  const intake = openIntakes.find((item) => item.id === intakeId || item.name === intakeId);
+  if (!intake) {
+    throw Object.assign(new Error('Choose an intake that is still open for enrolment.'), {
+      statusCode: 400,
+    });
+  }
+  const resultsDocument = requireText(payload, 'results_document_url', 'Results document');
+  const idDocument = requireText(payload, 'id_document_url', 'Identity document');
   const firstName = requireText(payload, 'first_name', 'First name');
   const lastName = requireText(payload, 'last_name', 'Surname');
   const middleName = String(payload.middle_name || '').trim();
@@ -276,13 +297,16 @@ const submitApplication = async ({ payload }) => {
     department: published.department,
     second_program_id: secondProgram?.id || null,
     second_program_name: secondProgram?.name || null,
-    intake: requireText(payload, 'intake', 'Intake'),
+    intake: intake.name,
+    intake_id: intake.id,
     study_mode: requireText(payload, 'study_mode', 'Study mode'),
     student_category: requireText(payload, 'student_category', 'Student category'),
     previous_institution: requireText(payload, 'previous_institution', 'Previous school'),
     qualification: requireText(payload, 'qualification', 'Highest qualification'),
     year_completed: String(payload.year_completed || '').trim(),
     subjects_or_grades: String(payload.subjects_or_grades || '').trim(),
+    results_document_url: resultsDocument,
+    id_document_url: idDocument,
     sponsor_type: String(payload.sponsor_type || 'Self').trim(),
     sponsor_name: requireText(payload, 'sponsor_name', 'Sponsor name'),
     sponsor_phone: String(payload.sponsor_phone || '').trim(),

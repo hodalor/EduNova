@@ -31,6 +31,7 @@ import {
 import { useAuthStore } from '../../store/authStore';
 import { formatCurrencyAmount, resolvePrimaryCurrencyCode } from '../../utils/currency';
 import PageHeader from '../shared/PageHeader';
+import IntakeReport from '../university/IntakeReport';
 import ParentWorkspacePage from '../workspace/ParentWorkspacePage';
 import StudentWorkspacePage from '../workspace/StudentWorkspacePage';
 import TeacherWorkspacePage from '../workspace/TeacherWorkspacePage';
@@ -117,6 +118,7 @@ const DashboardPage = () => {
             : 'Institution performance at a glance across finance, academics, attendance, and daily operations.'
         }
       />
+      <IntakeReport />
       <div className="grid gap-5 xl:grid-cols-4">
         {(data.stats as DashboardStat[]).map((item) => (
           <Stat key={item.id} item={item} />

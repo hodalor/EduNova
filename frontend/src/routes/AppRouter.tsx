@@ -38,6 +38,10 @@ const FeeStructurePage = lazy(() => import('../modules/finance/FeeStructurePage'
 const ResultsEntryPage = lazy(() => import('../modules/academics/ResultsEntryPage'));
 const ReportCardsPage = lazy(() => import('../modules/academics/ReportCardsPage'));
 const GradebookPage = lazy(() => import('../modules/academics/GradebookPage'));
+const IntakesPage = lazy(() => import('../modules/university/IntakesPage'));
+const NoticesPage = lazy(() => import('../modules/university/NoticesPage'));
+const MessageBlastPage = lazy(() => import('../modules/university/MessageBlastPage'));
+const UniversityResultsPage = lazy(() => import('../modules/university/UniversityResultsPage'));
 const AttendanceTakingPage = lazy(() => import('../modules/attendance/AttendanceTakingPage'));
 const AttendanceReportPage = lazy(() => import('../modules/attendance/AttendanceReportPage'));
 const TimetableViewPage = lazy(() => import('../modules/timetable/TimetableViewPage'));
@@ -183,6 +187,22 @@ const AppRouter = () => {
               }
             />
             <Route
+              path="/academics/intakes"
+              element={
+                <ProtectedRoute allowedRoles={['institution_admin']}>
+                  <IntakesPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/academics/results"
+              element={
+                <ProtectedRoute allowedRoles={['institution_admin', 'teacher', 'student']}>
+                  <UniversityResultsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
               path="/academics/results-entry"
               element={
                 <ProtectedRoute
@@ -300,6 +320,22 @@ const AppRouter = () => {
                   allowedPermissions={['finance:read', 'finance_approve_director', 'finance_approve_accountant']}
                 >
                   <FeeStructurePage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/communication/notices"
+              element={
+                <ProtectedRoute allowedRoles={['institution_admin', 'teacher', 'student']}>
+                  <NoticesPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/communication/messages"
+              element={
+                <ProtectedRoute allowedRoles={['institution_admin']}>
+                  <MessageBlastPage />
                 </ProtectedRoute>
               }
             />
