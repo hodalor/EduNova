@@ -7,6 +7,7 @@ const helmet = require('helmet');
 const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
 
+const { isAllowedOrigin } = require('./config/cors');
 const env = require('./config/env');
 const logger = require('./config/logger');
 const academicsRoutes = require('./modules/academics/academics.routes');
@@ -28,17 +29,6 @@ const errorHandler = require('./shared/middleware/errorHandler');
 const notFound = require('./shared/middleware/notFound');
 const sanitizeInput = require('./shared/middleware/sanitizeInput');
 
-const allowedOrigins = Array.from(
-  new Set(
-    [
-      ...(env.FRONTEND_URL ? String(env.FRONTEND_URL).split(',') : []),
-      ...(env.CORS_ORIGINS ? env.CORS_ORIGINS.split(',') : []),
-    ]
-      .map((origin) => origin.trim())
-      .filter(Boolean)
-  )
-);
-
 const createApp = () => {
   const app = express();
 
@@ -50,11 +40,13 @@ const createApp = () => {
   app.use(
     cors({
       origin: (origin, callback) => {
-        if (!origin || allowedOrigins.includes(origin)) {
+        if (isAllowedOrigin(origin)) {
           callback(null, true);
           return;
         }
-        callback(new Error('Origin not allowed by CORS.'));
+
+        logger.warn('Blocked CORS origin', { origin });
+        callback(null, false);
       },
       credentials: true,
     })
