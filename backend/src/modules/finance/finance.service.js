@@ -15,21 +15,25 @@ const ensureAdmissionsSettings = (settings) => {
 
 const clone = (value) => JSON.parse(JSON.stringify(value || {}));
 
+const LOCAL_CURRENCIES = ['ZMW', 'GHS'];
+const SCHOOL_CURRENCIES = ['ZMW', 'GHS', 'USD'];
+
+const normalizeCurrency = (value) => String(value || '').trim().toUpperCase();
+
+const resolveLocalCurrency = (value) => {
+  const code = normalizeCurrency(value);
+  return LOCAL_CURRENCIES.includes(code) ? code : 'GHS';
+};
+
 const ensureFinanceSettings = (settings) => {
   const next = clone(settings);
   next.finance = next.finance || {};
   next.finance.payment_approvals = next.finance.payment_approvals || [];
   next.finance.student_credits = next.finance.student_credits || [];
   next.finance.payment_gateway_requests = next.finance.payment_gateway_requests || [];
-  next.finance.currencies = Array.isArray(next.finance.currencies) && next.finance.currencies.length
-    ? next.finance.currencies
-    : ['GHS', 'ZMW', 'USD'];
-  next.finance.default_local_currency =
-    next.finance.default_local_currency || next.finance.currencies[0] || 'GHS';
-  next.finance.default_international_currency =
-    next.finance.default_international_currency ||
-    next.finance.currencies.find((item) => item !== next.finance.default_local_currency) ||
-    'USD';
+  next.finance.currencies = [...SCHOOL_CURRENCIES];
+  next.finance.default_local_currency = resolveLocalCurrency(next.finance.default_local_currency);
+  next.finance.default_international_currency = 'USD';
   next.access_control = next.access_control || {};
   next.access_control.finance_approval_grants = next.access_control.finance_approval_grants || {};
   next.branding = next.branding || {};
@@ -1491,30 +1495,9 @@ const getFinanceSettings = async ({ institutionId }) => {
 };
 
 const updateFinanceSettings = async ({ institutionId, userId, payload, ip }) => {
-  const normalizeCurrency = (value) => String(value || '').trim().toUpperCase();
-  const currencies = Array.from(
-    new Set((Array.isArray(payload.currencies) ? payload.currencies : []).map(normalizeCurrency).filter(Boolean))
-  );
-  const nextCurrencies = currencies.length ? currencies : ['GHS', 'ZMW', 'USD'];
-  const defaultLocal = normalizeCurrency(payload.default_local_currency) || nextCurrencies[0] || 'GHS';
-  const defaultInternational =
-    normalizeCurrency(payload.default_international_currency) ||
-    nextCurrencies.find((item) => item !== defaultLocal) ||
-    nextCurrencies[0] ||
-    'USD';
-
-  if (!nextCurrencies.includes(defaultLocal)) {
-    throw Object.assign(new Error('Default local currency must be one of the configured currencies.'), {
-      statusCode: 400,
-    });
-  }
-
-  if (!nextCurrencies.includes(defaultInternational)) {
-    throw Object.assign(
-      new Error('Default international currency must be one of the configured currencies.'),
-      { statusCode: 400 }
-    );
-  }
+  const nextCurrencies = [...SCHOOL_CURRENCIES];
+  const defaultLocal = resolveLocalCurrency(payload.default_local_currency);
+  const defaultInternational = 'USD';
 
   if (models.Institution) {
     const institution = await models.Institution.findByPk(institutionId);

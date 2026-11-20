@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 
@@ -8,7 +8,6 @@ import Button from '../../components/ui/Button';
 import Card from '../../components/ui/Card';
 import Input from '../../components/ui/Input';
 import MediaUploadField from '../../components/ui/MediaUploadField';
-import Select from '../../components/ui/Select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/Tabs';
 import PageHeader from '../shared/PageHeader';
 import { useAuthStore } from '../../store/authStore';
@@ -42,8 +41,63 @@ interface BrandingSettings {
   signature_url: string;
 }
 
+const LocalCurrencyChoice = ({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (code: LocalCurrencyCode) => void;
+}) => (
+  <div className="space-y-3">
+    <div>
+      <p className="text-sm font-semibold text-slate-700">Local student currency</p>
+      <p className="mt-1 text-sm text-slate-500">
+        Local student fees use the currency you choose here. International students stay in US dollars ($).
+      </p>
+    </div>
+    <div className="grid gap-3 sm:grid-cols-2">
+      {LOCAL_CURRENCIES.map((option) => {
+        const selected = value === option.code;
+        return (
+          <button
+            key={option.code}
+            type="button"
+            onClick={() => onChange(option.code)}
+            className={`rounded-2xl border px-4 py-3 text-left transition ${
+              selected
+                ? 'border-brand-navy bg-slate-50 ring-2 ring-brand-navy'
+                : 'border-slate-200 bg-white hover:border-slate-300'
+            }`}
+          >
+            <p className="text-sm font-semibold text-brand-navy">{option.name}</p>
+            <p className="mt-1 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+              {option.code}
+            </p>
+          </button>
+        );
+      })}
+    </div>
+    <div className="rounded-2xl bg-slate-50 px-4 py-3">
+      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
+        International students
+      </p>
+      <p className="mt-2 text-sm font-semibold text-brand-navy">US Dollar ($)</p>
+    </div>
+  </div>
+);
+
+const LOCAL_CURRENCIES = [
+  { code: 'ZMW', name: 'Zambian Kwacha' },
+  { code: 'GHS', name: 'Ghana Cedis' },
+] as const;
+
+type LocalCurrencyCode = (typeof LOCAL_CURRENCIES)[number]['code'];
+
+const isLocalCurrency = (value?: string): value is LocalCurrencyCode =>
+  value === 'ZMW' || value === 'GHS';
+
 const fallbackFinanceSettings: FinanceSettings = {
-  currencies: ['GHS', 'ZMW', 'USD'],
+  currencies: ['ZMW', 'GHS', 'USD'],
   default_local_currency: 'GHS',
   default_international_currency: 'USD',
   branding: {
@@ -78,58 +132,34 @@ const SettingsWorkspacePage = () => {
     enabled: true,
   });
   const financeSettings = financeQuery.data || fallbackFinanceSettings;
-  const [currencyInput, setCurrencyInput] = useState(financeSettings.currencies.join(', '));
-  const [defaultLocalCurrency, setDefaultLocalCurrency] = useState(financeSettings.default_local_currency);
-  const [defaultInternationalCurrency, setDefaultInternationalCurrency] = useState(
-    financeSettings.default_international_currency
+  const [defaultLocalCurrency, setDefaultLocalCurrency] = useState<LocalCurrencyCode>(
+    isLocalCurrency(financeSettings.default_local_currency)
+      ? financeSettings.default_local_currency
+      : 'GHS'
   );
   const [brandingForm, setBrandingForm] = useState<BrandingSettings>(
     financeSettings.branding ?? fallbackFinanceSettings.branding!
   );
 
   useEffect(() => {
-    setCurrencyInput(financeSettings.currencies.join(', '));
-    setDefaultLocalCurrency(financeSettings.default_local_currency);
-    setDefaultInternationalCurrency(financeSettings.default_international_currency);
+    setDefaultLocalCurrency(
+      isLocalCurrency(financeSettings.default_local_currency)
+        ? financeSettings.default_local_currency
+        : 'GHS'
+    );
     setBrandingForm(financeSettings.branding ?? fallbackFinanceSettings.branding!);
-  }, [
-    financeSettings.branding,
-    financeSettings.currencies,
-    financeSettings.default_international_currency,
-    financeSettings.default_local_currency,
-  ]);
-
-  const currencyOptions = useMemo(() => {
-    const parsed: string[] = currencyInput
-      .split(',')
-      .map((item: string) => item.trim().toUpperCase())
-      .filter(Boolean);
-    return Array.from<string>(new Set(parsed.length ? parsed : fallbackFinanceSettings.currencies));
-  }, [currencyInput]);
-
-  useEffect(() => {
-    if (!currencyOptions.includes(defaultLocalCurrency)) {
-      setDefaultLocalCurrency(currencyOptions[0] || fallbackFinanceSettings.default_local_currency);
-    }
-    if (!currencyOptions.includes(defaultInternationalCurrency)) {
-      setDefaultInternationalCurrency(
-        currencyOptions.find((item: string) => item !== (currencyOptions[0] || '')) ||
-          currencyOptions[0] ||
-          fallbackFinanceSettings.default_international_currency
-      );
-    }
-  }, [currencyOptions, defaultInternationalCurrency, defaultLocalCurrency]);
+  }, [financeSettings.branding, financeSettings.default_local_currency]);
 
   const saveFinanceSettings = useMutation({
     mutationFn: () =>
       eduovaApi.finance.updateSettings({
-        currencies: currencyOptions,
+        currencies: ['ZMW', 'GHS', 'USD'],
         default_local_currency: defaultLocalCurrency,
-        default_international_currency: defaultInternationalCurrency,
+        default_international_currency: 'USD',
         branding: brandingForm,
       }),
     onSuccess: () => {
-      toast.success('Finance settings updated.');
+      toast.success('Settings saved.');
       queryClient.invalidateQueries({ queryKey: ['finance-settings'] });
     },
     onError: (error: unknown) => {
@@ -249,6 +279,9 @@ const SettingsWorkspacePage = () => {
                     }
                     placeholder="The University of the Future"
                   />
+                </div>
+                <div className="md:col-span-2">
+                  <LocalCurrencyChoice value={defaultLocalCurrency} onChange={setDefaultLocalCurrency} />
                 </div>
                 <div className="md:col-span-2">
                   <MediaUploadField
@@ -427,38 +460,7 @@ const SettingsWorkspacePage = () => {
                 </Button>
               }
             >
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="md:col-span-2">
-                  <Input
-                    label="Currencies"
-                    value={currencyInput}
-                    onChange={(event) => setCurrencyInput(event.target.value.toUpperCase())}
-                    placeholder="GHS, ZMW, USD"
-                  />
-                </div>
-                <Select
-                  label="Default Local Currency"
-                  value={defaultLocalCurrency}
-                  onChange={(event) => setDefaultLocalCurrency(event.target.value)}
-                >
-                  {currencyOptions.map((currency) => (
-                    <option key={currency} value={currency}>
-                      {currency}
-                    </option>
-                  ))}
-                </Select>
-                <Select
-                  label="Default International Currency"
-                  value={defaultInternationalCurrency}
-                  onChange={(event) => setDefaultInternationalCurrency(event.target.value)}
-                >
-                  {currencyOptions.map((currency) => (
-                    <option key={currency} value={currency}>
-                      {currency}
-                    </option>
-                  ))}
-                </Select>
-              </div>
+              <LocalCurrencyChoice value={defaultLocalCurrency} onChange={setDefaultLocalCurrency} />
             </Card>
 
             <Card title="Current Finance Profile">
@@ -467,25 +469,17 @@ const SettingsWorkspacePage = () => {
                   <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
                     Local students
                   </p>
-                  <p className="mt-2 text-lg font-semibold text-brand-navy">{defaultLocalCurrency}</p>
+                  <p className="mt-2 text-lg font-semibold text-brand-navy">
+                    {LOCAL_CURRENCIES.find((option) => option.code === defaultLocalCurrency)?.name ||
+                      'Ghana Cedis'}{' '}
+                    ({defaultLocalCurrency})
+                  </p>
                 </div>
                 <div className="rounded-2xl bg-slate-50 px-4 py-3">
                   <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
                     International students
                   </p>
-                  <p className="mt-2 text-lg font-semibold text-brand-navy">
-                    {defaultInternationalCurrency}
-                  </p>
-                </div>
-                <div className="rounded-2xl border border-slate-200 px-4 py-3">
-                  <p className="text-sm font-semibold text-brand-navy">Enabled currencies</p>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {currencyOptions.map((currency) => (
-                      <Badge key={currency} variant="info">
-                        {currency}
-                      </Badge>
-                    ))}
-                  </div>
+                  <p className="mt-2 text-lg font-semibold text-brand-navy">US Dollar ($)</p>
                 </div>
               </div>
             </Card>

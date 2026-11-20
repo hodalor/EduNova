@@ -39,20 +39,13 @@ const ensureAdmissionsSettings = (settings) => {
 };
 
 const getFinanceDefaults = (settings) => {
-  const currencies =
-    Array.isArray(settings?.finance?.currencies) && settings.finance.currencies.length
-      ? settings.finance.currencies
-      : ['GHS', 'ZMW', 'USD'];
-  const defaultLocal = settings?.finance?.default_local_currency || currencies[0] || 'GHS';
-  const defaultInternational =
-    settings?.finance?.default_international_currency ||
-    currencies.find((item) => item !== defaultLocal) ||
-    'USD';
+  const localCode = String(settings?.finance?.default_local_currency || '').trim().toUpperCase();
+  const defaultLocal = localCode === 'ZMW' || localCode === 'GHS' ? localCode : 'GHS';
 
   return {
-    currencies,
+    currencies: ['ZMW', 'GHS', 'USD'],
     default_local_currency: defaultLocal,
-    default_international_currency: defaultInternational,
+    default_international_currency: 'USD',
   };
 };
 
