@@ -98,8 +98,11 @@ const ApplyPage = () => {
     onError: (error: unknown) => toast.error(getApiErrorMessage(error, 'Unable to submit the application.')),
   });
 
-  const programs = useMemo(() => catalogQuery.data?.programs || [], [catalogQuery.data?.programs]);
-  const selectedProgram = programs.find((program) => program.id === form.program_id);
+  const programs = useMemo<PublicProgram[]>(
+    () => catalogQuery.data?.programs || [],
+    [catalogQuery.data?.programs]
+  );
+  const selectedProgram = programs.find((program: PublicProgram) => program.id === form.program_id);
 
   const setField = (key: keyof typeof emptyForm, value: string | boolean) => {
     setForm((current) => ({ ...current, [key]: value }));
@@ -267,7 +270,7 @@ const ApplyPage = () => {
                 >
                   <option value="">Optional</option>
                   {programs
-                    .filter((program) => program.id !== form.program_id)
+                    .filter((program: PublicProgram) => program.id !== form.program_id)
                     .map((program: PublicProgram) => (
                       <option key={program.id} value={program.id}>
                         {program.name}

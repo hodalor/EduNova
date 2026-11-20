@@ -112,8 +112,8 @@ const AdmissionApplicationsPage = () => {
     onError: (error: unknown) => toast.error(getApiErrorMessage(error, 'Unable to admit this applicant.')),
   });
 
-  const applications = (listQuery.data || []).filter((item: ApplicationSummary) =>
-    statusFilter === 'all' ? true : item.status === statusFilter
+  const applications: ApplicationSummary[] = (listQuery.data || []).filter(
+    (item: ApplicationSummary) => (statusFilter === 'all' ? true : item.status === statusFilter)
   );
   const detail = detailQuery.data;
 
@@ -151,7 +151,7 @@ const AdmissionApplicationsPage = () => {
             <p className="p-6 text-sm text-slate-500">No applications in this list yet.</p>
           ) : null}
           <div className="divide-y divide-slate-100">
-            {applications.map((application) => (
+            {applications.map((application: ApplicationSummary) => (
               <button
                 key={application.id}
                 type="button"
