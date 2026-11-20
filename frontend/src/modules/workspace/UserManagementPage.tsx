@@ -23,7 +23,7 @@ import { useCreateStaffUser } from './hooks/useCreateStaffUser';
 const userSchema = z.object({
   role: z
     .string()
-    .refine((value) => ['institution_admin', 'teacher', 'accountant'].includes(value), 'User role is required'),
+    .refine((value) => ['institution_admin', 'teacher', 'principal_lecturer', 'accountant'].includes(value), 'User role is required'),
   first_name: z.string().min(2, 'First name is required'),
   last_name: z.string().min(2, 'Last name is required'),
   email: z.string().email('Valid email is required'),
@@ -49,7 +49,7 @@ interface ManagedUserRow {
   last_name: string;
   email: string;
   phone: string;
-  role: 'institution_admin' | 'teacher' | 'accountant';
+  role: 'institution_admin' | 'teacher' | 'principal_lecturer' | 'accountant';
   staff_number: string;
   department: string;
   designation: string;
@@ -191,7 +191,7 @@ const UserManagementPage = () => {
     <div className="space-y-6">
       <PageHeader
         title="User Access Management"
-        description="Create institution admin users and teacher accounts, assign staff identity details, and keep school access under control."
+        description="Create institution admin users and lecturer accounts, assign staff identity details, and keep school access under control."
         actions={
           <Button
             variant="primary"
@@ -207,7 +207,7 @@ const UserManagementPage = () => {
         {[
           { label: 'Total Staff Users', value: `${users.length}`, icon: Users2 },
           { label: 'Institution Admins', value: `${adminCount}`, icon: ShieldCheck },
-          { label: 'Teachers', value: `${teacherCount}`, icon: UserCog },
+          { label: 'Lecturers', value: `${teacherCount}`, icon: UserCog },
           { label: 'Accountants', value: `${accountantCount}`, icon: ShieldCheck },
           { label: 'Pending Activation', value: `${pendingCount}`, icon: ShieldCheck },
         ].slice(0, 4).map((item) => {
@@ -236,7 +236,11 @@ const UserManagementPage = () => {
             header: 'Name',
             cell: ({ row }) => `${row.original.first_name} ${row.original.last_name}`,
           },
-          { header: 'Role', cell: ({ row }) => row.original.role.replace('_', ' ') },
+          { header: 'Role', cell: ({ row }) => {
+            if (row.original.role === 'teacher') return 'Lecturer';
+            if (row.original.role === 'principal_lecturer') return 'Principal lecturer';
+            return row.original.role.replaceAll('_', ' ');
+          } },
           { header: 'Staff No.', accessorKey: 'staff_number' },
           { header: 'Department', accessorKey: 'department' },
           { header: 'Designation', accessorKey: 'designation' },
@@ -297,7 +301,8 @@ const UserManagementPage = () => {
         <form className="space-y-5" onSubmit={onSubmit}>
           <div className="grid gap-4 md:grid-cols-2">
             <Select label="User Role" error={errors.role?.message} {...register('role')}>
-              <option value="teacher">Teacher</option>
+              <option value="teacher">Lecturer</option>
+              <option value="principal_lecturer">Principal lecturer</option>
               <option value="institution_admin">Institution Admin</option>
               <option value="accountant">Accountant</option>
             </Select>
@@ -333,7 +338,7 @@ const UserManagementPage = () => {
             <Input label="Date Joined" type="date" error={errors.date_joined?.message} {...register('date_joined')} />
             <Input label="Qualification" {...register('qualification')} />
             <Input
-              label={role === 'teacher' ? 'Teaching Specialization' : 'Administrative Focus'}
+              label={role === 'teacher' || role === 'principal_lecturer' ? 'Teaching Specialization' : 'Administrative Focus'}
               {...register('specialization')}
             />
             <div className="md:col-span-2">
@@ -360,10 +365,12 @@ const UserManagementPage = () => {
           </div>
 
           <Alert
-            title={role === 'teacher' ? 'Teacher account setup' : 'Institution admin account setup'}
+            title={role === 'principal_lecturer' ? 'Principal lecturer account' : role === 'teacher' ? 'Lecturer account setup' : 'Institution admin account setup'}
             message={
-              role === 'teacher'
-                ? 'Teacher users will use this account for attendance, assessment, report cards, communication, and timetable access.'
+              role === 'principal_lecturer'
+                ? 'A principal lecturer reviews uploaded exam results and publishes them after approval.'
+                : role === 'teacher'
+                ? 'Lecturers use this account for attendance, assessment, report cards, communication, and timetable access.'
                 : 'Institution admin users will get school-level control for admissions, students, finance, staff, settings, and reporting.'
             }
             variant="info"

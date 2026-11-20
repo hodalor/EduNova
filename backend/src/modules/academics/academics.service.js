@@ -1441,6 +1441,8 @@ const createAcademicOfferingFromDatabase = async ({ institutionId, userId, paylo
           : Number(payload.credit_hours),
       ...offeringFees,
       is_core: payload.is_core !== false,
+      lecturer_id: payload.lecturer_id || null,
+      lecturer_name: payload.lecturer_name || null,
       prerequisite_codes: payload.prerequisite_codes || [],
       next_offering_codes: payload.next_offering_codes || [],
       subject_id: subject.id,
@@ -1521,6 +1523,8 @@ const createAcademicOfferingFromRuntime = async ({ institutionId, userId, payloa
         : Number(payload.credit_hours),
     ...offeringFees,
     is_core: payload.is_core !== false,
+    lecturer_id: payload.lecturer_id || null,
+    lecturer_name: payload.lecturer_name || null,
     prerequisite_codes: payload.prerequisite_codes || [],
     next_offering_codes: payload.next_offering_codes || [],
   };
@@ -1609,6 +1613,8 @@ const updateAcademicOfferingFromDatabase = async ({
             : Number(payload.credit_hours),
       ...offeringFees,
       is_core: payload.is_core === undefined ? current.is_core : payload.is_core !== false,
+      lecturer_id: payload.lecturer_id === undefined ? current.lecturer_id || null : payload.lecturer_id || null,
+      lecturer_name: payload.lecturer_name === undefined ? current.lecturer_name || null : payload.lecturer_name || null,
       prerequisite_codes: payload.prerequisite_codes || current.prerequisite_codes || [],
       next_offering_codes: payload.next_offering_codes || current.next_offering_codes || [],
     };
@@ -1701,6 +1707,8 @@ const updateAcademicOfferingFromRuntime = async ({
           : Number(payload.credit_hours),
     ...offeringFees,
     is_core: payload.is_core === undefined ? current.is_core : payload.is_core !== false,
+    lecturer_id: payload.lecturer_id === undefined ? current.lecturer_id || null : payload.lecturer_id || null,
+    lecturer_name: payload.lecturer_name === undefined ? current.lecturer_name || null : payload.lecturer_name || null,
     prerequisite_codes: payload.prerequisite_codes || current.prerequisite_codes || [],
     next_offering_codes: payload.next_offering_codes || current.next_offering_codes || [],
   };

@@ -595,6 +595,34 @@ export const eduovaApi = {
       (await axiosInstance.post('/v1/university/results', payload)).data.data,
     updateWeights: async (payload: Record<string, unknown>) =>
       (await axiosInstance.patch('/v1/university/results/weights', payload)).data.data,
+    resultTemplate: async (offeringId: string) =>
+      (
+        await axiosInstance.get('/v1/university/results/template', {
+          params: { offering_id: offeringId },
+          responseType: 'blob',
+        })
+      ).data as Blob,
+    previewResults: async (payload: Record<string, unknown>) =>
+      (await axiosInstance.post('/v1/university/results/preview', payload)).data.data,
+    commitResults: async (payload: Record<string, unknown>) =>
+      (await axiosInstance.post('/v1/university/results/commit', payload)).data.data,
+    pendingResults: async () => (await axiosInstance.get('/v1/university/results/pending')).data.data,
+    approveResults: async (batchId: string) =>
+      (await axiosInstance.post(`/v1/university/results/approve/${batchId}`)).data.data,
+    examBoard: async () => (await axiosInstance.get('/v1/university/exams/board')).data.data,
+    saveWindow: async (payload: Record<string, unknown>) =>
+      (await axiosInstance.post('/v1/university/exams/windows', payload)).data.data,
+    extendWindow: async (id: string, extendedUntil: string) =>
+      (await axiosInstance.patch(`/v1/university/exams/windows/${id}/extend`, { extended_until: extendedUntil })).data.data,
+    saveSitting: async (payload: Record<string, unknown>) =>
+      (await axiosInstance.post('/v1/university/exams/sittings', payload)).data.data,
+    removeSitting: async (id: string, collection: 'exam' | 'lecture') =>
+      (await axiosInstance.delete(`/v1/university/exams/sittings/${id}`, { params: { collection } })).data.data,
+    examDocket: async (studentId?: string) =>
+      (await axiosInstance.get('/v1/university/exams/docket', { params: { student_id: studentId } })).data.data,
+    confirmationSlip: async (studentId?: string) =>
+      (await axiosInstance.get('/v1/university/exams/confirmation', { params: { student_id: studentId } })).data.data,
+    lectureTimetable: async () => (await axiosInstance.get('/v1/university/exams/lectures')).data.data,
   },
   tertiary: {
     overview: async () => (await axiosInstance.get('/v1/tertiary/overview')).data.data,

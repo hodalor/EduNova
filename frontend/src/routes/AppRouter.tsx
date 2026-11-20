@@ -42,6 +42,12 @@ const IntakesPage = lazy(() => import('../modules/university/IntakesPage'));
 const NoticesPage = lazy(() => import('../modules/university/NoticesPage'));
 const MessageBlastPage = lazy(() => import('../modules/university/MessageBlastPage'));
 const UniversityResultsPage = lazy(() => import('../modules/university/UniversityResultsPage'));
+const ExamWindowPage = lazy(() => import('../modules/university/ExamWindowPage'));
+const ExamTimetablePage = lazy(() => import('../modules/university/ExamTimetablePage'));
+const LectureTimetablePage = lazy(() => import('../modules/university/LectureTimetablePage'));
+const ResultApprovalPage = lazy(() => import('../modules/university/ResultApprovalPage'));
+const ExamDocketPage = lazy(() => import('../modules/university/ExamDocketPage'));
+const ConfirmationSlipPage = lazy(() => import('../modules/university/ConfirmationSlipPage'));
 const AttendanceTakingPage = lazy(() => import('../modules/attendance/AttendanceTakingPage'));
 const AttendanceReportPage = lazy(() => import('../modules/attendance/AttendanceReportPage'));
 const TimetableViewPage = lazy(() => import('../modules/timetable/TimetableViewPage'));
@@ -97,7 +103,7 @@ const AppRouter = () => {
           <Route path="/apply" element={<ApplyPage />} />
           <Route
             element={
-              <ProtectedRoute allowedRoles={['institution_admin', 'teacher', 'student', 'parent', 'driver', 'accountant', 'librarian']}>
+              <ProtectedRoute allowedRoles={['institution_admin', 'teacher', 'student', 'parent', 'driver', 'accountant', 'librarian', 'principal_lecturer']}>
                 <AppShell />
               </ProtectedRoute>
             }
@@ -197,8 +203,56 @@ const AppRouter = () => {
             <Route
               path="/academics/results"
               element={
-                <ProtectedRoute allowedRoles={['institution_admin', 'teacher', 'student']}>
+                <ProtectedRoute allowedRoles={['institution_admin', 'teacher', 'principal_lecturer', 'student']}>
                   <UniversityResultsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/exams/window"
+              element={
+                <ProtectedRoute allowedRoles={['institution_admin', 'teacher', 'principal_lecturer']}>
+                  <ExamWindowPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/exams/approval"
+              element={
+                <ProtectedRoute allowedRoles={['institution_admin', 'principal_lecturer']}>
+                  <ResultApprovalPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/exams/timetable"
+              element={
+                <ProtectedRoute allowedRoles={['institution_admin', 'teacher', 'principal_lecturer', 'student']}>
+                  <ExamTimetablePage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/exams/lectures"
+              element={
+                <ProtectedRoute allowedRoles={['institution_admin', 'teacher', 'principal_lecturer', 'student']}>
+                  <LectureTimetablePage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/exams/docket"
+              element={
+                <ProtectedRoute allowedRoles={['institution_admin', 'student']}>
+                  <ExamDocketPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/exams/confirmation"
+              element={
+                <ProtectedRoute allowedRoles={['institution_admin', 'student', 'accountant']}>
+                  <ConfirmationSlipPage />
                 </ProtectedRoute>
               }
             />

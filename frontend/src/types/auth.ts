@@ -4,6 +4,7 @@ export type UserRole =
   | 'super_admin'
   | 'institution_admin'
   | 'teacher'
+  | 'principal_lecturer'
   | 'student'
   | 'parent'
   | 'driver'

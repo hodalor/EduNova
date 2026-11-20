@@ -138,7 +138,7 @@ const institutionNavGroups: NavGroup[] = [
         name: 'Results',
         to: '/academics/results',
         icon: BookOpen,
-        roles: ['institution_admin', 'teacher'],
+        roles: ['institution_admin', 'teacher', 'principal_lecturer'],
         permissions: ['academics:write'],
         visible: supportsAcademics,
       },
@@ -222,6 +222,60 @@ const institutionNavGroups: NavGroup[] = [
     ],
   },
   {
+    label: 'Exams',
+    items: [
+      {
+        name: 'Exams',
+        to: '/exams/window',
+        icon: ClipboardCheck,
+        children: [
+          {
+            name: 'Exam window',
+            to: '/exams/window',
+            icon: ClipboardCheck,
+            roles: ['institution_admin', 'teacher', 'principal_lecturer'],
+            visible: isTertiaryInstitution,
+          },
+          {
+            name: 'Approve results',
+            to: '/exams/approval',
+            icon: ClipboardCheck,
+            roles: ['institution_admin', 'principal_lecturer'],
+            visible: isTertiaryInstitution,
+          },
+          {
+            name: 'Exam timetable',
+            to: '/exams/timetable',
+            icon: ClipboardCheck,
+            roles: ['institution_admin', 'teacher', 'principal_lecturer', 'student'],
+            visible: isTertiaryInstitution,
+          },
+          {
+            name: 'Lecture timetable',
+            to: '/exams/lectures',
+            icon: ClipboardCheck,
+            roles: ['institution_admin', 'teacher', 'principal_lecturer', 'student'],
+            visible: isTertiaryInstitution,
+          },
+          {
+            name: 'Exam docket',
+            to: '/exams/docket',
+            icon: ClipboardCheck,
+            roles: ['institution_admin', 'student'],
+            visible: isTertiaryInstitution,
+          },
+          {
+            name: 'Confirmation slip',
+            to: '/exams/confirmation',
+            icon: ClipboardCheck,
+            roles: ['institution_admin', 'student', 'accountant'],
+            visible: isTertiaryInstitution,
+          },
+        ],
+      },
+    ],
+  },
+  {
     label: 'Student',
     items: [
       {
@@ -286,7 +340,8 @@ const itemIsVisible = (
   institution: InstitutionSummary | null,
   permissions: string[]
 ) => {
-  const matchesRole = !item.roles?.length || (role ? item.roles.includes(role) : false);
+  const matchesRole =
+    role === 'super_admin' || !item.roles?.length || (role ? item.roles.includes(role) : false);
   const matchesPermission =
     !item.permissions?.length ||
     item.permissions.some(

@@ -57,6 +57,8 @@ interface AcademicOffering {
   fee_amount_international?: number;
   currency_code?: string;
   is_core: boolean;
+  lecturer_id?: string | null;
+  lecturer_name?: string | null;
   prerequisite_codes: string[];
   next_offering_codes: string[];
 }
@@ -69,6 +71,13 @@ interface FinanceSettings {
   currencies: string[];
   default_local_currency: string;
   default_international_currency: string;
+}
+
+interface LecturerOption {
+  id: string;
+  first_name: string;
+  last_name: string;
+  role: string;
 }
 
 interface TertiaryProgramOption {
@@ -235,6 +244,7 @@ const initialOfferingForm = {
   fee_amount_local: '0',
   fee_amount_international: '0',
   is_core: 'true',
+  lecturer_id: '',
   prerequisite_codes: [] as string[],
   next_offering_codes: [] as string[],
 };
@@ -320,6 +330,13 @@ const AcademicStructurePage = () => {
     queryFn: eduovaApi.finance.settings,
     enabled: true,
   });
+  const { data: staffUsers } = useQuery<LecturerOption[]>({
+    queryKey: ['course-lecturers'],
+    queryFn: eduovaApi.users.list,
+  });
+  const lecturers = (staffUsers || []).filter(
+    (user: LecturerOption) => user.role === 'teacher' || user.role === 'principal_lecturer'
+  );
   const levelOptions = useMemo(
     () => allowedLevels.map((code) => ({ code, label: educationLevelLabels[code] })),
     [allowedLevels]
@@ -883,6 +900,7 @@ const AcademicStructurePage = () => {
         offering.fee_amount_international ?? offering.fee_amount_local ?? offering.fee_amount ?? 0
       ),
       is_core: offering.is_core ? 'true' : 'false',
+      lecturer_id: offering.lecturer_id || '',
       prerequisite_codes: offering.prerequisite_codes || [],
       next_offering_codes: offering.next_offering_codes || [],
     });
@@ -1156,6 +1174,7 @@ const AcademicStructurePage = () => {
                                       {(allowedLevels.includes('TR') ? ['Program'] : []).concat([
                                         'Code',
                                         'Name',
+                                        'Lecturer',
                                         'Credits',
                                         `Local (${localCurrency})`,
                                         'Status',
@@ -1183,6 +1202,7 @@ const AcademicStructurePage = () => {
                                         ) : null}
                                         <td className="px-3 py-2 font-semibold text-brand-navy">{offering.code}</td>
                                         <td className="px-3 py-2">{offering.name}</td>
+                                        <td className="px-3 py-2">{offering.lecturer_name || 'Unassigned'}</td>
                                         <td className="px-3 py-2">{offering.credit_hours ?? '-'}</td>
                                         <td className="px-3 py-2">
                                           {Number(offering.fee_amount_local ?? offering.fee_amount ?? 0).toLocaleString()}
@@ -1627,6 +1647,10 @@ const AcademicStructurePage = () => {
                 </p>
               </div>
               <div className="rounded-2xl bg-slate-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Lecturer</p>
+                <p className="mt-2 text-lg font-semibold text-brand-navy">{detailOffering.lecturer_name || 'Unassigned'}</p>
+              </div>
+              <div className="rounded-2xl bg-slate-50 p-4">
                 <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Status</p>
                 <div className="mt-2">
                   <Badge variant={detailOffering.is_core ? 'success' : 'info'}>
@@ -1948,6 +1972,11 @@ const AcademicStructurePage = () => {
               fee_amount_local: Number(offeringForm.fee_amount_local || 0),
               fee_amount_international: Number(offeringForm.fee_amount_international || 0),
               is_core: offeringForm.is_core === 'true',
+              lecturer_id: offeringForm.lecturer_id || null,
+              lecturer_name: (() => {
+                const lecturer = lecturers.find((item: LecturerOption) => item.id === offeringForm.lecturer_id);
+                return lecturer ? `${lecturer.first_name} ${lecturer.last_name}` : '';
+              })(),
               prerequisite_codes: offeringForm.prerequisite_codes,
               next_offering_codes: offeringForm.next_offering_codes,
             };
@@ -2076,6 +2105,19 @@ const AcademicStructurePage = () => {
           >
             <option value="true">Core</option>
             <option value="false">Elective</option>
+          </Select>
+          <Select
+            label="Lecturer"
+            value={offeringForm.lecturer_id}
+            onChange={(event) => setOfferingForm((current) => ({ ...current, lecturer_id: event.target.value }))}
+          >
+            <option value="">Unassigned</option>
+            {lecturers.map((lecturer: LecturerOption) => (
+              <option key={lecturer.id} value={lecturer.id}>
+                {lecturer.first_name} {lecturer.last_name}
+                {lecturer.role === 'principal_lecturer' ? ' · Principal lecturer' : ''}
+              </option>
+            ))}
           </Select>
           <div className="space-y-2">
             <label className="text-sm font-semibold text-slate-700">Prerequisites</label>

@@ -42,6 +42,7 @@ interface AcademicOffering {
   group_id: string;
   code: string;
   name: string;
+  lecturer_name?: string | null;
 }
 
 interface AcademicStructureResponse {
@@ -82,10 +83,10 @@ const TimetableViewPage = () => {
       day: days[index % days.length],
       period: periods[Math.floor(index / days.length)] || periods[0],
       subject: offering.name,
-      teacher: viewMode === 'teacher' ? offering.code : 'Teacher assignment pending',
+      teacher: offering.lecturer_name || 'Lecturer not assigned',
       room: selectedGroup?.code || 'Room pending',
     }));
-  }, [groupId, selectedGroup?.code, structure?.offerings, viewMode]);
+  }, [groupId, selectedGroup?.code, structure?.offerings]);
   const entries = structureEntries.length ? structureEntries : actualEntries;
 
   useEffect(() => {
@@ -113,7 +114,7 @@ const TimetableViewPage = () => {
               {isTertiaryScope ? 'Level View' : 'Class View'}
             </Button>
             <Button variant={viewMode === 'teacher' ? 'primary' : 'secondary'} onClick={() => setViewMode('teacher')}>
-              Teacher View
+              Lecturer View
             </Button>
           </div>
         }

@@ -44,6 +44,9 @@ const ensureUniversitySettings = (settings) => {
     ...(next.academics.assessment_weights || {}),
     pre_mock: 0,
   };
+  next.academics.exam_windows = next.academics.exam_windows || [];
+  next.academics.exam_sittings = next.academics.exam_sittings || [];
+  next.academics.lecture_slots = next.academics.lecture_slots || [];
   next.communication = next.communication || {};
   next.communication.notices = next.communication.notices || [];
   next.communication.blasts = next.communication.blasts || [];
@@ -395,21 +398,40 @@ const buildResults = (settings, records) => {
     const ordered = items
       .slice()
       .sort((left, right) => String(left.uploaded_at).localeCompare(String(right.uploaded_at)));
-    const latest = {};
+    const namedByKind = {};
+    const resitByKind = {};
     ordered.forEach((item) => {
-      latest[item.kind] = item;
+      if (item.is_resit) {
+        resitByKind[item.kind] = item;
+        return;
+      }
+      if (!namedByKind[item.kind]) namedByKind[item.kind] = new Map();
+      namedByKind[item.kind].set(item.assessment_name || item.id, item);
     });
     let score = 0;
+    const components = {};
     WEIGHTED_KINDS.forEach((kind) => {
-      const item = latest[kind];
       const weight = Number(weights[kind] || 0);
-      if (!item || !weight) return;
-      const maxScore = Number(item.max_score || 100) || 100;
-      score += (Number(item.score || 0) / maxScore) * weight;
+      const pool = resitByKind[kind]
+        ? [resitByKind[kind]]
+        : Array.from(namedByKind[kind]?.values() || []);
+      if (!pool.length || !weight) return;
+      const percent =
+        pool.reduce((sum, item) => {
+          const maxScore = Number(item.max_score || 100) || 100;
+          return sum + Number(item.score || 0) / maxScore;
+        }, 0) / pool.length;
+      score += percent * weight;
+      components[kind] = {
+        score: Math.round(percent * 1000) / 10,
+        count: pool.length,
+        names: pool.map((item) => item.assessment_name || kind),
+      };
     });
     score = Math.round(score * 10) / 10;
     const graded = gradeForScore(score, rules);
     const sample = ordered[ordered.length - 1];
+    const awaitingFinal = Number(weights.final_exam || 0) > 0 && !components.final_exam;
     courses.push({
       student_id: sample.student_id,
       student_name: names.get(sample.student_id) || 'Student',
@@ -419,10 +441,12 @@ const buildResults = (settings, records) => {
       period_name: sample.period_name || 'Semester',
       program_id: sample.program_id || null,
       score,
-      ...graded,
-      failed: graded.grade === 'F' || Number(graded.gp) === 0,
+      grade: awaitingFinal ? 'Pending' : graded.grade,
+      gp: awaitingFinal ? null : graded.gp,
+      remark: awaitingFinal ? 'Awaiting published final exam' : graded.remark,
+      failed: awaitingFinal ? false : graded.grade === 'F' || Number(graded.gp) === 0,
       latest_upload: sample.uploaded_at,
-      components: latest,
+      components,
     });
   });
 
@@ -441,9 +465,10 @@ const buildResults = (settings, records) => {
   });
 
   const summary = Array.from(semesters.values()).map((semester) => {
-    const totalGp = semester.courses.reduce((sum, course) => sum + Number(course.gp || 0), 0);
-    const gpa = semester.courses.length
-      ? Math.round((totalGp / semester.courses.length) * 100) / 100
+    const gradedCourses = semester.courses.filter((course) => course.gp !== null && course.gp !== undefined);
+    const totalGp = gradedCourses.reduce((sum, course) => sum + Number(course.gp || 0), 0);
+    const gpa = gradedCourses.length
+      ? Math.round((totalGp / gradedCourses.length) * 100) / 100
       : 0;
     return {
       ...semester,
@@ -467,7 +492,7 @@ const listResults = async ({ user }) => {
   if (user?.role === 'student' && models.Student) {
     const student = await models.Student.findOne({ where: { user_id: user.id } });
     const studentId = student?.id || '';
-    records = records.filter((item) => item.student_id === studentId);
+    records = records.filter((item) => item.student_id === studentId && item.approved !== false);
     students = students.filter((item) => item.student_id === studentId);
   }
   const computed = buildResults(settings, records);
@@ -482,6 +507,8 @@ const listResults = async ({ user }) => {
       period_id: offering.period_id || null,
       period_name: periods.get(offering.period_id)?.name || 'Semester',
       program_id: offering.program_id || null,
+      lecturer_id: offering.lecturer_id || null,
+      lecturer_name: offering.lecturer_name || null,
       credit_hours: offering.credit_hours || offering.credits || 0,
     })),
     records,
@@ -494,6 +521,12 @@ const recordResult = async ({ user, payload }) => {
   if (!RESULT_KINDS.includes(kind)) {
     throw Object.assign(new Error('Choose the assessment type.'), { statusCode: 400 });
   }
+  if (user?.role === 'principal_lecturer') {
+    throw Object.assign(new Error('A principal lecturer approves results. Lecturers upload them.'), {
+      statusCode: 403,
+    });
+  }
+  const examKinds = ['midsem', 'final_exam'];
   const studentId = String(payload?.student_id || '');
   const courseCode = String(payload?.course_code || '').trim();
   const courseName = String(payload?.course_name || '').trim();
@@ -507,6 +540,26 @@ const recordResult = async ({ user, payload }) => {
 
   const institution = await loadInstitution();
   const settings = ensureUniversitySettings(institution.settings);
+  if (user?.role === 'teacher' && payload?.offering_id) {
+    const offering = (settings.academics.offerings || []).find((item) => item.id === payload.offering_id);
+    if (offering?.lecturer_id && offering.lecturer_id !== user.id) {
+      throw Object.assign(new Error('This course is assigned to another lecturer.'), { statusCode: 403 });
+    }
+  }
+  if (examKinds.includes(kind) && user?.role === 'teacher') {
+    const today = todayInSchool();
+    const windowOpen = (settings.academics.exam_windows || []).some((item) => {
+      const inDates = today >= item.opens_on && today <= (item.extended_until || item.closes_on);
+      const periodOk = !item.period_id || !payload?.period_id || item.period_id === payload.period_id;
+      return inDates && periodOk;
+    });
+    if (!windowOpen) {
+      throw Object.assign(
+        new Error('The exam window is closed. An admin has to extend the date before this result can be uploaded.'),
+        { statusCode: 400 }
+      );
+    }
+  }
   const record = {
     id: crypto.randomUUID(),
     student_id: studentId,
@@ -520,7 +573,10 @@ const recordResult = async ({ user, payload }) => {
     score,
     max_score: maxScore,
     is_resit: Boolean(payload?.is_resit),
-    source: 'manual',
+    source: payload?.source || 'manual',
+    assessment_name: String(payload?.assessment_name || '').trim() || kind,
+    approved: !['midsem', 'final_exam'].includes(kind),
+    batch_id: payload?.batch_id || null,
     uploaded_at: new Date().toISOString(),
     uploaded_by: user?.id || null,
   };
@@ -562,4 +618,9 @@ module.exports = {
   listResults,
   recordResult,
   updateWeights,
+  ensureUniversitySettings,
+  loadInstitution,
+  saveSettings,
+  todayInSchool,
+  studentRows,
 };

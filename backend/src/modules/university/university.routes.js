@@ -15,8 +15,8 @@ router.use(
   generalApiRateLimiter
 );
 
-const staff = ['institution_admin', 'teacher'];
-const readers = ['institution_admin', 'teacher', 'student', 'accountant'];
+const staff = ['institution_admin', 'teacher', 'principal_lecturer'];
+const readers = ['institution_admin', 'teacher', 'principal_lecturer', 'student', 'accountant'];
 
 router.get('/intakes', authorize(readers), controller.listIntakes);
 router.post('/intakes', authorize(['institution_admin']), controller.createIntake);
@@ -27,7 +27,20 @@ router.post('/notices', authorize(['institution_admin']), controller.createNotic
 router.get('/blasts', authorize(['institution_admin']), controller.listBlasts);
 router.post('/blasts', authorize(['institution_admin']), controller.sendBlast);
 router.get('/results', authorize([...staff, 'student']), controller.listResults);
-router.post('/results', authorize(staff), controller.recordResult);
+router.post('/results', authorize(['institution_admin', 'teacher']), controller.recordResult);
+router.get('/results/template', authorize(['institution_admin', 'teacher']), controller.resultTemplate);
+router.post('/results/preview', authorize(['institution_admin', 'teacher']), controller.previewResults);
+router.post('/results/commit', authorize(['institution_admin', 'teacher']), controller.commitResults);
+router.get('/results/pending', authorize(['institution_admin', 'principal_lecturer']), controller.listPendingResults);
+router.post('/results/approve/:batchId', authorize(['institution_admin', 'principal_lecturer']), controller.approveResults);
+router.get('/exams/board', authorize(readers), controller.examBoard);
+router.post('/exams/windows', authorize(['institution_admin']), controller.saveWindow);
+router.patch('/exams/windows/:id/extend', authorize(['institution_admin']), controller.extendWindow);
+router.post('/exams/sittings', authorize(['institution_admin']), controller.saveSitting);
+router.delete('/exams/sittings/:id', authorize(['institution_admin']), controller.removeSitting);
+router.get('/exams/docket', authorize(['institution_admin', 'student']), controller.examDocket);
+router.get('/exams/confirmation', authorize(['institution_admin', 'student', 'accountant']), controller.confirmationSlip);
+router.get('/exams/lectures', authorize(readers), controller.lectureTimetable);
 router.patch('/results/weights', authorize(['institution_admin']), controller.updateWeights);
 
 module.exports = router;

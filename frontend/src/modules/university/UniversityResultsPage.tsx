@@ -20,7 +20,7 @@ interface CourseResult {
   period_name: string;
   score: number;
   grade: string;
-  gp: number;
+  gp: number | null;
   remark: string;
   failed: boolean;
 }
@@ -48,6 +48,20 @@ interface ResultsPayload {
   summary: SemesterSummary[];
   current: CourseResult[];
   rewrites: CourseResult[];
+}
+
+interface PreviewRow {
+  student_number: string;
+  student_name: string;
+  score: number | null;
+  ok: boolean;
+  reason: string;
+}
+
+interface PreviewPayload {
+  ready: boolean;
+  saved?: boolean;
+  rows: PreviewRow[];
 }
 
 const TABS = [
@@ -78,9 +92,12 @@ const UniversityResultsPage = () => {
     student_id: '',
     offering_id: '',
     kind: 'quiz' as ResultKind,
+    assessment_name: '',
     score: '',
     is_resit: false,
   });
+  const [preview, setPreview] = useState<PreviewPayload | null>(null);
+  const [sheetText, setSheetText] = useState('');
   const resultsQuery = useQuery<ResultsPayload>({
     queryKey: ['university-results'],
     queryFn: eduovaApi.university.results,
@@ -101,6 +118,7 @@ const UniversityResultsPage = () => {
         period_name: selectedCourse?.period_name,
         program_id: selectedCourse?.program_id,
         kind: form.kind,
+        assessment_name: form.assessment_name,
         score: Number(form.score),
         max_score: 100,
         is_resit: form.is_resit,
@@ -120,6 +138,52 @@ const UniversityResultsPage = () => {
     },
     onError: (error: unknown) => toast.error(getApiErrorMessage(error, 'Unable to save the percentages.')),
   });
+  const previewSheet = useMutation({
+    mutationFn: () =>
+      eduovaApi.university.previewResults({
+        offering_id: form.offering_id,
+        kind: form.kind,
+        assessment_name: form.assessment_name,
+        csv: sheetText,
+      }),
+    onSuccess: (result: PreviewPayload) => setPreview(result),
+    onError: (error: unknown) => toast.error(getApiErrorMessage(error, 'Unable to read this file.')),
+  });
+  const commitSheet = useMutation({
+    mutationFn: () =>
+      eduovaApi.university.commitResults({
+        offering_id: form.offering_id,
+        kind: form.kind,
+        assessment_name: form.assessment_name,
+        period_name: selectedCourse?.period_name,
+        csv: sheetText,
+      }),
+    onSuccess: (result: PreviewPayload) => {
+      setPreview(result);
+      if (result.ready && result.saved) {
+        toast.success(
+          form.kind === 'final_exam' || form.kind === 'midsem'
+            ? 'Uploaded. Students will see it after the principal lecturer approves.'
+            : 'Uploaded. Students can see these scores.'
+        );
+        queryClient.invalidateQueries({ queryKey: ['university-results'] });
+      }
+    },
+    onError: (error: unknown) => toast.error(getApiErrorMessage(error, 'Unable to save this upload.')),
+  });
+  const downloadTemplate = async () => {
+    if (!form.offering_id) {
+      toast.error('Choose the course first.');
+      return;
+    }
+    const blob = await eduovaApi.university.resultTemplate(form.offering_id);
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${selectedCourse?.code || 'results'}-template.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
 
   const semesters = useMemo(() => data?.summary || [], [data?.summary]);
   const entryKinds = kindForTab(tab);
@@ -128,7 +192,7 @@ const UniversityResultsPage = () => {
     <div className="space-y-6">
       <PageHeader
         title="Results"
-        description="Quizzes, tests and coursework make up continuous assessment. Pre-mock is recorded separately. Mock stays at 0% until an admin gives it a percentage. A resit replaces the failed score on the summary."
+        description="Quizzes, tests, coursework, pre-mocks and mocks are visible as soon as they are accepted. Mid-semester and final exams stay hidden until a principal lecturer approves them. The final grade adds each accepted part by its percentage. Several tests of the same type are averaged. A resit replaces the failed score."
       />
       <div className="flex flex-wrap gap-2">
         {TABS.map((item) => (
@@ -227,6 +291,11 @@ const UniversityResultsPage = () => {
             </select>
           </label>
           <Input
+            label="Name, for example test 1 or end of semester"
+            value={form.assessment_name}
+            onChange={(event) => setForm((current) => ({ ...current, assessment_name: event.target.value }))}
+          />
+          <Input
             label="Score out of 100"
             type="number"
             value={form.score}
@@ -246,6 +315,72 @@ const UniversityResultsPage = () => {
             </Button>
           </div>
         </form>
+      ) : null}
+
+      {canEnter && entryKinds.length ? (
+        <div className="space-y-4 rounded-3xl border border-slate-200 bg-white p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="font-semibold text-slate-900">Spreadsheet upload</p>
+              <p className="text-sm text-slate-500">
+                Download the template, fill student ID and score in Excel, then save it as CSV. Every student ID must be registered on this course this semester. One mistake blocks the whole file.
+              </p>
+            </div>
+            <Button variant="secondary" onClick={downloadTemplate}>Download template</Button>
+          </div>
+          <input
+            type="file"
+            accept=".csv,text/csv"
+            onChange={async (event) => {
+              const file = event.target.files?.[0];
+              if (!file) return;
+              const text = await file.text();
+              setSheetText(text);
+              setPreview(null);
+            }}
+          />
+          {preview ? (
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="text-left text-xs uppercase text-slate-500">
+                    <th className="px-3 py-2">Student ID</th>
+                    <th className="px-3 py-2">Name</th>
+                    <th className="px-3 py-2">Score</th>
+                    <th className="px-3 py-2">Check</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {preview.rows.map((row: PreviewRow) => (
+                    <tr key={`${row.student_number}-${row.student_name}`} className={row.ok ? '' : 'bg-rose-50 text-rose-800'}>
+                      <td className="px-3 py-2">{row.student_number}</td>
+                      <td className="px-3 py-2">{row.student_name}</td>
+                      <td className="px-3 py-2">{row.score ?? ''}</td>
+                      <td className="px-3 py-2">{row.ok ? 'Ready' : row.reason}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+          <div className="flex flex-wrap gap-3">
+            <Button
+              variant="secondary"
+              onClick={() => previewSheet.mutate()}
+              loading={previewSheet.isPending}
+              disabled={!sheetText || !form.offering_id || !form.assessment_name}
+            >
+              Preview
+            </Button>
+            <Button
+              onClick={() => commitSheet.mutate()}
+              loading={commitSheet.isPending}
+              disabled={!preview?.ready}
+            >
+              Confirm and save
+            </Button>
+          </div>
+        </div>
       ) : null}
 
       {tab === 'current' ? (

@@ -5,7 +5,7 @@ const { logAudit } = require('../../shared/services/audit-log.service');
 const { store } = require('../../shared/store/runtime-store');
 const { Op } = require('sequelize');
 
-const allowedRoles = ['institution_admin', 'teacher', 'accountant'];
+const allowedRoles = ['institution_admin', 'teacher', 'principal_lecturer', 'accountant'];
 const allowedEmploymentTypes = ['full_time', 'part_time', 'contract'];
 const allowedCustomPermissions = ['finance_approve_director', 'finance_approve_accountant'];
 
@@ -125,7 +125,7 @@ const listUsers = async ({ institutionId, role }) => {
 const validatePayload = (payload) => {
   if (!allowedRoles.includes(payload.role)) {
     throw Object.assign(
-      new Error('Only institution_admin, teacher, and accountant accounts can be created here.'),
+      new Error('Only institution_admin, teacher, principal_lecturer, and accountant accounts can be created here.'),
       { statusCode: 400 }
     );
   }

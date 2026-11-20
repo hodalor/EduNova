@@ -81,7 +81,7 @@ const DashboardPage = () => {
   const recentPayments = (data?.recentPayments as RecentPaymentRow[] | undefined) || [];
   const primaryCurrencyCode = resolvePrimaryCurrencyCode(recentPayments);
 
-  if (role === 'teacher') {
+  if (role === 'teacher' || role === 'principal_lecturer') {
     return <TeacherWorkspacePage />;
   }
 

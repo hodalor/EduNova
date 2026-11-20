@@ -24,6 +24,14 @@ const ROLE_PERMISSIONS = {
     'communication:write',
     'timetable:read',
   ],
+  principal_lecturer: [
+    'auth:read',
+    'academics:read',
+    'academics:write',
+    'attendance:read',
+    'communication:read',
+    'timetable:read',
+  ],
   student: [
     'auth:read',
     'academics:read',
