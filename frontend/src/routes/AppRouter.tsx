@@ -56,6 +56,10 @@ const StudentCourseRegistrationPage = lazy(
 const LearningLibraryPage = lazy(() => import('../modules/learning/LearningLibraryPage'));
 const LearningAssessmentsPage = lazy(() => import('../modules/learning/LearningAssessmentsPage'));
 const LearningResultsPage = lazy(() => import('../modules/learning/LearningResultsPage'));
+const ApplyPage = lazy(() => import('../modules/admissions/ApplyPage'));
+const AdmissionApplicationsPage = lazy(
+  () => import('../modules/admissions/AdmissionApplicationsPage')
+);
 
 const Loader = () => {
   return (
@@ -89,6 +93,7 @@ const AppRouter = () => {
             }
           />
           <Route path="/transcript/verify/:code" element={<TranscriptVerificationPage />} />
+          <Route path="/apply" element={<ApplyPage />} />
           <Route
             element={
               <ProtectedRoute allowedRoles={['institution_admin', 'teacher', 'student', 'parent', 'driver', 'accountant', 'librarian']}>
@@ -101,7 +106,18 @@ const AppRouter = () => {
               path="/admissions"
               element={
                 <ProtectedRoute allowedRoles={['institution_admin']}>
-                  <Navigate to="/students/enroll" replace />
+                  <Navigate to="/admissions/applications" replace />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admissions/applications"
+              element={
+                <ProtectedRoute
+                  allowedRoles={['institution_admin']}
+                  allowedPermissions={['admissions:read', 'admissions:*']}
+                >
+                  <AdmissionApplicationsPage />
                 </ProtectedRoute>
               }
             />

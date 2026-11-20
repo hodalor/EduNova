@@ -561,6 +561,18 @@ export const eduovaApi = {
     updateSettings: async (payload: Record<string, unknown>) =>
       (await axiosInstance.patch('/v1/daycare/settings', payload)).data.data,
   },
+  admissions: {
+    catalog: async (code: string) =>
+      (await authApi.get(`/v1/admissions/public/${encodeURIComponent(code)}`)).data.data,
+    submit: async (code: string, payload: Record<string, unknown>) =>
+      (await authApi.post(`/v1/admissions/public/${encodeURIComponent(code)}/applications`, payload))
+        .data.data,
+    list: async () => (await axiosInstance.get('/v1/admissions/applications')).data.data,
+    detail: async (id: string) =>
+      (await axiosInstance.get(`/v1/admissions/applications/${id}`)).data.data,
+    admit: async (id: string) =>
+      (await axiosInstance.post(`/v1/admissions/applications/${id}/admit`)).data.data,
+  },
   tertiary: {
     overview: async () => (await axiosInstance.get('/v1/tertiary/overview')).data.data,
     createFaculty: async (payload: Record<string, unknown>) =>

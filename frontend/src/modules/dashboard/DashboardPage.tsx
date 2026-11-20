@@ -239,6 +239,15 @@ const DashboardPage = () => {
           {isTertiaryInstitution(institution) ? (
             <Button
               variant="secondary"
+              leftIcon={<FileText className="h-4 w-4" />}
+              onClick={() => navigate('/admissions/applications')}
+            >
+              New Applications
+            </Button>
+          ) : null}
+          {isTertiaryInstitution(institution) ? (
+            <Button
+              variant="secondary"
               leftIcon={<Receipt className="h-4 w-4" />}
               onClick={() => navigate('/tertiary')}
             >

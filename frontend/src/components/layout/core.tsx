@@ -5,6 +5,7 @@ import {
   BriefcaseBusiness,
   Building2,
   ClipboardCheck,
+  ClipboardList,
   CreditCard,
   FileBarChart2,
   GraduationCap,
@@ -101,6 +102,26 @@ const institutionNavGroups: NavGroup[] = [
         name: 'Tertiary Setup',
         to: '/tertiary',
         icon: Building2,
+        roles: ['institution_admin'],
+        visible: isTertiaryInstitution,
+      },
+    ],
+  },
+  {
+    label: 'Admission',
+    items: [
+      {
+        name: 'New Applications',
+        to: '/admissions/applications',
+        icon: ClipboardList,
+        roles: ['institution_admin'],
+        permissions: ['admissions:read', 'admissions:*'],
+        visible: isTertiaryInstitution,
+      },
+      {
+        name: 'Application Form',
+        to: '/apply',
+        icon: FileBarChart2,
         roles: ['institution_admin'],
         visible: isTertiaryInstitution,
       },
@@ -303,7 +324,12 @@ export const Sidebar = () => {
       </div>
       <div className="scrollbar-hidden flex-1 overflow-y-auto px-2 py-4">
         {groups.map((group) => (
-          <div key={group.label} className="space-y-0.5">
+          <div key={group.label} className="mb-4 space-y-0.5">
+            {!collapsed ? (
+              <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                {group.label}
+              </p>
+            ) : null}
             <div className="space-y-0.5">
               {group.items.map((item) => {
                 const Icon = item.icon;
@@ -422,7 +448,7 @@ export const AppShell = () => (
         <Topbar />
         <div className="flex-1 overflow-y-auto">
           <Suspense fallback={<div className="app-container py-6"><PageLoader /></div>}>
-            <main className="app-container py-6">
+            <main className="app-container py-6 lg:py-8">
               <Outlet />
             </main>
           </Suspense>
@@ -443,41 +469,17 @@ export const AuthLayout = ({
   title,
   description,
   children,
-  decorativeWord = 'EDUNOVA',
 }: AuthLayoutProps) => (
-  <div className="flex min-h-screen items-center justify-center bg-brand-navy px-4 py-10">
-    <div className="grid w-full max-w-6xl overflow-hidden rounded-[2rem] bg-white shadow-2xl lg:grid-cols-[1.5fr_1fr]">
-      <div className="relative hidden overflow-hidden bg-brand-navy px-12 py-12 text-white lg:block">
-        <div className="absolute inset-y-0 right-6 flex items-center gap-5 opacity-80">
-          {[0, 1, 2, 3, 4].map((index) => (
-            <span
-              key={`${decorativeWord}-${index}`}
-              className="[writing-mode:vertical-rl] text-4xl font-black uppercase tracking-[0.32em] text-white/8"
-            >
-              {decorativeWord}
-            </span>
-          ))}
-        </div>
-        <div className="relative z-10 max-w-xl">
-          <p className="text-sm font-semibold uppercase tracking-[0.4em] text-brand-gold">EDUNOVA</p>
-          <h1 className="mt-8 text-4xl font-semibold leading-tight">
-            Trustworthy administration for every school.
-          </h1>
-          <p className="mt-4 max-w-md text-slate-300">
-            Admissions, academics, finance, attendance, and communication stay in one secure school workspace.
-          </p>
-        </div>
-      </div>
-      <div className="px-6 py-10 sm:px-10 lg:px-12">
-        <div className="mx-auto max-w-md">
-          <p className="text-xs font-semibold uppercase tracking-[0.36em] text-brand-gold">
-            Secure Access
-          </p>
-          <h2 className="mt-4 text-3xl font-semibold text-brand-navy">{title}</h2>
-          <p className="mt-2 text-sm text-slate-500">{description}</p>
-          <div className="mt-8">{children}</div>
-        </div>
-      </div>
+  <div className="flex min-h-screen items-center justify-center bg-slate-100 px-4 py-10">
+    <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white px-6 py-8 shadow-xl sm:px-8">
+      <p className="text-center text-xs font-semibold uppercase tracking-[0.42em] text-brand-gold">
+        EDUOVA
+      </p>
+      {title ? (
+        <h1 className="mt-4 text-center text-2xl font-semibold text-brand-navy">{title}</h1>
+      ) : null}
+      {description ? <p className="mt-2 text-center text-sm text-slate-500">{description}</p> : null}
+      <div className={title || description ? 'mt-8' : 'mt-6'}>{children}</div>
     </div>
   </div>
 );

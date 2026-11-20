@@ -10,6 +10,7 @@ const rateLimit = require('express-rate-limit');
 const env = require('./config/env');
 const logger = require('./config/logger');
 const academicsRoutes = require('./modules/academics/academics.routes');
+const admissionsRoutes = require('./modules/admissions/admissions.routes');
 const analyticsRoutes = require('./modules/analytics/analytics.routes');
 const attendanceRoutes = require('./modules/attendance/attendance.routes');
 const authRoutes = require('./modules/auth/auth.routes');
@@ -127,6 +128,8 @@ const createApp = () => {
   app.use('/api/v1/daycare', daycareRoutes);
   app.use('/api/tertiary', tertiaryRoutes);
   app.use('/api/v1/tertiary', tertiaryRoutes);
+  app.use('/api/admissions', admissionsRoutes);
+  app.use('/api/v1/admissions', admissionsRoutes);
   app.use('/api/media', mediaRoutes);
   app.use('/api/v1/media', mediaRoutes);
 

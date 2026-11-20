@@ -41,8 +41,12 @@ const initializeSocketNamespaces = ({ io }) => {
 
   namespaces.notifications.on('connection', (socket) => {
     const userId = socket.data.auth?.sub;
+    const institutionId = socket.data.auth?.institution_id;
     if (userId) {
       socket.join(`user:${userId}`);
+    }
+    if (institutionId) {
+      socket.join(`institution:${institutionId}`);
     }
   });
 
@@ -94,6 +98,14 @@ const initializeSocketNamespaces = ({ io }) => {
       socket.join(`user:${userId}`);
     }
   });
+};
+
+const emitAdmissionEvent = ({ institutionId, event, application }) => {
+  if (!namespaces.notifications || !institutionId || !event) {
+    return;
+  }
+
+  namespaces.notifications.to(`institution:${institutionId}`).emit(event, application);
 };
 
 const emitNotification = ({ userId, notification }) => {
@@ -160,6 +172,7 @@ const getNamespaces = () => namespaces;
 
 module.exports = {
   initializeSocketNamespaces,
+  emitAdmissionEvent,
   emitNotification,
   emitNotificationBadge,
   emitBusLocationUpdate,

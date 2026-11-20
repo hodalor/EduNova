@@ -76,8 +76,9 @@ body {
   }
 
   .nav-active {
-    background: rgba(15, 27, 60, 0.08);
-    border-left: 3px solid rgb(var(--color-accent));
+    background: rgba(255, 255, 255, 0.12);
+    color: white;
+    box-shadow: inset 3px 0 0 rgb(var(--color-accent));
   }
 
   .scrollbar-hidden {

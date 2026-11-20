@@ -28,7 +28,6 @@ const LoginPage = () => {
   const {
     register,
     handleSubmit,
-    watch,
     formState: { errors, isSubmitting },
   } = useForm<LoginValues>({
     resolver: zodResolver(loginSchema),
@@ -38,7 +37,6 @@ const LoginPage = () => {
       password: '',
     },
   });
-  const institutionCode = watch('institution_code');
 
   const mutation = useMutation({
     mutationFn: eduovaApi.auth.login,
@@ -52,11 +50,7 @@ const LoginPage = () => {
   });
 
   return (
-    <AuthLayout
-      title=""
-      description=""
-      decorativeWord={(institutionCode || 'EDUNOVA').trim().toUpperCase()}
-    >
+    <AuthLayout title="Sign in" description="Use your institution code, identity, and password.">
       <form
         className="space-y-4"
         onSubmit={handleSubmit((values) =>
