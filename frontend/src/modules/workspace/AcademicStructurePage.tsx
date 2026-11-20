@@ -425,6 +425,27 @@ const AcademicStructurePage = () => {
           ),
     [groups, offerings, selectedGroupId, selectedProgramId]
   );
+  const courseRoadmap = useMemo(
+    () =>
+      (selectedGroupId ? groups.filter((group) => group.id === selectedGroupId) : groups)
+        .slice()
+        .sort((left, right) => left.name.localeCompare(right.name))
+        .map((group) => ({
+          group,
+          semesters: periods
+            .filter((period) => period.group_id === group.id)
+            .slice()
+            .sort((left, right) => left.sequence - right.sequence)
+            .map((period) => ({
+              period,
+              courses: filteredOfferings
+                .filter((offering) => offering.group_id === group.id && offering.period_id === period.id)
+                .slice()
+                .sort((left, right) => left.code.localeCompare(right.code)),
+            })),
+        })),
+    [filteredOfferings, groups, periods, selectedGroupId]
+  );
   const tertiaryPrograms = useMemo(() => tertiaryOverview?.programs || [], [tertiaryOverview?.programs]);
   const activeOfferingGroup = useMemo(
     () => baseGroups.find((group) => group.id === offeringForm.group_id) || null,
@@ -576,13 +597,15 @@ const AcademicStructurePage = () => {
     });
   };
 
-  const resetOfferingForm = (groupId = '') => {
-    const sourcePeriods = periods.filter((period) => period.group_id === groupId);
+  const resetOfferingForm = (groupId = '', periodId = '') => {
+    const sourcePeriods = periods
+      .filter((period) => period.group_id === groupId)
+      .sort((left, right) => left.sequence - right.sequence);
     const sourceGroup = groups.find((group) => group.id === groupId);
     setOfferingForm({
       ...initialOfferingForm,
       group_id: groupId,
-      period_id: sourcePeriods[0]?.id || '',
+      period_id: periodId || sourcePeriods[0]?.id || '',
       program_id:
         sourceGroup?.level_code === 'TR'
           ? selectedProgramId || tertiaryPrograms[0]?.id || ''
@@ -1088,73 +1111,111 @@ const AcademicStructurePage = () => {
           ) : null}
 
           {activeTab === 'offerings' ? (
-            filteredOfferings.length ? (
-              <table className="min-w-full divide-y divide-slate-200 text-sm">
-                <thead className="bg-slate-50">
-                  <tr>
-                    {[
-                      groupLabel,
-                      periodLabel,
-                      ...(allowedLevels.includes('TR') ? ['Program'] : []),
-                      'Code',
-                      'Name',
-                      'Type',
-                      'Credits',
-                      `Local (${localCurrency})`,
-                      `International (${internationalCurrency})`,
-                      'Status',
-                    ].map((label) => (
-                      <th key={label} className="px-4 py-3 text-left font-semibold uppercase text-slate-600">
-                        {label}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 bg-white">
-                  {filteredOfferings.map((offering) => {
-                    const group = groups.find((item) => item.id === offering.group_id);
-                    const period = periods.find((item) => item.id === offering.period_id);
-                    return (
-                      <tr
-                        key={offering.id}
-                        className="cursor-pointer transition hover:bg-slate-50"
-                        onClick={() => {
-                          setSelectedGroupId(offering.group_id);
-                          setDetailState({ type: 'offerings', id: offering.id });
-                        }}
-                      >
-                        <td className="px-4 py-3">{group?.name || '-'}</td>
-                        <td className="px-4 py-3">{period?.name || '-'}</td>
-                        {allowedLevels.includes('TR') ? (
-                          <td className="px-4 py-3">
-                            {tertiaryProgramMap.get(String(offering.program_id || '')) || '-'}
-                          </td>
-                        ) : null}
-                        <td className="px-4 py-3 font-semibold text-brand-navy">{offering.code}</td>
-                        <td className="px-4 py-3">{offering.name}</td>
-                        <td className="px-4 py-3 capitalize">{offering.type}</td>
-                        <td className="px-4 py-3">{offering.credit_hours ?? '-'}</td>
-                        <td className="px-4 py-3">
-                          {Number(offering.fee_amount_local ?? offering.fee_amount ?? 0).toLocaleString()}
-                        </td>
-                        <td className="px-4 py-3">
-                          {Number(
-                            offering.fee_amount_international ?? offering.fee_amount_local ?? offering.fee_amount ?? 0
-                          ).toLocaleString()}
-                        </td>
-                        <td className="px-4 py-3">
-                          <Badge variant={offering.is_core ? 'success' : 'info'}>
-                            {offering.is_core ? 'core' : 'elective'}
-                          </Badge>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+            courseRoadmap.length ? (
+              <div className="space-y-5">
+                {courseRoadmap.map(({ group, semesters }) => (
+                  <section key={group.id} className="overflow-hidden rounded-3xl border border-slate-200">
+                    <div className="flex flex-wrap items-center justify-between gap-3 bg-brand-navy px-5 py-4 text-white">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-white/70">{groupLabel}</p>
+                        <h3 className="text-lg font-semibold">{group.name}</h3>
+                      </div>
+                      <p className="text-sm text-white/80">
+                        {semesters.reduce((count, semester) => count + semester.courses.length, 0)} {offeringListLabel.toLowerCase()}
+                      </p>
+                    </div>
+                    {semesters.length ? (
+                      <div className="divide-y divide-slate-200">
+                        {semesters.map(({ period, courses }) => (
+                          <div key={period.id} className="bg-white px-5 py-4">
+                            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                              <div>
+                                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
+                                  {periodLabel} {period.sequence}
+                                </p>
+                                <h4 className="text-base font-semibold text-brand-navy">{period.name}</h4>
+                              </div>
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={() => {
+                                  setEditingOfferingId('');
+                                  setOfferingModalMode('create');
+                                  resetOfferingForm(group.id, period.id);
+                                  setOfferingModalOpen(true);
+                                }}
+                              >
+                                Add {offeringLabel}
+                              </Button>
+                            </div>
+                            {courses.length ? (
+                              <div className="overflow-x-auto">
+                                <table className="min-w-full text-sm">
+                                  <thead>
+                                    <tr className="text-left text-xs uppercase tracking-wide text-slate-500">
+                                      {(allowedLevels.includes('TR') ? ['Program'] : []).concat([
+                                        'Code',
+                                        'Name',
+                                        'Credits',
+                                        `Local (${localCurrency})`,
+                                        'Status',
+                                      ]).map((label) => (
+                                        <th key={label} className="px-3 py-2 font-semibold">
+                                          {label}
+                                        </th>
+                                      ))}
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {courses.map((offering) => (
+                                      <tr
+                                        key={offering.id}
+                                        className="cursor-pointer border-t border-slate-100 hover:bg-slate-50"
+                                        onClick={() => {
+                                          setSelectedGroupId(offering.group_id);
+                                          setDetailState({ type: 'offerings', id: offering.id });
+                                        }}
+                                      >
+                                        {allowedLevels.includes('TR') ? (
+                                          <td className="px-3 py-2">
+                                            {tertiaryProgramMap.get(String(offering.program_id || '')) || '-'}
+                                          </td>
+                                        ) : null}
+                                        <td className="px-3 py-2 font-semibold text-brand-navy">{offering.code}</td>
+                                        <td className="px-3 py-2">{offering.name}</td>
+                                        <td className="px-3 py-2">{offering.credit_hours ?? '-'}</td>
+                                        <td className="px-3 py-2">
+                                          {Number(offering.fee_amount_local ?? offering.fee_amount ?? 0).toLocaleString()}
+                                        </td>
+                                        <td className="px-3 py-2">
+                                          <Badge variant={offering.is_core ? 'success' : 'info'}>
+                                            {offering.is_core ? 'core' : 'elective'}
+                                          </Badge>
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            ) : (
+                              <p className="rounded-2xl border border-dashed border-slate-200 px-4 py-5 text-sm text-slate-500">
+                                No {offeringListLabel.toLowerCase()} in {group.name}, {period.name} yet.
+                              </p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="px-5 py-6 text-sm text-slate-500">
+                        Add {periodListLabel.toLowerCase()} to {group.name} before placing {offeringListLabel.toLowerCase()}.
+                      </p>
+                    )}
+                  </section>
+                ))}
+              </div>
             ) : (
               <p className="rounded-2xl border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-500">
-                No {offeringListLabel.toLowerCase()} found for the current filter yet.
+                Add a {groupLabel.toLowerCase()} and its {periodListLabel.toLowerCase()} before creating {offeringListLabel.toLowerCase()}.
               </p>
             )
           ) : null}
@@ -1868,12 +1929,16 @@ const AcademicStructurePage = () => {
           }
         }}
         title={`${offeringModalMode === 'create' ? 'Add' : 'Edit'} ${offeringLabel}`}
-        description={`Attach a ${offeringLabel.toLowerCase()} to the right ${periodLabel.toLowerCase()} and manage its dependencies in one place.`}
+        description={`Choose the ${groupLabel.toLowerCase()}, then the ${periodLabel.toLowerCase()}. The ${offeringLabel.toLowerCase()} is saved on that semester of the level.`}
       >
         <form
           className="space-y-4"
           onSubmit={(event) => {
             event.preventDefault();
+            if (!offeringForm.group_id || !offeringForm.period_id) {
+              toast.error(`Choose the ${groupLabel.toLowerCase()} and ${periodLabel.toLowerCase()} first.`);
+              return;
+            }
             const payload = {
               ...offeringForm,
               code: offeringForm.code.toUpperCase(),

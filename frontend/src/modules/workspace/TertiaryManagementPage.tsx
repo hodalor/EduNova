@@ -1194,11 +1194,19 @@ const TertiaryManagementPage = () => {
                       {level.periods.map((period: ProgramRoadmapPeriod) => (
                         <div key={period.id} className="rounded-2xl bg-white px-3 py-2">
                           <p className="text-sm font-semibold text-brand-navy">{period.name}</p>
-                          <p className="text-xs text-slate-500">
-                            {period.courses
-                              .map((course: ProgramRoadmapCourse) => course.code)
-                              .join(', ') || 'No courses mapped'}
-                          </p>
+                          {period.courses.length ? (
+                            <ul className="mt-2 space-y-1">
+                              {period.courses.map((course: ProgramRoadmapCourse) => (
+                                <li key={course.id} className="text-sm text-slate-600">
+                                  <span className="font-semibold text-brand-navy">{course.code}</span>
+                                  {' · '}
+                                  {course.name}
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p className="text-xs text-slate-500">No courses in this semester yet.</p>
+                          )}
                         </div>
                       ))}
                     </div>
