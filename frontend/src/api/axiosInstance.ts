@@ -6,8 +6,9 @@ import toast from 'react-hot-toast';
 
 import { useAuthStore } from '../store/authStore';
 import { tokenStorage } from '../utils/tokenStorage';
+import { resolveApiBaseUrl } from './apiOrigin';
 
-const baseURL = process.env.REACT_APP_API_URL || 'https://edunova-e4bo.onrender.com/api';
+const baseURL = resolveApiBaseUrl();
 
 const authApi = axios.create({
   baseURL,
@@ -111,26 +112,6 @@ axiosInstance.interceptors.response.use(
       originalRequest._retry = true;
 
       const refreshToken = tokenStorage.getRefreshToken();
-      // #region debug-point A:frontend-refresh-start
-      fetch('http://127.0.0.1:7777/event', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sessionId: 'login-refresh-500',
-          runId: 'pre-fix',
-          hypothesisId: 'A',
-          location: 'frontend/src/api/axiosInstance.ts:refresh-start',
-          msg: '[DEBUG] frontend refresh start',
-          data: {
-            failedStatus: error.response?.status || null,
-            failedUrl: originalRequest.url || null,
-            hasRefreshToken: Boolean(refreshToken),
-            hasAccessToken: Boolean(tokenStorage.getAccessToken()),
-          },
-          ts: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
       if (!refreshToken) {
         useAuthStore.getState().logout();
         return Promise.reject(error);
@@ -142,25 +123,6 @@ axiosInstance.interceptors.response.use(
         const nextAccessToken = payload.tokens?.access_token || payload.access_token;
         const nextRefreshToken =
           payload.tokens?.refresh_token || payload.refresh_token || refreshToken;
-        // #region debug-point D:frontend-refresh-success
-        fetch('http://127.0.0.1:7777/event', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            sessionId: 'login-refresh-500',
-            runId: 'pre-fix',
-            hypothesisId: 'D',
-            location: 'frontend/src/api/axiosInstance.ts:refresh-success',
-            msg: '[DEBUG] frontend refresh success',
-            data: {
-              refreshUrl: '/auth/refresh',
-              hasNextAccessToken: Boolean(nextAccessToken),
-              hasNextRefreshToken: Boolean(nextRefreshToken),
-            },
-            ts: Date.now(),
-          }),
-        }).catch(() => {});
-        // #endregion
 
         tokenStorage.setTokens(nextAccessToken, nextRefreshToken);
         useAuthStore.getState().updateAccessToken(
@@ -176,26 +138,6 @@ axiosInstance.interceptors.response.use(
 
         return axiosInstance(originalRequest);
       } catch (refreshError) {
-        const axiosRefreshError = refreshError as AxiosError;
-        // #region debug-point E:frontend-refresh-error
-        fetch('http://127.0.0.1:7777/event', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            sessionId: 'login-refresh-500',
-            runId: 'pre-fix',
-            hypothesisId: 'E',
-            location: 'frontend/src/api/axiosInstance.ts:refresh-error',
-            msg: '[DEBUG] frontend refresh error',
-            data: {
-              status: axiosRefreshError.response?.status || null,
-              message: axiosRefreshError.message,
-              refreshUrl: '/auth/refresh',
-            },
-            ts: Date.now(),
-          }),
-        }).catch(() => {});
-        // #endregion
         useAuthStore.getState().logout();
         window.location.href = '/login';
         return Promise.reject(refreshError);

@@ -1,16 +1,14 @@
 import { useEffect, useMemo } from 'react';
 import { io, type Socket } from 'socket.io-client';
 
+import { resolveSocketUrl } from '../api/apiOrigin';
 import { baseURL } from '../api/axiosInstance';
 import { useAuthStore } from '../store/authStore';
 import { tokenStorage } from '../utils/tokenStorage';
 
 const socketCache = new Map<string, Socket>();
 
-const socketBaseUrl = (process.env.REACT_APP_SOCKET_URL || baseURL).replace(
-  /\/api\/?$/,
-  ''
-);
+const socketBaseUrl = resolveSocketUrl(baseURL);
 
 export const getSocketClient = (namespace: string, token: string) => {
   const cacheKey = `${namespace}:${token}`;
