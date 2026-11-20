@@ -263,13 +263,23 @@ const listAssessments = async ({ institutionId, role, userId, query = {}, authSt
     (await getAccessibleCourses({ institutionId, role, userId, settings, authStudentId })).map((item) => item.id)
   );
 
-  const now = new Date().toISOString();
-
   return settings.learning.assessments
     .filter((item) => accessibleCourseIds.has(item.course_id))
     .filter((item) => !query.course_id || String(item.course_id) === String(query.course_id))
-    .filter((item) => (role === 'student' ? item.is_published !== false && (!item.due_at || item.due_at >= now) : true))
-    .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
+    .filter((item) => (role === 'student' ? item.is_published !== false : true))
+    .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')))
+    .map((item) => {
+      if (role !== 'student') {
+        return item;
+      }
+
+      return {
+        ...item,
+        questions: Array.isArray(item.questions)
+          ? item.questions.map(({ correct_answer, model_answer, ...question }) => question)
+          : [],
+      };
+    });
 };
 
 const createAssessment = async ({ institutionId, user, payload }) => {

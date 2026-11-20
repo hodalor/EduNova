@@ -93,7 +93,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                         ),
                         const SizedBox(height: 8),
                         const Text(
-                          'Access your school workspace with institution code and password.',
+                          'Parents, students, and teachers sign in here with the institution code and password.',
                           style: TextStyle(color: AppColors.textMuted),
                         ),
                         const SizedBox(height: 24),

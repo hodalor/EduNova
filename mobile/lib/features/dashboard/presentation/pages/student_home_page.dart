@@ -44,8 +44,22 @@ class StudentHomePage extends ConsumerWidget {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  '${auth?.institution.name ?? 'EDUOVA'} tertiary portal for course registration, e-learning, finance, and academic progress.',
+                  '${auth?.institution.name ?? 'EDUOVA'} tertiary portal for your authentication, results, library, quizzes, assignments, courses, and finance.',
                   style: const TextStyle(color: AppColors.textMuted),
+                ),
+                const SizedBox(height: 16),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    Chip(
+                      label: Text(auth?.user.studentNumber?.isNotEmpty == true
+                          ? auth!.user.studentNumber!
+                          : 'Student number pending'),
+                    ),
+                    Chip(label: Text(auth?.user.email.isNotEmpty == true ? auth!.user.email : 'Email pending')),
+                    const Chip(label: Text('Student sign-in')),
+                  ],
                 ),
               ],
             ),

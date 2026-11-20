@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/constants/app_colors.dart';
+import '../../../academics/presentation/providers/academics_provider.dart';
 import '../providers/student_learning_provider.dart';
 
 String _formatDateTime(dynamic value) {
@@ -16,20 +17,22 @@ String _formatDateTime(dynamic value) {
   return '${parsed.year}-${parsed.month.toString().padLeft(2, '0')}-${parsed.day.toString().padLeft(2, '0')} ${parsed.hour.toString().padLeft(2, '0')}:${parsed.minute.toString().padLeft(2, '0')}';
 }
 
+bool _isQuiz(Map<String, dynamic> item) {
+  final type = (item['assessment_type'] ?? 'quiz').toString().toLowerCase();
+  return type.contains('quiz') || type.contains('test') || type.contains('exam');
+}
+
 class StudentLearningPage extends ConsumerWidget {
   const StudentLearningPage({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final learningAsync = ref.watch(studentLearningHubProvider);
+    final reportCardsAsync = ref.watch(reportCardsProvider);
 
     return learningAsync.when(
       data: (payload) {
         final data = payload.data;
-        final courses = ((data['courses'] as List?) ?? const [])
-            .whereType<Map>()
-            .map((item) => item.cast<String, dynamic>())
-            .toList();
         final materials = ((data['materials'] as List?) ?? const [])
             .whereType<Map>()
             .map((item) => item.cast<String, dynamic>())
@@ -38,166 +41,126 @@ class StudentLearningPage extends ConsumerWidget {
             .whereType<Map>()
             .map((item) => item.cast<String, dynamic>())
             .toList();
+        final quizzes = assessments.where(_isQuiz).toList();
+        final assignments = assessments.where((item) => !_isQuiz(item)).toList();
         final results = ((data['results'] as List?) ?? const [])
             .whereType<Map>()
             .map((item) => item.cast<String, dynamic>())
             .toList();
+        final reportCards = reportCardsAsync.valueOrNull?.data ?? const <Map<String, dynamic>>[];
 
-        return ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'E-Learning',
-                      style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'View course materials, active assessments, and your latest results in one place.',
-                      style: TextStyle(color: AppColors.textMuted),
-                    ),
-                    if (payload.isStale) ...[
-                      const SizedBox(height: 12),
-                      const Text(
-                        'Showing the last cached learning data.',
-                        style: TextStyle(color: AppColors.warning, fontWeight: FontWeight.w600),
-                      ),
-                    ],
+        return DefaultTabController(
+          length: 4,
+          child: Column(
+            children: [
+              const Material(
+                color: AppColors.surface,
+                child: TabBar(
+                  isScrollable: true,
+                  labelColor: AppColors.primary,
+                  unselectedLabelColor: AppColors.textMuted,
+                  tabs: [
+                    Tab(text: 'Library'),
+                    Tab(text: 'Quizzes'),
+                    Tab(text: 'Assignments'),
+                    Tab(text: 'Results'),
                   ],
                 ),
               ),
-            ),
-            const SizedBox(height: 16),
-            GridView.count(
-              crossAxisCount: 2,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
-              childAspectRatio: 1.35,
-              children: [
-                _MetricCard(
-                  label: 'Courses',
-                  value: '${courses.length}',
-                  hint: 'Accessible tertiary courses',
-                ),
-                _MetricCard(
-                  label: 'Library',
-                  value: '${materials.length}',
-                  hint: 'Published notes and slides',
-                ),
-                _MetricCard(
-                  label: 'Assessments',
-                  value: '${assessments.length}',
-                  hint: 'Active quizzes and tests',
-                ),
-                _MetricCard(
-                  label: 'Results',
-                  value: '${results.length}',
-                  hint: 'Submitted learning records',
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
-            const Text(
-              'Course Materials',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 12),
-            if (materials.isEmpty)
-              const Card(
-                child: ListTile(
-                  title: Text('No learning files yet'),
-                  subtitle: Text('Lecture notes and slides will appear here when published.'),
-                ),
-              )
-            else
-              ...materials.take(8).map(
-                (item) => Card(
-                  child: ListTile(
-                    leading: const Icon(Icons.menu_book_outlined, color: AppColors.primary),
-                    title: Text(item['title']?.toString() ?? 'Course material'),
-                    subtitle: Text(
-                      '${item['course_code'] ?? ''} ${item['course_name'] ?? ''}\n${item['material_type'] ?? 'Material'} · ${_formatDateTime(item['created_at'])}',
-                    ),
-                    isThreeLine: true,
+              if (payload.isStale)
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(16, 12, 16, 0),
+                  child: Text(
+                    'Showing the last cached learning data.',
+                    style: TextStyle(color: AppColors.warning, fontWeight: FontWeight.w600),
                   ),
                 ),
-              ),
-            const SizedBox(height: 24),
-            const Text(
-              'Active Assessments',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 12),
-            if (assessments.isEmpty)
-              const Card(
-                child: ListTile(
-                  title: Text('No active assessments'),
-                  subtitle: Text('Quizzes and tests assigned to your courses will show here.'),
-                ),
-              )
-            else
-              ...assessments.take(8).map(
-                (item) => Card(
-                  child: ListTile(
-                    leading: const Icon(Icons.assignment_outlined, color: AppColors.info),
-                    title: Text(item['title']?.toString() ?? 'Assessment'),
-                    subtitle: Text(
-                      '${item['course_code'] ?? ''} ${item['course_name'] ?? ''}\nDue ${_formatDateTime(item['due_at'])} · ${item['assessment_type'] ?? 'Assessment'}',
+              Expanded(
+                child: TabBarView(
+                  children: [
+                    _RecordList(
+                      emptyTitle: 'No library files yet',
+                      emptySubtitle: 'Lecture notes and slides will appear here when published.',
+                      children: materials
+                          .map(
+                            (item) => Card(
+                              child: ListTile(
+                                leading: const Icon(Icons.menu_book_outlined, color: AppColors.primary),
+                                title: Text(item['title']?.toString() ?? 'Course material'),
+                                subtitle: Text(
+                                  '${item['course_code'] ?? ''} ${item['course_name'] ?? ''}\n${item['material_type'] ?? 'Material'} · ${_formatDateTime(item['created_at'])}',
+                                ),
+                                isThreeLine: true,
+                              ),
+                            ),
+                          )
+                          .toList(),
                     ),
-                    isThreeLine: true,
-                    trailing: Chip(
-                      label: Text('${item['total_score'] ?? 0} marks'),
-                      backgroundColor: AppColors.info.withOpacity(0.12),
+                    _RecordList(
+                      emptyTitle: 'No quizzes yet',
+                      emptySubtitle: 'Published quizzes for your courses will show here.',
+                      children: quizzes.map((item) => _AssessmentTile(item: item)).toList(),
                     ),
-                  ),
+                    _RecordList(
+                      emptyTitle: 'No assignments yet',
+                      emptySubtitle: 'Published assignments for your courses will show here.',
+                      children: assignments.map((item) => _AssessmentTile(item: item)).toList(),
+                    ),
+                    _RecordList(
+                      emptyTitle: 'No results yet',
+                      emptySubtitle: 'Published report cards and marked work will appear here.',
+                      children: [
+                        ...reportCards.map((card) {
+                          final subjects = ((card['results'] as List?) ?? const [])
+                              .whereType<Map>()
+                              .map((item) => item.cast<String, dynamic>())
+                              .toList();
+                          return Card(
+                            child: ExpansionTile(
+                              leading: const Icon(Icons.school_outlined, color: AppColors.primary),
+                              title: Text(card['term_name']?.toString() ?? card['term']?.toString() ?? 'Report card'),
+                              subtitle: Text(
+                                'Average ${card['overall_average'] ?? 0}% · Grade ${card['overall_grade'] ?? 'N/A'}',
+                              ),
+                              children: subjects
+                                  .map(
+                                    (subject) => ListTile(
+                                      title: Text(subject['subject']?.toString() ?? 'Subject'),
+                                      trailing: Text(subject['grade']?.toString() ?? '${subject['score'] ?? ''}'),
+                                    ),
+                                  )
+                                  .toList(),
+                            ),
+                          );
+                        }),
+                        ...results.map((item) {
+                          final finalScore = num.tryParse(
+                                item['final_score']?.toString() ?? item['auto_score']?.toString() ?? '0',
+                              ) ??
+                              0;
+                          final maxScore = num.tryParse(item['max_score']?.toString() ?? '0') ?? 0;
+                          final isGraded = item['status']?.toString() == 'graded';
+                          return Card(
+                            child: ListTile(
+                              leading: Icon(
+                                isGraded ? Icons.verified_outlined : Icons.hourglass_bottom_outlined,
+                                color: isGraded ? AppColors.success : AppColors.warning,
+                              ),
+                              title: Text(item['assessment_title']?.toString() ?? 'Result'),
+                              subtitle: Text(
+                                '${item['course_code'] ?? ''} ${item['course_name'] ?? ''}\nScore ${finalScore.toStringAsFixed(0)}/${maxScore.toStringAsFixed(0)} · ${item['feedback'] ?? 'No feedback yet'}',
+                              ),
+                              isThreeLine: true,
+                            ),
+                          );
+                        }),
+                      ],
+                    ),
+                  ],
                 ),
               ),
-            const SizedBox(height: 24),
-            const Text(
-              'My Results',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 12),
-            if (results.isEmpty)
-              const Card(
-                child: ListTile(
-                  title: Text('No results yet'),
-                  subtitle: Text('Marked assessments and lecturer feedback will appear here.'),
-                ),
-              )
-            else
-              ...results.take(8).map(
-                (item) {
-                  final finalScore = num.tryParse(
-                        item['final_score']?.toString() ?? item['auto_score']?.toString() ?? '0',
-                      ) ??
-                      0;
-                  final maxScore =
-                      num.tryParse(item['max_score']?.toString() ?? '0') ?? 0;
-                  final isGraded = item['status']?.toString() == 'graded';
-                  return Card(
-                    child: ListTile(
-                      leading: Icon(
-                        isGraded ? Icons.verified_outlined : Icons.hourglass_bottom_outlined,
-                        color: isGraded ? AppColors.success : AppColors.warning,
-                      ),
-                      title: Text(item['assessment_title']?.toString() ?? 'Result'),
-                      subtitle: Text(
-                        '${item['course_code'] ?? ''} ${item['course_name'] ?? ''}\nScore ${finalScore.toStringAsFixed(0)}/${maxScore.toStringAsFixed(0)} · ${item['feedback'] ?? 'No feedback yet'}',
-                      ),
-                      isThreeLine: true,
-                    ),
-                  );
-                },
-              ),
-          ],
+            ],
+          ),
         );
       },
       loading: () => const Center(child: CircularProgressIndicator()),
@@ -206,38 +169,60 @@ class StudentLearningPage extends ConsumerWidget {
   }
 }
 
-class _MetricCard extends StatelessWidget {
-  const _MetricCard({
-    required this.label,
-    required this.value,
-    required this.hint,
-  });
+class _AssessmentTile extends StatelessWidget {
+  const _AssessmentTile({required this.item});
 
-  final String label;
-  final String value;
-  final String hint;
+  final Map<String, dynamic> item;
 
   @override
   Widget build(BuildContext context) {
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(label, style: const TextStyle(color: AppColors.textMuted)),
-            const Spacer(),
-            Text(
-              value,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
-            ),
-            const SizedBox(height: 6),
-            Text(hint, style: const TextStyle(color: AppColors.textMuted)),
-          ],
+      child: ListTile(
+        leading: const Icon(Icons.assignment_outlined, color: AppColors.info),
+        title: Text(item['title']?.toString() ?? 'Assessment'),
+        subtitle: Text(
+          '${item['course_code'] ?? ''} ${item['course_name'] ?? ''}\nDue ${_formatDateTime(item['due_at'])} · ${item['assessment_type'] ?? 'Assessment'}',
+        ),
+        isThreeLine: true,
+        trailing: Chip(
+          label: Text('${item['total_score'] ?? 0} marks'),
+          backgroundColor: AppColors.info.withOpacity(0.12),
         ),
       ),
+    );
+  }
+}
+
+class _RecordList extends StatelessWidget {
+  const _RecordList({
+    required this.emptyTitle,
+    required this.emptySubtitle,
+    required this.children,
+  });
+
+  final String emptyTitle;
+  final String emptySubtitle;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    if (children.isEmpty) {
+      return ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Card(
+            child: ListTile(
+              title: Text(emptyTitle),
+              subtitle: Text(emptySubtitle),
+            ),
+          ),
+        ],
+      );
+    }
+
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: children,
     );
   }
 }

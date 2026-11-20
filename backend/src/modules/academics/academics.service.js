@@ -1928,11 +1928,37 @@ const getReportCardsFromRuntime = async ({ institutionId }) => {
     );
 };
 
-const getReportCards = async ({ institutionId }) => {
-  if (models.ReportCard && models.Institution) {
-    return getReportCardsFromDatabase({ institutionId });
+const getReportCards = async ({ institutionId, actor = null }) => {
+  const cards =
+    models.ReportCard && models.Institution
+      ? await getReportCardsFromDatabase({ institutionId })
+      : await getReportCardsFromRuntime({ institutionId });
+
+  if (!actor || actor.role !== 'student') {
+    return cards;
   }
-  return getReportCardsFromRuntime({ institutionId });
+
+  const linkedStudent = models.Student
+    ? await models.Student.findOne({
+        where: { user_id: actor.id, institution_id: institutionId },
+        attributes: ['id'],
+      }).catch(() => null)
+    : null;
+
+  if (!linkedStudent) {
+    return [];
+  }
+
+  return cards.filter((card) => {
+    if (String(card.student_id || '') !== String(linkedStudent.id)) {
+      return false;
+    }
+    if (card.is_published === false) {
+      return false;
+    }
+    const status = String(card.status || card.workflow?.status || '').toLowerCase();
+    return !['draft', 'review', 'rejected'].includes(status);
+  });
 };
 
 const transitionReportCardWorkflowInDatabase = async ({

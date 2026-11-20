@@ -27,6 +27,7 @@ const ROLE_PERMISSIONS = {
   student: [
     'auth:read',
     'academics:read',
+    'finance:read',
     'attendance:read',
     'communication:read',
     'timetable:read',

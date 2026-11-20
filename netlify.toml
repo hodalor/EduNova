@@ -1,0 +1,19 @@
+# Deploy the React app from the repository root.
+# In Netlify, set REACT_APP_API_URL to the Render API, for example:
+# https://eduova-api.onrender.com/api
+# Set REACT_APP_SOCKET_URL to the Render origin without /api, for example:
+# https://eduova-api.onrender.com
+[build]
+  base = "frontend"
+  command = "npm ci && npm run build"
+  publish = "build"
+
+[build.environment]
+  NODE_VERSION = "20"
+  CI = "false"
+  GENERATE_SOURCEMAP = "false"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

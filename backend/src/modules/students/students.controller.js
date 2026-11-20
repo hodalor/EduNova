@@ -1,3 +1,4 @@
+const { models } = require('../../config/database');
 const studentsService = require('./students.service');
 
 const wrap = (handler) => async (req, res) =>
@@ -18,12 +19,27 @@ module.exports = {
       institutionId: req.institutionId,
     })
   ),
-  getStudent: wrap((req) =>
-    studentsService.getStudent({
+  getStudent: wrap(async (req) => {
+    if (req.user?.role === 'student') {
+      const linkedStudent = models.Student
+        ? await models.Student.findOne({
+            where: { user_id: req.user.id, institution_id: req.institutionId },
+            attributes: ['id'],
+          }).catch(() => null)
+        : null;
+
+      if (!linkedStudent || String(linkedStudent.id) !== String(req.params.studentId)) {
+        throw Object.assign(new Error('You can only view your own student record.'), {
+          statusCode: 403,
+        });
+      }
+    }
+
+    return studentsService.getStudent({
       institutionId: req.institutionId,
       studentId: req.params.studentId,
-    })
-  ),
+    });
+  }),
   updateStudent: wrap((req) =>
     studentsService.updateStudent({
       institutionId: req.institutionId,

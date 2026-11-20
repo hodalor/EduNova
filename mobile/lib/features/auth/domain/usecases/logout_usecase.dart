@@ -9,9 +9,11 @@ class LogoutUseCase {
 
   Future<void> call() async {
     final refreshToken = await _storageService.getRefreshToken();
-    if (refreshToken != null && refreshToken.isNotEmpty) {
-      await _remoteDataSource.logout(refreshToken);
-    }
+    try {
+      if (refreshToken != null && refreshToken.isNotEmpty) {
+        await _remoteDataSource.logout(refreshToken);
+      }
+    } catch (_) {}
     await _storageService.clearAll();
   }
 }

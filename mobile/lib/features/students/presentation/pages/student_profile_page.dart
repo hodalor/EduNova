@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/constants/app_routes.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../providers/student_portal_provider.dart';
 
@@ -61,6 +63,21 @@ class StudentProfilePage extends ConsumerWidget {
             ),
             const SizedBox(height: 16),
             _SectionCard(
+              title: 'Student authentication',
+              rows: [
+                _ProfileRow('Role', auth?.user.role ?? 'student'),
+                _ProfileRow('Email', auth?.user.email ?? profile['email']?.toString() ?? ''),
+                _ProfileRow('Phone', auth?.user.phone ?? 'Not set'),
+                _ProfileRow(
+                  'Student number',
+                  auth?.user.studentNumber ?? profile['student_number']?.toString() ?? '',
+                ),
+                _ProfileRow('Institution', auth?.institution.name ?? ''),
+                _ProfileRow('Institution code', auth?.institution.code ?? ''),
+              ],
+            ),
+            const SizedBox(height: 16),
+            _SectionCard(
               title: 'Identity',
               rows: [
                 _ProfileRow('Email', profile['email']?.toString() ?? auth?.user.email ?? ''),
@@ -103,6 +120,17 @@ class StudentProfilePage extends ConsumerWidget {
                 _ProfileRow('Road Map Levels', '${roadmap['level_count'] ?? 0}'),
                 _ProfileRow('Road Map Courses', '${roadmap['total_courses'] ?? 0}'),
               ],
+            ),
+            const SizedBox(height: 16),
+            OutlinedButton.icon(
+              onPressed: () async {
+                await ref.read(authProvider.notifier).logout();
+                if (context.mounted) {
+                  context.go(AppRoutes.login);
+                }
+              },
+              icon: const Icon(Icons.logout),
+              label: const Text('Sign out'),
             ),
           ],
         );

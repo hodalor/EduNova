@@ -21,10 +21,14 @@ module.exports = {
     });
     res.status(200).json({ success: true, data });
   },
-  listInvoices: wrap((req) =>
-    financeService.listInvoices({
+  listInvoices: wrap(async (req) =>
+    financeService.scopeRowsForStudentActor({
       institutionId: req.institutionId,
-      query: req.query,
+      actor: req.user,
+      rows: await financeService.listInvoices({
+        institutionId: req.institutionId,
+        query: req.query,
+      }),
     })
   ),
   createInvoice: async (req, res) => {
@@ -102,10 +106,14 @@ module.exports = {
     });
     res.status(200).json({ success: true, data });
   },
-  listPayments: wrap((req) =>
-    financeService.listPayments({
+  listPayments: wrap(async (req) =>
+    financeService.scopeRowsForStudentActor({
       institutionId: req.institutionId,
-      query: req.query,
+      actor: req.user,
+      rows: await financeService.listPayments({
+        institutionId: req.institutionId,
+        query: req.query,
+      }),
     })
   ),
   listFeeStructures: wrap((req) =>

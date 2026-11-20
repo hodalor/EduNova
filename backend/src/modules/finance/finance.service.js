@@ -384,6 +384,27 @@ const applyInvoicePaymentState = ({ invoice, amount }) => {
   };
 };
 
+const scopeRowsForStudentActor = async ({ institutionId, actor, rows }) => {
+  if (!actor || actor.role !== 'student' || !Array.isArray(rows)) {
+    return rows;
+  }
+
+  if (!models.Student) {
+    return [];
+  }
+
+  const linkedStudent = await models.Student.findOne({
+    where: { user_id: actor.id, institution_id: institutionId },
+    attributes: ['id'],
+  }).catch(() => null);
+
+  if (!linkedStudent) {
+    return [];
+  }
+
+  return rows.filter((item) => String(item?.student_id || '') === String(linkedStudent.id));
+};
+
 const listInvoices = async ({ institutionId, query }) => {
   const runtimeItems = (store.finance.invoices || []).filter(
     (invoice) => invoice.institution_id === institutionId
@@ -1607,6 +1628,7 @@ const updateFinanceSettings = async ({ institutionId, userId, payload, ip }) => 
 
 module.exports = {
   listInvoices,
+  scopeRowsForStudentActor,
   createInvoice,
   recordPayment,
   listPaymentApprovals,

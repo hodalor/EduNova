@@ -128,6 +128,7 @@ module.exports = {
   getReportCards: wrap((req) =>
     academicsService.getReportCards({
       institutionId: req.institutionId,
+      actor: req.user,
     })
   ),
   transitionReportCardWorkflow: wrap((req) =>

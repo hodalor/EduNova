@@ -27,10 +27,29 @@ import 'shared/navigation/app_shells.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp();
+  try {
+    await Firebase.initializeApp();
+  } catch (error) {
+    debugPrint('Firebase is unavailable, continuing without push setup: $error');
+  }
   await HiveCache.init();
 
   runApp(const ProviderScope(child: EduovaMobileApp()));
+}
+
+String _homeForRole(String role) {
+  switch (role.toLowerCase()) {
+    case 'parent':
+    case 'guardian':
+      return AppRoutes.parentHome;
+    case 'student':
+    case 'tertiary_student':
+      return AppRoutes.studentHome;
+    case 'teacher':
+      return AppRoutes.teacherHome;
+    default:
+      return AppRoutes.teacherHome;
+  }
 }
 
 final routerProvider = Provider<GoRouter>((ref) {
@@ -47,15 +66,23 @@ final routerProvider = Provider<GoRouter>((ref) {
         return isAuthPage ? null : AppRoutes.login;
       }
 
-      if (state.matchedLocation == AppRoutes.app) {
-        switch (auth.user.role) {
-          case 'parent':
-            return AppRoutes.parentHome;
-          case 'student':
-            return AppRoutes.studentHome;
-          default:
-            return AppRoutes.teacherHome;
-        }
+      final role = auth.user.role.toLowerCase();
+      final location = state.matchedLocation;
+      final isStudent = role == 'student' || role == 'tertiary_student';
+      final isParent = role == 'parent' || role == 'guardian';
+
+      if (isStudent && location.startsWith('/app/parent')) {
+        return AppRoutes.studentHome;
+      }
+      if (isParent && (location.startsWith('/app/student') || location.startsWith('/app/teacher'))) {
+        return AppRoutes.parentHome;
+      }
+      if (!isStudent && !isParent && location.startsWith('/app/student')) {
+        return AppRoutes.teacherHome;
+      }
+
+      if (location == AppRoutes.app) {
+        return _homeForRole(role);
       }
 
       if (isAuthPage) {

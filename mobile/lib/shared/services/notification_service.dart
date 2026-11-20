@@ -1,4 +1,5 @@
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import '../../core/api/dio_client.dart';
@@ -11,41 +12,54 @@ class NotificationService {
     required this.dioClient,
     FirebaseMessaging? firebaseMessaging,
     FlutterLocalNotificationsPlugin? localNotifications,
-  })  : _firebaseMessaging = firebaseMessaging ?? FirebaseMessaging.instance,
-        _localNotifications =
-            localNotifications ?? FlutterLocalNotificationsPlugin();
+  })  : _firebaseMessaging = firebaseMessaging,
+        _localNotifications = localNotifications;
 
   final DioClient dioClient;
-  final FirebaseMessaging _firebaseMessaging;
-  final FlutterLocalNotificationsPlugin _localNotifications;
+  final FirebaseMessaging? _firebaseMessaging;
+  final FlutterLocalNotificationsPlugin? _localNotifications;
+
+  FirebaseMessaging get _messaging =>
+      _firebaseMessaging ?? FirebaseMessaging.instance;
+
+  FlutterLocalNotificationsPlugin get _notifications =>
+      _localNotifications ?? FlutterLocalNotificationsPlugin();
 
   Future<void> initialize() async {
-    await _firebaseMessaging.requestPermission(
-      alert: true,
-      badge: true,
-      sound: true,
-    );
+    try {
+      await _messaging.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
 
-    FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+      FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
 
-    const androidSettings =
-        AndroidInitializationSettings('@mipmap/ic_launcher');
-    const settings = InitializationSettings(android: androidSettings);
-    await _localNotifications.initialize(settings);
+      const androidSettings =
+          AndroidInitializationSettings('@mipmap/ic_launcher');
+      const settings = InitializationSettings(android: androidSettings);
+      await _notifications.initialize(settings);
 
-    FirebaseMessaging.onMessage.listen(_showForegroundNotification);
+      FirebaseMessaging.onMessage.listen(_showForegroundNotification);
+    } catch (error) {
+      debugPrint('Notification setup skipped: $error');
+    }
   }
 
   Future<void> syncDeviceToken() async {
-    final token = await _firebaseMessaging.getToken();
-    if (token == null || token.isEmpty) {
-      return;
-    }
+    try {
+      final token = await _messaging.getToken();
+      if (token == null || token.isEmpty) {
+        return;
+      }
 
-    await dioClient.dio.post('/notifications/device-token', data: {
-      'fcm_token': token,
-      'platform': 'flutter',
-    });
+      await dioClient.dio.post('/notifications/device-token', data: {
+        'fcm_token': token,
+        'platform': 'flutter',
+      });
+    } catch (error) {
+      debugPrint('Device token sync skipped: $error');
+    }
   }
 
   Future<void> _showForegroundNotification(RemoteMessage message) async {
@@ -63,7 +77,7 @@ class NotificationService {
       ),
     );
 
-    await _localNotifications.show(
+    await _notifications.show(
       notification.hashCode,
       notification.title,
       notification.body,
